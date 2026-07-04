@@ -1,0 +1,99 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3001:3000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hoctro}:${DB_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-hoctro}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hoctro}
+      POSTGRES_USER: ${POSTGRES_USER:-hoctro}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hoctro} -d ${POSTGRES_DB:-hoctro}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  migrate:
+    image: node:22-alpine
+    profiles: ["tools"]
+    working_dir: /app
+    command: sh -c "npm install && npx prisma db push"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hoctro}:${DB_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-hoctro}?schema=public
+    volumes:
+      - .:/app
+      - node_modules_tools:/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db-dump-backup:
+    image: postgres:16
+    profiles: ["backup"]
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-hoctro}
+      POSTGRES_USER: ${POSTGRES_USER:-hoctro}
+    volumes:
+      - ./backups:/backups
+    command: >
+      sh -c 'mkdir -p /backups &&
+      pg_dump -h db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c
+      -f "/backups/$${POSTGRES_DB}-$$(date +%Y%m%d-%H%M%S).dump"'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  volume-backup:
+    image: alpine:3.20
+    profiles: ["backup"]
+    volumes:
+      - db_data:/volume:ro
+      - ./backups:/backups
+    command: >
+      sh -c 'mkdir -p /backups &&
+      tar czf "/backups/db_data-$$(date +%Y%m%d-%H%M%S).tar.gz" -C /volume .'
+
+  volume-restore:
+    image: alpine:3.20
+    profiles: ["restore"]
+    environment:
+      BACKUP_FILE: ${BACKUP_FILE:-}
+    volumes:
+      - db_data:/volume
+      - ./backups:/backups
+    command: >
+      sh -c 'test -n "$$BACKUP_FILE" ||
+      (echo "Missing BACKUP_FILE. Example: BACKUP_FILE=db_data-20260704-120000.tar.gz docker compose --profile restore run --rm volume-restore" && exit 1);
+      rm -rf /volume/* /volume/.[!.]* /volume/..?* 2>/dev/null || true;
+      tar xzf "/backups/$$BACKUP_FILE" -C /volume'
+
+volumes:
+  db_data:
+    name: qltrungtam_db_data
+  node_modules_tools:

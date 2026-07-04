@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EnrollmentStatus {
+  active
+  on_leave
+}
+
+enum InvoiceStatus {
+  unpaid
+  paid
+}
+
+model ClassRoom {
+  id                      String       @id @default(cuid())
+  name                    String
+  shortCode               String       @unique
+  teacherName             String       @default("")
+  pricePerSession         Int
+  sessionsPerMonthDefault Int
+  createdAt               DateTime     @default(now())
+  enrollments             Enrollment[]
+
+  @@index([shortCode])
+}
+
+model Student {
+  id          String       @id @default(cuid())
+  fullName    String
+  phone       String
+  address     String
+  parentName  String?
+  note        String?
+  createdAt   DateTime     @default(now())
+  enrollments Enrollment[]
+
+  @@index([phone])
+}
+
+model Enrollment {
+  id               String           @id @default(cuid())
+  studentId        String
+  classId          String
+  sessionsOverride Int?
+  status           EnrollmentStatus @default(active)
+  createdAt        DateTime         @default(now())
+  classRoom        ClassRoom        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  invoices         MonthlyInvoice[]
+
+  @@unique([studentId, classId])
+  @@index([classId, status])
+}
+
+model MonthlyInvoice {
+  id              String        @id @default(cuid())
+  enrollmentId    String
+  month           Int
+  year            Int
+  sessions        Int
+  pricePerSession Int
+  amount          Int
+  memoContent     String
+  status          InvoiceStatus @default(unpaid)
+  paidAt          DateTime?
+  transactionId   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  enrollment      Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  transaction     Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
+  matchedTransactions Transaction[] @relation("TransactionMatchedInvoice")
+
+  @@unique([enrollmentId, month, year])
+  @@index([status, month, year])
+  @@index([memoContent])
+}
+
+model Transaction {
+  id               String           @id @default(cuid())
+  gatewayRef       String           @unique
+  amount           Int
+  rawContent       String
+  transferredAt    DateTime
+  matchedInvoiceId String?
+  rawPayload       Json
+  createdAt        DateTime         @default(now())
+  matchedInvoice   MonthlyInvoice?  @relation("TransactionMatchedInvoice", fields: [matchedInvoiceId], references: [id])
+  invoices         MonthlyInvoice[] @relation("InvoicePaymentTransaction")
+
+  @@index([matchedInvoiceId])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
