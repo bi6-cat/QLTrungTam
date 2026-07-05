@@ -22,12 +22,12 @@ export function EditStudentButton({ student }: { student: Student }) {
     <>
       <Button
         type="button"
-        variant="ghost"
-        className="h-9 w-9 px-0"
+        variant="secondary"
+        className="h-9 w-9 px-0 text-primary hover:bg-indigo-50"
         title="Sửa học sinh"
         onClick={() => setOpen(true)}
       >
-        <Pencil className="h-4 w-4 text-primary" />
+        <Pencil className="h-5 w-5" />
       </Button>
       {open ? <EditStudentDialog student={student} onClose={() => setOpen(false)} /> : null}
     </>

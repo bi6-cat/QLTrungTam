@@ -141,8 +141,13 @@ export default async function StudentsPage({
                         />
                         <form action={deleteStudentAction}>
                           <input type="hidden" name="id" value={student.id} />
-                          <Button type="submit" variant="ghost" className="h-9 w-9 px-0" title="Xóa học sinh">
-                            <Trash2 className="h-4 w-4 text-warning" />
+                          <Button
+                            type="submit"
+                            variant="secondary"
+                            className="h-9 w-9 px-0 text-warning hover:bg-rose-50"
+                            title="Xóa học sinh"
+                          >
+                            <Trash2 className="h-5 w-5" />
                           </Button>
                         </form>
                       </div>
