@@ -79,9 +79,27 @@ export const createClassSchema = z.object({
   sessionsPerMonthDefault: z.coerce.number().int().min(0).max(60).catch(8)
 });
 
+export const updateClassSchema = z.object({
+  id,
+  name: requiredText("Thiếu tên lớp", 120),
+  shortCode,
+  teacherName: looseText(120),
+  pricePerSession: money,
+  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60).catch(8)
+});
+
 export const idSchema = z.object({ id });
 
 export const createStudentSchema = z.object({
+  fullName: requiredText("Thiếu tên học sinh", 120),
+  phone,
+  address: looseText(300),
+  parentName: optionalText(120),
+  note: optionalText(1000)
+});
+
+export const updateStudentSchema = z.object({
+  id,
   fullName: requiredText("Thiếu tên học sinh", 120),
   phone,
   address: looseText(300),

@@ -11,6 +11,7 @@ import { ClassInvoiceEditor } from "@/components/ClassInvoiceEditor";
 import { CopyParentLinkButton } from "@/components/CopyParentLinkButton";
 import { CopyTeacherLinkButton } from "@/components/CopyTeacherLinkButton";
 import { DeleteClassButton } from "@/components/DeleteClassButton";
+import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
 import { StudentEnrollmentPicker } from "@/components/StudentEnrollmentPicker";
 
@@ -66,6 +67,16 @@ export default async function ClassesPage({
         </div>
         {selectedClass ? (
           <div className="flex flex-wrap gap-2">
+            <EditClassButton
+              classRoom={{
+                id: selectedClass.id,
+                name: selectedClass.name,
+                shortCode: selectedClass.shortCode,
+                teacherName: selectedClass.teacherName,
+                pricePerSession: selectedClass.pricePerSession,
+                sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault
+              }}
+            />
             <CopyTeacherLinkButton
               className={selectedClass.name}
               teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.publicToken}?month=${month}&year=${year}`}

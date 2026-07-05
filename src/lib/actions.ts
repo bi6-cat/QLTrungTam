@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -30,9 +31,11 @@ import {
   parseForm,
   safeParseForm,
   updateClassDetailsSchema,
+  updateClassSchema,
   updateEnrollmentStatusSchema,
   updateInvoiceSchema,
-  updateSettingsSchema
+  updateSettingsSchema,
+  updateStudentSchema
 } from "@/lib/validation";
 
 function clampSessions(value: FormDataEntryValue | null) {
@@ -116,6 +119,39 @@ export async function deleteClassAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+export type EditState = { error: string; ok: boolean };
+
+export async function updateClassAction(
+  _prevState: EditState,
+  formData: FormData
+): Promise<EditState> {
+  await requireAdmin();
+  const { data, error } = safeParseForm(updateClassSchema, formData);
+  if (error || !data) {
+    return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+  }
+  try {
+    await prisma.classRoom.update({
+      where: { id: data.id },
+      data: {
+        name: data.name,
+        shortCode: data.shortCode,
+        teacherName: data.teacherName,
+        pricePerSession: data.pricePerSession,
+        sessionsPerMonthDefault: data.sessionsPerMonthDefault
+      }
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { error: "Mã lớp đã tồn tại, hãy chọn mã khác.", ok: false };
+    }
+    throw e;
+  }
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin");
+  return { error: "", ok: true };
+}
+
 export async function createStudentAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(createStudentSchema, formData);
@@ -136,6 +172,30 @@ export async function deleteStudentAction(formData: FormData) {
   const { id } = parseForm(idSchema, formData);
   await prisma.student.delete({ where: { id } });
   revalidatePath("/admin/students");
+}
+
+export async function updateStudentAction(
+  _prevState: EditState,
+  formData: FormData
+): Promise<EditState> {
+  await requireAdmin();
+  const { data, error } = safeParseForm(updateStudentSchema, formData);
+  if (error || !data) {
+    return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+  }
+  await prisma.student.update({
+    where: { id: data.id },
+    data: {
+      fullName: data.fullName,
+      phone: data.phone,
+      address: data.address,
+      parentName: data.parentName,
+      note: data.note
+    }
+  });
+  revalidatePath("/admin/students");
+  revalidatePath("/admin/classes");
+  return { error: "", ok: true };
 }
 
 export async function createEnrollmentAction(formData: FormData) {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
 import { createStudentAction, deleteStudentAction } from "@/lib/actions";
 import { Badge, Button, EmptyState, Field, Input, Panel, Textarea } from "@/components/ui";
+import { EditStudentButton } from "@/components/EditStudentButton";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -126,13 +127,25 @@ export default async function StudentsPage({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-stone-600">{student.note || "-"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <form action={deleteStudentAction}>
-                        <input type="hidden" name="id" value={student.id} />
-                        <Button type="submit" variant="ghost" className="h-9 w-9 px-0" title="Xóa học sinh">
-                          <Trash2 className="h-4 w-4 text-warning" />
-                        </Button>
-                      </form>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <EditStudentButton
+                          student={{
+                            id: student.id,
+                            fullName: student.fullName,
+                            phone: student.phone,
+                            address: student.address,
+                            parentName: student.parentName,
+                            note: student.note
+                          }}
+                        />
+                        <form action={deleteStudentAction}>
+                          <input type="hidden" name="id" value={student.id} />
+                          <Button type="submit" variant="ghost" className="h-9 w-9 px-0" title="Xóa học sinh">
+                            <Trash2 className="h-4 w-4 text-warning" />
+                          </Button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 ))}
