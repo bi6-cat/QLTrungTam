@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, CircleDollarSign, ExternalLink, Loader2 } from "lucide-react";
-import { markInvoicePaidForTestAction } from "@/lib/actions";
+import { ArrowRight, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 
@@ -148,13 +147,6 @@ export function PaymentFlow({ students }: { students: Student[] }) {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Đang chờ xác nhận thanh toán...
               </div>
-              <form action={markInvoicePaidForTestAction}>
-                <input type="hidden" name="invoiceId" value={invoice.id} />
-                <Button type="submit" variant="secondary" className="w-full">
-                  <CircleDollarSign className="h-4 w-4" />
-                  Đánh dấu đã đóng (test)
-                </Button>
-              </form>
             </div>
           </section>
         ))

@@ -26,7 +26,7 @@ Tài khoản seed:
 
 - Admin: `http://localhost:3001/admin`
 - Đăng nhập: `http://localhost:3001/login`
-- Trang phụ huynh mẫu: `http://localhost:3001/pay/L10A`
+- Trang phụ huynh / giáo viên: link chứa **token ngẫu nhiên** cho mỗi lớp, lấy bằng nút "Copy Zalo phụ huynh" / "Link giáo viên" trong màn Lớp học (dạng `/pay/<token>`, `/teacher/classes/<token>`). Không còn dùng mã lớp trong URL để tránh dò đoán.
 - Webhook SePay: `POST http://localhost:3001/api/webhook/sepay`
 
 ## Test webhook nhanh

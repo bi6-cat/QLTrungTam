@@ -1,4 +1,5 @@
 import { Save } from "lucide-react";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { updateSettingsAction } from "@/lib/actions";
 import { Field, Input, Panel, Button } from "@/components/ui";
 import { getAppSettings } from "@/lib/settings";
@@ -54,6 +55,16 @@ export default async function SettingsPage() {
             </Button>
           </div>
         </form>
+      </Panel>
+
+      <Panel>
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-neutralText">Đổi mật khẩu admin</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Nên đổi mật khẩu mặc định ngay sau khi cài đặt lần đầu.
+          </p>
+        </div>
+        <ChangePasswordForm />
       </Panel>
     </div>
   );

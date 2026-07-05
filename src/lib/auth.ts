@@ -14,7 +14,16 @@ type SessionPayload = {
 };
 
 function getSecret() {
-  return process.env.SESSION_SECRET || "dev-session-secret-change-me";
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 16) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET chưa được cấu hình (hoặc quá ngắn). Đặt một chuỗi ngẫu nhiên dài trước khi chạy production."
+      );
+    }
+    return "dev-session-secret-change-me";
+  }
+  return secret;
 }
 
 function sign(value: string) {

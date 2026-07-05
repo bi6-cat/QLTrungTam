@@ -25,7 +25,7 @@ export default async function TeacherClassPage({
   const requestedPage = Math.max(1, Number(query.page) || 1);
 
   const classRoom = await prisma.classRoom.findUnique({
-    where: { shortCode: short_code.toUpperCase() },
+    where: { publicToken: short_code },
     include: {
       enrollments: {
         orderBy: { student: { fullName: "asc" } },
@@ -82,7 +82,7 @@ export default async function TeacherClassPage({
                   {classRoom.sessionsPerMonthDefault} buổi mặc định
                 </p>
               </div>
-              <form action={`/teacher/classes/${classRoom.shortCode}`} method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
+              <form action={`/teacher/classes/${classRoom.publicToken}`} method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
                 <Field label="Tháng">
                   <Input name="month" type="number" min="1" max="12" defaultValue={month} />
                 </Field>
@@ -206,7 +206,7 @@ export default async function TeacherClassPage({
               </p>
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/teacher/classes/${classRoom.shortCode}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
+                  href={`/teacher/classes/${classRoom.publicToken}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
                   className={[
                     "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
                     currentPage <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
@@ -219,7 +219,7 @@ export default async function TeacherClassPage({
                   {currentPage}/{totalPages}
                 </span>
                 <Link
-                  href={`/teacher/classes/${classRoom.shortCode}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
+                  href={`/teacher/classes/${classRoom.publicToken}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
                   className={[
                     "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
                     currentPage >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-stone-50"

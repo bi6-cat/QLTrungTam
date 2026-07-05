@@ -7,7 +7,7 @@ export default function LoginPage() {
         <div className="mb-6">
           <p className="text-sm font-semibold text-primary">QL Trung Tâm</p>
           <h1 className="mt-2 text-2xl font-bold text-neutralText">Đăng nhập admin</h1>
-          <p className="mt-2 text-sm text-stone-600">Tài khoản mặc định sau khi seed: admin / admin123.</p>
+          <p className="mt-2 text-sm text-stone-600">Vui lòng đăng nhập để tiếp tục.</p>
         </div>
         <LoginForm />
       </section>

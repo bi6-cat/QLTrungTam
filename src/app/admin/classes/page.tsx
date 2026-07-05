@@ -68,12 +68,12 @@ export default async function ClassesPage({
           <div className="flex flex-wrap gap-2">
             <CopyTeacherLinkButton
               className={selectedClass.name}
-              teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.shortCode}?month=${month}&year=${year}`}
+              teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.publicToken}?month=${month}&year=${year}`}
             />
             <CopyParentLinkButton
               className={selectedClass.name}
               classShortCode={selectedClass.shortCode}
-              payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.shortCode}`}
+              payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.publicToken}`}
             />
           </div>
         ) : null}

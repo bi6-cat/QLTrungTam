@@ -15,7 +15,7 @@ export default async function PayPage({
 }) {
   const { short_code } = await params;
   const classRoom = await prisma.classRoom.findUnique({
-    where: { shortCode: short_code.toUpperCase() },
+    where: { publicToken: short_code },
     include: {
       enrollments: {
         where: { status: "active" },

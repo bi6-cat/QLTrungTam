@@ -21,6 +21,7 @@ model ClassRoom {
   id                      String       @id @default(cuid())
   name                    String
   shortCode               String       @unique
+  publicToken             String       @unique @default(cuid())
   teacherName             String       @default("")
   pricePerSession         Int
   sessionsPerMonthDefault Int
@@ -28,6 +29,7 @@ model ClassRoom {
   enrollments             Enrollment[]
 
   @@index([shortCode])
+  @@index([publicToken])
 }
 
 model Student {

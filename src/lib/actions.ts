@@ -1,20 +1,67 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout, requireAdmin } from "@/lib/auth";
-import { toInt, toText } from "@/lib/format";
 import { buildMemo } from "@/lib/payment";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
 import { saveAppSettings } from "@/lib/settings";
 
+const LOGIN_LIMIT = { max: 8, windowMs: 15 * 60 * 1000 };
+
+async function getClientIp() {
+  const h = await headers();
+  const forwarded = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || h.get("x-real-ip")?.trim() || "unknown";
+}
+import {
+  assignTransactionSchema,
+  changePasswordSchema,
+  createClassSchema,
+  createStudentSchema,
+  enrollmentSchema,
+  generateInvoicesSchema,
+  idSchema,
+  loginSchema,
+  markCashSchema,
+  parseForm,
+  safeParseForm,
+  updateClassDetailsSchema,
+  updateEnrollmentStatusSchema,
+  updateInvoiceSchema,
+  updateSettingsSchema
+} from "@/lib/validation";
+
+function clampSessions(value: FormDataEntryValue | null) {
+  const parsed = Math.floor(Number(String(value ?? "").replace(/[^\d.-]/g, "")));
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(60, parsed);
+}
+
 export async function loginAction(_prevState: { error: string }, formData: FormData) {
-  const username = toText(formData.get("username"));
-  const password = toText(formData.get("password"));
-  const ok = await login(username, password);
-  if (!ok) {
+  const ip = await getClientIp();
+  const rlKey = `login:${ip}`;
+  const limit = checkRateLimit(rlKey, LOGIN_LIMIT);
+  if (!limit.allowed) {
+    return {
+      error: `Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ${limit.retryAfterSec} giây.`
+    };
+  }
+
+  const { data, error } = safeParseForm(loginSchema, formData);
+  if (error || !data) {
+    recordFailure(rlKey, LOGIN_LIMIT);
     return { error: "Sai tên đăng nhập hoặc mật khẩu." };
   }
+  const ok = await login(data.username, data.password);
+  if (!ok) {
+    recordFailure(rlKey, LOGIN_LIMIT);
+    return { error: "Sai tên đăng nhập hoặc mật khẩu." };
+  }
+  resetLimit(rlKey);
   redirect("/admin");
 }
 
@@ -23,15 +70,39 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+export async function changePasswordAction(
+  _prevState: { error: string; success: string },
+  formData: FormData
+) {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(changePasswordSchema, formData);
+  if (error || !data) {
+    return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+  }
+
+  const user = await prisma.adminUser.findUnique({ where: { id: session.userId } });
+  if (!user || !verifyPassword(data.currentPassword, user.passwordHash)) {
+    return { error: "Mật khẩu hiện tại không đúng.", success: "" };
+  }
+
+  await prisma.adminUser.update({
+    where: { id: user.id },
+    data: { passwordHash: hashPassword(data.newPassword) }
+  });
+
+  return { error: "", success: "Đã đổi mật khẩu thành công." };
+}
+
 export async function createClassAction(formData: FormData) {
   await requireAdmin();
+  const data = parseForm(createClassSchema, formData);
   await prisma.classRoom.create({
     data: {
-      name: toText(formData.get("name")),
-      shortCode: toText(formData.get("shortCode")).toUpperCase(),
-      teacherName: toText(formData.get("teacherName")),
-      pricePerSession: toInt(formData.get("pricePerSession")),
-      sessionsPerMonthDefault: toInt(formData.get("sessionsPerMonthDefault"), 8)
+      name: data.name,
+      shortCode: data.shortCode,
+      teacherName: data.teacherName,
+      pricePerSession: data.pricePerSession,
+      sessionsPerMonthDefault: data.sessionsPerMonthDefault
     }
   });
   revalidatePath("/admin/classes");
@@ -39,20 +110,22 @@ export async function createClassAction(formData: FormData) {
 
 export async function deleteClassAction(formData: FormData) {
   await requireAdmin();
-  await prisma.classRoom.delete({ where: { id: toText(formData.get("id")) } });
+  const { id } = parseForm(idSchema, formData);
+  await prisma.classRoom.delete({ where: { id } });
   revalidatePath("/admin/classes");
   revalidatePath("/admin");
 }
 
 export async function createStudentAction(formData: FormData) {
   await requireAdmin();
+  const data = parseForm(createStudentSchema, formData);
   await prisma.student.create({
     data: {
-      fullName: toText(formData.get("fullName")),
-      phone: toText(formData.get("phone")).replace(/\D/g, ""),
-      address: toText(formData.get("address")),
-      parentName: toText(formData.get("parentName")) || null,
-      note: toText(formData.get("note")) || null
+      fullName: data.fullName,
+      phone: data.phone,
+      address: data.address,
+      parentName: data.parentName,
+      note: data.note
     }
   });
   revalidatePath("/admin/students");
@@ -60,32 +133,24 @@ export async function createStudentAction(formData: FormData) {
 
 export async function deleteStudentAction(formData: FormData) {
   await requireAdmin();
-  await prisma.student.delete({ where: { id: toText(formData.get("id")) } });
+  const { id } = parseForm(idSchema, formData);
+  await prisma.student.delete({ where: { id } });
   revalidatePath("/admin/students");
 }
 
 export async function createEnrollmentAction(formData: FormData) {
   await requireAdmin();
+  const data = parseForm(enrollmentSchema, formData);
   await prisma.enrollment.upsert({
     where: {
-      studentId_classId: {
-        studentId: toText(formData.get("studentId")),
-        classId: toText(formData.get("classId"))
-      }
+      studentId_classId: { studentId: data.studentId, classId: data.classId }
     },
-    update: {
-      sessionsOverride: formData.get("sessionsOverride")
-        ? toInt(formData.get("sessionsOverride"))
-        : null,
-      status: toText(formData.get("status")) === "on_leave" ? "on_leave" : "active"
-    },
+    update: { sessionsOverride: data.sessionsOverride, status: data.status },
     create: {
-      studentId: toText(formData.get("studentId")),
-      classId: toText(formData.get("classId")),
-      sessionsOverride: formData.get("sessionsOverride")
-        ? toInt(formData.get("sessionsOverride"))
-        : null,
-      status: toText(formData.get("status")) === "on_leave" ? "on_leave" : "active"
+      studentId: data.studentId,
+      classId: data.classId,
+      sessionsOverride: data.sessionsOverride,
+      status: data.status
     }
   });
   revalidatePath("/admin/classes");
@@ -94,20 +159,22 @@ export async function createEnrollmentAction(formData: FormData) {
 
 export async function updateEnrollmentStatusAction(formData: FormData) {
   await requireAdmin();
+  const data = parseForm(updateEnrollmentStatusSchema, formData);
   await prisma.enrollment.update({
-    where: { id: toText(formData.get("id")) },
-    data: { status: toText(formData.get("status")) === "on_leave" ? "on_leave" : "active" }
+    where: { id: data.id },
+    data: { status: data.status }
   });
   revalidatePath("/admin/classes");
 }
 
 export async function generateInvoicesAction(formData: FormData) {
   await requireAdmin();
-  const classId = toText(formData.get("classId"));
-  const month = toInt(formData.get("month"), new Date().getMonth() + 1);
-  const year = toInt(formData.get("year"), new Date().getFullYear());
+  const data = parseForm(generateInvoicesSchema, formData);
+  const month = data.month || new Date().getMonth() + 1;
+  const year = data.year || new Date().getFullYear();
+
   const enrollments = await prisma.enrollment.findMany({
-    where: { classId, status: "active" },
+    where: { classId: data.classId, status: "active" },
     include: { student: true, classRoom: true }
   });
 
@@ -130,20 +197,18 @@ export async function generateInvoicesAction(formData: FormData) {
 
   revalidatePath("/admin/classes");
   revalidatePath("/admin/invoices");
-  redirect(`/admin/classes?classId=${classId}&month=${month}&year=${year}`);
+  redirect(`/admin/classes?classId=${data.classId}&month=${month}&year=${year}`);
 }
 
 export async function updateInvoiceAction(formData: FormData) {
   await requireAdmin();
-  const invoiceId = toText(formData.get("invoiceId"));
-  const sessions = toInt(formData.get("sessions"));
-  const pricePerSession = toInt(formData.get("pricePerSession"));
+  const data = parseForm(updateInvoiceSchema, formData);
   await prisma.monthlyInvoice.update({
-    where: { id: invoiceId },
+    where: { id: data.invoiceId },
     data: {
-      sessions,
-      pricePerSession,
-      amount: toInt(formData.get("amount"), sessions * pricePerSession)
+      sessions: data.sessions,
+      pricePerSession: data.pricePerSession,
+      amount: data.amount ?? data.sessions * data.pricePerSession
     }
   });
   revalidatePath("/admin/classes");
@@ -152,10 +217,9 @@ export async function updateInvoiceAction(formData: FormData) {
 
 export async function updateClassDetailsAction(formData: FormData) {
   await requireAdmin();
-  const classId = toText(formData.get("classId"));
-  const month = toInt(formData.get("month"), new Date().getMonth() + 1);
-  const year = toInt(formData.get("year"), new Date().getFullYear());
-  const intent = toText(formData.get("intent")) === "create" ? "create" : "save";
+  const parsed = parseForm(updateClassDetailsSchema, formData);
+  const month = parsed.month || new Date().getMonth() + 1;
+  const year = parsed.year || new Date().getFullYear();
   const enrollmentIds = Array.from(
     new Set(formData.getAll("enrollmentId").map((value) => String(value)).filter(Boolean))
   );
@@ -170,26 +234,21 @@ export async function updateClassDetailsAction(formData: FormData) {
         continue;
       }
 
-      const status = toText(formData.get(`status:${enrollmentId}`)) === "on_leave" ? "on_leave" : "active";
-      const sessions = toInt(formData.get(`sessions:${enrollmentId}`));
+      const status =
+        String(formData.get(`status:${enrollmentId}`)) === "on_leave" ? "on_leave" : "active";
+      const sessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
       const enrollment = await tx.enrollment.update({
         where: { id: enrollmentId },
-        data: {
-          status,
-          sessionsOverride: sessions > 0 ? sessions : null
-        },
+        data: { status, sessionsOverride: sessions > 0 ? sessions : null },
         include: { classRoom: true, student: true }
       });
 
       if (existingInvoice) {
         await tx.monthlyInvoice.update({
           where: { id: existingInvoice.id },
-          data: {
-            sessions,
-            amount: sessions * existingInvoice.pricePerSession
-          }
+          data: { sessions, amount: sessions * existingInvoice.pricePerSession }
         });
-      } else if (intent === "create" && status === "active") {
+      } else if (parsed.intent === "create" && status === "active") {
         await tx.monthlyInvoice.create({
           data: {
             enrollmentId,
@@ -207,46 +266,23 @@ export async function updateClassDetailsAction(formData: FormData) {
 
   revalidatePath("/admin/classes");
   revalidatePath("/admin");
-  redirect(`/admin/classes?classId=${classId}&month=${month}&year=${year}`);
+  redirect(`/admin/classes?classId=${parsed.classId}&month=${month}&year=${year}`);
 }
 
 export async function updateSettingsAction(formData: FormData) {
   await requireAdmin();
-  await saveAppSettings({
-    sepayApiKey: toText(formData.get("sepayApiKey")),
-    sepayWebhookSecret: toText(formData.get("sepayWebhookSecret")),
-    bankAccountNumber: toText(formData.get("bankAccountNumber")),
-    bankAccountName: toText(formData.get("bankAccountName")),
-    bankBin: toText(formData.get("bankBin")),
-    appUrl: toText(formData.get("appUrl"))
-  });
+  const data = parseForm(updateSettingsSchema, formData);
+  await saveAppSettings(data);
   revalidatePath("/admin/settings");
-  revalidatePath("/pay/[short_code]", "page");
-}
-
-export async function markInvoicePaidForTestAction(formData: FormData) {
-  const invoiceId = toText(formData.get("invoiceId"));
-  await prisma.monthlyInvoice.update({
-    where: { id: invoiceId },
-    data: { status: "paid", paidAt: new Date() }
-  });
   revalidatePath("/pay/[short_code]", "page");
 }
 
 export async function markInvoiceCashPaidAction(formData: FormData) {
   await requireAdmin();
-  const invoiceId = toText(formData.get("invoiceId"));
-  const returnTo = toText(formData.get("returnTo"));
+  const { invoiceId, returnTo } = parseForm(markCashSchema, formData);
   const invoice = await prisma.monthlyInvoice.findUnique({
     where: { id: invoiceId },
-    include: {
-      enrollment: {
-        include: {
-          student: true,
-          classRoom: true
-        }
-      }
-    }
+    include: { enrollment: { include: { student: true, classRoom: true } } }
   });
 
   if (!invoice || invoice.status === "paid") {
@@ -259,28 +295,27 @@ export async function markInvoiceCashPaidAction(formData: FormData) {
   }
 
   const paidAt = new Date();
-  const transaction = await prisma.transaction.create({
-    data: {
-      gatewayRef: `CASH-${invoice.id}-${paidAt.getTime()}`,
-      amount: invoice.amount,
-      rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
-      transferredAt: paidAt,
-      matchedInvoiceId: invoice.id,
-      rawPayload: {
-        method: "cash",
-        source: "admin_manual",
-        invoiceId: invoice.id
-      }
-    }
-  });
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.monthlyInvoice.updateMany({
+      where: { id: invoice.id, status: "unpaid" },
+      data: { status: "paid", paidAt }
+    });
+    if (claimed.count === 0) return;
 
-  await prisma.monthlyInvoice.update({
-    where: { id: invoice.id },
-    data: {
-      status: "paid",
-      paidAt,
-      transactionId: transaction.id
-    }
+    const transaction = await tx.transaction.create({
+      data: {
+        gatewayRef: `CASH-${invoice.id}-${paidAt.getTime()}`,
+        amount: invoice.amount,
+        rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
+        transferredAt: paidAt,
+        matchedInvoiceId: invoice.id,
+        rawPayload: { method: "cash", source: "admin_manual", invoiceId: invoice.id }
+      }
+    });
+    await tx.monthlyInvoice.update({
+      where: { id: invoice.id },
+      data: { transactionId: transaction.id }
+    });
   });
 
   revalidatePath("/admin/classes");
@@ -293,8 +328,7 @@ export async function markInvoiceCashPaidAction(formData: FormData) {
 
 export async function assignTransactionAction(formData: FormData) {
   await requireAdmin();
-  const transactionId = toText(formData.get("transactionId"));
-  const invoiceId = toText(formData.get("invoiceId"));
+  const { transactionId, invoiceId } = parseForm(assignTransactionSchema, formData);
   await prisma.$transaction([
     prisma.transaction.update({
       where: { id: transactionId },
@@ -302,7 +336,7 @@ export async function assignTransactionAction(formData: FormData) {
     }),
     prisma.monthlyInvoice.update({
       where: { id: invoiceId },
-      data: { status: "paid", paidAt: new Date(), transactionId: transactionId }
+      data: { status: "paid", paidAt: new Date(), transactionId }
     })
   ]);
   revalidatePath("/admin/transactions");
