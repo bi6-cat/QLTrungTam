@@ -1,4 +1,10 @@
-import { clsx } from "clsx";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+// Gộp class Tailwind, ưu tiên class truyền vào sau (giải xung đột px-4 vs px-0, h-10 vs h-9…).
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export function Button({
   className,
@@ -9,7 +15,7 @@ export function Button({
 }) {
   return (
     <button
-      className={clsx(
+      className={cn(
         "focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
         variant === "primary" && "bg-primary text-white shadow-sm hover:bg-indigo-800",
         variant === "secondary" && "border border-stone-300 bg-white text-neutralText shadow-sm hover:bg-stone-50",
@@ -26,7 +32,7 @@ export function Button({
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={clsx(
+      className={cn(
         "focus-ring h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm transition placeholder:text-stone-400 hover:border-stone-400",
         props.className
       )}
@@ -38,7 +44,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={clsx(
+      className={cn(
         "focus-ring h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm transition hover:border-stone-400",
         props.className
       )}
@@ -50,7 +56,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={clsx(
+      className={cn(
         "focus-ring min-h-20 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm",
         props.className
       )}
@@ -68,7 +74,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={clsx(
+      className={cn(
         "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
         tone === "success" && "bg-emerald-50 text-emerald-700",
         tone === "warning" && "bg-rose-50 text-rose-700",
@@ -104,7 +110,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={clsx("rounded-lg border border-stone-200 bg-white p-5 shadow-soft", className)}>
+    <section className={cn("rounded-lg border border-stone-200 bg-white p-5 shadow-soft", className)}>
       {children}
     </section>
   );

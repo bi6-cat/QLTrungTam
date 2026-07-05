@@ -8,6 +8,10 @@ services:
     env_file: .env
     environment:
       TZ: Asia/Ho_Chi_Minh
+      # Bind mount trên Windows/macOS không bắn sự kiện đổi file vào container,
+      # nên bật polling để Next.js HMR nhận thay đổi source.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
       DATABASE_URL: postgresql://hoctro:${DB_PASSWORD:-change-me}@db:5432/hoctro?schema=public
     volumes:
       - .:/app

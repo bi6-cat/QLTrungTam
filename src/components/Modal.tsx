@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -13,17 +14,31 @@ export function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    // Khóa cuộn nền khi mở modal.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
 
-  return (
+  if (!mounted) return null;
+
+  // Portal ra body để không bị ảnh hưởng bởi ancestor có transform/overflow
+  // (nếu không, position: fixed sẽ neo theo phần tử cha đã transform).
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
@@ -39,11 +54,12 @@ export function Modal({
             onClick={onClose}
             title="Đóng"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
         <div className="mt-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
