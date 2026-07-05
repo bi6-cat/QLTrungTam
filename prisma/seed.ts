@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
 import { buildMemo } from "../src/lib/payment";
+import { generatePublicToken } from "../src/lib/publicToken";
 
 const prisma = new PrismaClient();
 
@@ -124,19 +125,12 @@ function buildEnrollments(students: StudentSeed[]): EnrollmentSeed[] {
 }
 
 async function main() {
-  // -------------------------------------------------------------------------
-  // 1. Xoá sạch dữ liệu demo cũ (giữ AdminUser + AppSetting).
-  //    Thứ tự an toàn với ràng buộc khoá ngoại (kể cả FK vòng invoice<->transaction).
-  // -------------------------------------------------------------------------
-  await prisma.monthlyInvoice.updateMany({ data: { transactionId: null } });
-  await prisma.transaction.deleteMany({});
-  await prisma.monthlyInvoice.deleteMany({});
-  await prisma.enrollment.deleteMany({});
-  await prisma.student.deleteMany({});
-  await prisma.classRoom.deleteMany({});
+  // SEED_DEMO=false (đặt trên production) → CHỈ tạo admin + cấu hình, KHÔNG xoá dữ liệu, KHÔNG chèn demo.
+  // Mặc định (dev) vẫn seed đầy đủ dữ liệu demo.
+  const seedDemo = process.env.SEED_DEMO !== "false";
 
   // -------------------------------------------------------------------------
-  // 2. Admin + cấu hình ứng dụng.
+  // 1. Admin + cấu hình ứng dụng — LUÔN chạy, idempotent (an toàn cho production).
   // -------------------------------------------------------------------------
   const adminUsername = process.env.ADMIN_USERNAME || "admin";
   const configuredHash = process.env.ADMIN_PASSWORD_HASH;
@@ -163,12 +157,38 @@ async function main() {
     await prisma.appSetting.upsert({ where: { key }, update: {}, create: { key, value } });
   }
 
+  if (!seedDemo) {
+    console.log(
+      `✅ Bootstrap hoàn tất: đã tạo/cập nhật admin "${adminUsername}" + cấu hình. Bỏ qua dữ liệu demo (SEED_DEMO=false).`
+    );
+    return;
+  }
+
+  // -------------------------------------------------------------------------
+  // 2. Xoá sạch dữ liệu demo cũ (CHỈ khi seed demo). Giữ AdminUser + AppSetting.
+  //    Thứ tự an toàn với ràng buộc khoá ngoại (kể cả FK vòng invoice<->transaction).
+  // -------------------------------------------------------------------------
+  await prisma.monthlyInvoice.updateMany({ data: { transactionId: null } });
+  await prisma.transaction.deleteMany({});
+  await prisma.monthlyInvoice.deleteMany({});
+  await prisma.enrollment.deleteMany({});
+  await prisma.student.deleteMany({});
+  await prisma.classRoom.deleteMany({});
+
   // -------------------------------------------------------------------------
   // 3. Lớp, học sinh, ghi danh.
   // -------------------------------------------------------------------------
   const students = buildStudents();
   const enrollments = buildEnrollments(students);
 
+  // Sinh mã công khai ngắn, duy nhất cho từng lớp demo.
+  const usedTokens = new Set<string>();
+  const uniqueToken = () => {
+    let token = generatePublicToken();
+    while (usedTokens.has(token)) token = generatePublicToken();
+    usedTokens.add(token);
+    return token;
+  };
   await prisma.classRoom.createMany({
     data: classSeed.map((c) => ({
       id: c.id,
@@ -176,7 +196,8 @@ async function main() {
       shortCode: c.shortCode,
       teacherName: c.teacherName,
       pricePerSession: c.pricePerSession,
-      sessionsPerMonthDefault: c.sessionsPerMonthDefault
+      sessionsPerMonthDefault: c.sessionsPerMonthDefault,
+      publicToken: uniqueToken()
     }))
   });
 

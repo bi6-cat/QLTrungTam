@@ -67,10 +67,10 @@ export function StudentEnrollmentPicker({
               type="button"
               onClick={() => setSelectedId(student.id)}
               className={[
-                "rounded-md border p-3 text-left transition",
+                "focus-ring rounded-xl border p-3 text-left transition-all duration-150",
                 isSelected
-                  ? "border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200"
-                  : "border-stone-200 bg-white hover:border-indigo-200"
+                  ? "border-indigo-300 bg-indigo-50 shadow-sm ring-1 ring-indigo-200"
+                  : "border-stone-200 bg-white hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-sm"
               ].join(" ")}
             >
               <div className="truncate font-semibold">{student.fullName}</div>
@@ -81,7 +81,7 @@ export function StudentEnrollmentPicker({
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-md border border-dashed border-stone-300 p-4 text-center text-sm text-stone-600">
+        <div className="rounded-xl border border-dashed border-stone-300 bg-white/60 p-4 text-center text-sm text-stone-600">
           Không tìm thấy học sinh phù hợp.
         </div>
       ) : null}

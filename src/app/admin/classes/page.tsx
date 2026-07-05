@@ -3,7 +3,7 @@ import { AlertTriangle, Plus } from "lucide-react";
 import {
   createClassAction
 } from "@/lib/actions";
-import { Button, EmptyState, Field, Input, Panel } from "@/components/ui";
+import { Button, EmptyState, Field, Input, Panel, PageHeader } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
@@ -60,35 +60,35 @@ export default async function ClassesPage({
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-neutralText">Lớp học</h1>
-          <p className="mt-1 text-sm text-stone-600">Quản lý lớp, giáo viên, học sinh trong lớp và hóa đơn theo tháng.</p>
-        </div>
-        {selectedClass ? (
-          <div className="flex flex-wrap gap-2">
-            <EditClassButton
-              classRoom={{
-                id: selectedClass.id,
-                name: selectedClass.name,
-                shortCode: selectedClass.shortCode,
-                teacherName: selectedClass.teacherName,
-                pricePerSession: selectedClass.pricePerSession,
-                sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault
-              }}
-            />
-            <CopyTeacherLinkButton
-              className={selectedClass.name}
-              teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.publicToken}?month=${month}&year=${year}`}
-            />
-            <CopyParentLinkButton
-              className={selectedClass.name}
-              classShortCode={selectedClass.shortCode}
-              payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.publicToken}`}
-            />
-          </div>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Lớp học"
+        description="Quản lý lớp, giáo viên, học sinh trong lớp và hóa đơn theo tháng."
+        actions={
+          selectedClass ? (
+            <>
+              <EditClassButton
+                classRoom={{
+                  id: selectedClass.id,
+                  name: selectedClass.name,
+                  shortCode: selectedClass.shortCode,
+                  teacherName: selectedClass.teacherName,
+                  pricePerSession: selectedClass.pricePerSession,
+                  sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault
+                }}
+              />
+              <CopyTeacherLinkButton
+                className={selectedClass.name}
+                teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.publicToken}?month=${month}&year=${year}`}
+              />
+              <CopyParentLinkButton
+                className={selectedClass.name}
+                classShortCode={selectedClass.shortCode}
+                payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.publicToken}`}
+              />
+            </>
+          ) : undefined
+        }
+      />
 
       <div className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
         <div className="grid h-fit gap-4">
@@ -104,10 +104,10 @@ export default async function ClassesPage({
                     <div
                       key={classRoom.id}
                       className={[
-                        "relative flex items-center justify-between gap-3 rounded-md border p-3 transition duration-150",
+                        "relative flex items-center justify-between gap-3 rounded-xl border p-3 transition-all duration-150",
                         isSelected
-                          ? "translate-x-1 border-indigo-200 bg-indigo-50 shadow-sm"
-                          : "border-stone-200 bg-white hover:border-indigo-200 hover:bg-stone-50"
+                          ? "border-indigo-200 bg-indigo-50 shadow-sm"
+                          : "border-stone-200 bg-white hover:border-indigo-300 hover:bg-stone-50"
                       ].join(" ")}
                     >
                       {isSelected ? (

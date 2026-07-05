@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { Button, Field, Input, Panel, Select } from "@/components/ui";
+import { Button, Field, Input, Panel, PageHeader, Select } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +10,10 @@ export default async function ReportsPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-neutralText">Xuất báo cáo</h1>
-        <p className="mt-1 text-sm text-stone-600">Tải Excel theo lớp hoặc toàn bộ trung tâm trong một tháng.</p>
-      </div>
+      <PageHeader
+        title="Xuất báo cáo"
+        description="Tải Excel theo lớp hoặc toàn bộ trung tâm trong một tháng."
+      />
 
       <Panel>
         <form action="/admin/reports/export" method="GET" className="grid gap-3 md:grid-cols-[1fr_120px_140px_auto]">

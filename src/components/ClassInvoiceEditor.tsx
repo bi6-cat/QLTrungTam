@@ -102,8 +102,8 @@ export function ClassInvoiceEditor({
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-soft">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 p-6">
+    <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200/80 p-6">
         <div className="min-w-0 flex-1">
           <h3 className="font-bold">Chi tiết {formatMonth(month, year)}</h3>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-500">
@@ -117,11 +117,11 @@ export function ClassInvoiceEditor({
               Còn lại: <strong className="text-lg text-warning">{formatCurrency(remainingAmount)}</strong>
             </span>
             {hasMissingInvoice ? (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Cần tạo {missingInvoiceCount} hóa đơn
               </span>
             ) : !hasAnyInvoice ? (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Dự thảo
               </span>
             ) : null}
@@ -185,7 +185,7 @@ export function ClassInvoiceEditor({
               <col className="w-[20%]" />
               <col className="w-[11%]" />
             </colgroup>
-            <thead className="bg-stone-50 text-xs uppercase text-stone-500">
+            <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
                 <th className="px-2 py-3">Học sinh</th>
                 <th className="px-2 py-3">Trạng thái học</th>
@@ -207,7 +207,7 @@ export function ClassInvoiceEditor({
                 return (
                   <tr
                     key={row.enrollmentId}
-                    className={isPaid ? "bg-emerald-50/30" : editing ? "bg-amber-50/30" : ""}
+                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
                   >
                     <td className="whitespace-nowrap px-2 py-3">
                       <input type="hidden" name="enrollmentId" value={row.enrollmentId} />

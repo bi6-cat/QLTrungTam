@@ -113,6 +113,7 @@ POSTGRES_USER="hoctro"
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD="MAT_KHAU_ADMIN_MANH"
 ADMIN_PASSWORD_HASH=""
+SEED_DEMO="false"
 SESSION_SECRET="CHUOI_RANDOM_RAT_DAI_TOI_THIEU_32_KY_TU"
 
 SEPAY_API_KEY=""
@@ -145,13 +146,15 @@ docker compose up -d db
 docker compose --profile tools run --rm migrate
 ```
 
-Nếu cần seed admin ban đầu, container dev hiện có seed tự động, còn production không tự seed. Có thể chạy:
+Tạo tài khoản admin ban đầu (chạy MỘT lần). Với `SEED_DEMO="false"` trong `.env`, lệnh này CHỈ tạo/cập nhật admin + cấu hình, **không xoá dữ liệu và không chèn dữ liệu demo**:
 
 ```bash
 docker compose --profile tools run --rm migrate sh -c "npm install && npm run prisma:seed"
 ```
 
-Lệnh seed sẽ tạo/cập nhật tài khoản admin theo `ADMIN_USERNAME`, `ADMIN_PASSWORD` hoặc `ADMIN_PASSWORD_HASH` trong `.env`.
+Lệnh seed sẽ tạo/cập nhật tài khoản admin theo `ADMIN_USERNAME`, `ADMIN_PASSWORD` hoặc `ADMIN_PASSWORD_HASH` trong `.env`. Vì dùng `upsert` nên chạy lại nhiều lần vẫn an toàn (không mất dữ liệu).
+
+> ⚠️ **Quan trọng:** Tuyệt đối KHÔNG chạy seed khi `SEED_DEMO="true"` trên production — khi đó seed sẽ **xoá sạch** toàn bộ lớp/học sinh/hoá đơn/giao dịch rồi nạp lại dữ liệu demo.
 
 ## 6. Build và chạy app
 

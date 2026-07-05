@@ -8,6 +8,7 @@ import { login, logout, requireAdmin } from "@/lib/auth";
 import { buildMemo } from "@/lib/payment";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { generatePublicToken } from "@/lib/publicToken";
 import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
 import { saveAppSettings } from "@/lib/settings";
 
@@ -99,15 +100,32 @@ export async function changePasswordAction(
 export async function createClassAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(createClassSchema, formData);
-  await prisma.classRoom.create({
-    data: {
-      name: data.name,
-      shortCode: data.shortCode,
-      teacherName: data.teacherName,
-      pricePerSession: data.pricePerSession,
-      sessionsPerMonthDefault: data.sessionsPerMonthDefault
+  // Sinh mã công khai ngắn, thử lại nếu trùng; sau vài lần thì nới dài để chắc chắn.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await prisma.classRoom.create({
+        data: {
+          name: data.name,
+          shortCode: data.shortCode,
+          teacherName: data.teacherName,
+          pricePerSession: data.pricePerSession,
+          sessionsPerMonthDefault: data.sessionsPerMonthDefault,
+          publicToken: generatePublicToken(attempt < 10 ? undefined : 6)
+        }
+      });
+      break;
+    } catch (error) {
+      const target = error instanceof Prisma.PrismaClientKnownRequestError ? (error.meta?.target as string[] | undefined) : undefined;
+      const isTokenCollision =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        Array.isArray(target) &&
+        target.includes("publicToken");
+      // Chỉ thử lại khi trùng publicToken; lỗi khác (vd trùng shortCode) ném ra ngoài.
+      if (isTokenCollision && attempt < 25) continue;
+      throw error;
     }
-  });
+  }
   revalidatePath("/admin/classes");
 }
 

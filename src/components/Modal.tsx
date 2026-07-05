@@ -38,15 +38,15 @@ export function Modal({
   // (nếu không, position: fixed sẽ neo theo phần tử cha đã transform).
   return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 grid animate-fade-in place-items-center bg-neutralText/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-stone-200 bg-white p-5 shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg animate-scale-in overflow-y-auto rounded-2xl border border-stone-200/80 bg-white p-6 shadow-lift"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
-          <h3 className="text-base font-bold text-neutralText">{title}</h3>
+          <h3 className="text-lg font-bold tracking-tight text-neutralText">{title}</h3>
           <Button
             type="button"
             variant="ghost"

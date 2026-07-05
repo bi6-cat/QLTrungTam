@@ -1,7 +1,7 @@
 import { Save } from "lucide-react";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { updateSettingsAction } from "@/lib/actions";
-import { Field, Input, Panel, Button } from "@/components/ui";
+import { Field, Input, Panel, PageHeader, Button } from "@/components/ui";
 import { getAppSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +11,10 @@ export default async function SettingsPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-neutralText">Cài đặt</h1>
-        <p className="mt-1 text-sm text-stone-600">
-          Cấu hình thông tin thanh toán, tài khoản nhận tiền và key webhook.
-        </p>
-      </div>
+      <PageHeader
+        title="Cài đặt"
+        description="Cấu hình thông tin thanh toán, tài khoản nhận tiền và key webhook."
+      />
 
       <Panel>
         <form action={updateSettingsAction} className="grid gap-5">
@@ -44,7 +42,7 @@ export default async function SettingsPage() {
             </Field>
           </div>
 
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-800">
             Logo hiển thị ở thanh điều hướng đọc từ <code className="font-mono">public/logo.jpg</code>.
           </div>
 

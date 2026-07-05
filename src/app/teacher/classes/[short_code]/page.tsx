@@ -66,11 +66,11 @@ export default async function TeacherClassPage({
   const visibleRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <main className="min-h-screen bg-neutralBg">
+    <main className="min-h-screen">
       <PublicBrandHeader subtitle="Cổng theo dõi lớp dành cho giáo viên" />
-      <div className="mx-auto grid max-w-6xl gap-5 px-4 py-6">
-        <header className="overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-soft">
-          <div className="bg-indigo-50/80 p-6">
+      <div className="mx-auto grid max-w-6xl animate-fade-up gap-5 px-4 py-6">
+        <header className="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-soft">
+          <div className="border-b border-indigo-100 bg-indigo-50/80 p-6">
             <div className="flex flex-wrap items-end justify-between gap-5">
               <div>
                 <p className="text-xs font-bold uppercase text-primary">APLUS ACADEMY</p>
@@ -98,28 +98,28 @@ export default async function TeacherClassPage({
         </header>
 
         <section className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-soft">
+          <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-500">Học sinh</p>
               <Users className="h-5 w-5 text-primary" />
             </div>
             <p className="mt-2 text-2xl font-bold">{rows.length}</p>
           </div>
-          <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-soft">
+          <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-500">Đã đóng</p>
               <CheckCircle2 className="h-5 w-5 text-success" />
             </div>
             <p className="mt-2 text-2xl font-bold text-success">{paidRows.length}</p>
           </div>
-          <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-soft">
+          <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-500">Chưa đóng</p>
               <Clock className="h-5 w-5 text-warning" />
             </div>
             <p className="mt-2 text-2xl font-bold text-warning">{unpaidRows.length}</p>
           </div>
-          <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-soft">
+          <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-stone-500">Đã thu</p>
               <CalendarDays className="h-5 w-5 text-primary" />
@@ -129,8 +129,8 @@ export default async function TeacherClassPage({
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-soft">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 p-5">
+        <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 p-5">
             <div className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5 text-primary" />
               <h2 className="font-bold">Theo dõi lớp {formatMonth(month, year)}</h2>
@@ -156,7 +156,7 @@ export default async function TeacherClassPage({
                   <col className="w-[11%]" />
                   <col className="w-[18%]" />
                 </colgroup>
-                <thead className="bg-stone-50 text-xs uppercase text-stone-500">
+                <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <tr>
                     <th className="px-4 py-3">Học sinh</th>
                     <th className="px-4 py-3">SĐT</th>
@@ -169,7 +169,14 @@ export default async function TeacherClassPage({
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {visibleRows.map((row) => (
-                    <tr key={row.enrollment.id} className={row.invoice?.status === "paid" ? "bg-emerald-50/30" : ""}>
+                    <tr
+                      key={row.enrollment.id}
+                      className={
+                        row.invoice?.status === "paid"
+                          ? "bg-emerald-50/30 transition-colors hover:bg-emerald-50/60"
+                          : "transition-colors hover:bg-indigo-50/40"
+                      }
+                    >
                       <td className="px-4 py-3">
                         <div className="truncate font-semibold">{row.enrollment.student.fullName}</div>
                       </td>

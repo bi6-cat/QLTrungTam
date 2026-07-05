@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { Plus, Trash2 } from "lucide-react";
 import { createStudentAction, deleteStudentAction } from "@/lib/actions";
-import { Badge, Button, EmptyState, Field, Input, Panel, Textarea } from "@/components/ui";
+import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, Select, Textarea } from "@/components/ui";
 import { EditStudentButton } from "@/components/EditStudentButton";
 import { prisma } from "@/lib/prisma";
 
@@ -11,21 +12,27 @@ const PAGE_SIZE = 15;
 export default async function StudentsPage({
   searchParams
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; classId?: string }>;
 }) {
   const params = await searchParams;
   const q = (params.q || "").trim();
+  const classId = (params.classId || "").trim();
   const page = Math.max(1, Number(params.page || 1));
-  const where = q
-    ? {
-        OR: [
-          { fullName: { contains: q, mode: "insensitive" as const } },
-          { phone: { contains: q } },
-          { parentName: { contains: q, mode: "insensitive" as const } }
-        ]
-      }
-    : {};
-  const [students, total] = await Promise.all([
+  const filters: Prisma.StudentWhereInput[] = [];
+  if (q) {
+    filters.push({
+      OR: [
+        { fullName: { contains: q, mode: "insensitive" as const } },
+        { phone: { contains: q } },
+        { parentName: { contains: q, mode: "insensitive" as const } }
+      ]
+    });
+  }
+  if (classId) {
+    filters.push({ enrollments: { some: { classId } } });
+  }
+  const where = filters.length ? { AND: filters } : {};
+  const [students, total, classes] = await Promise.all([
     prisma.student.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -35,29 +42,40 @@ export default async function StudentsPage({
         enrollments: { include: { classRoom: true } }
       }
     }),
-    prisma.student.count({ where })
+    prisma.student.count({ where }),
+    prisma.classRoom.findMany({ orderBy: { name: "asc" } })
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const selectedClass = classes.find((classRoom) => classRoom.id === classId) ?? null;
 
   function pageHref(nextPage: number) {
     const search = new URLSearchParams();
     if (q) search.set("q", q);
+    if (classId) search.set("classId", classId);
     search.set("page", String(nextPage));
     return `/admin/students?${search.toString()}`;
   }
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-neutralText">Học sinh</h1>
-          <p className="mt-1 text-sm text-stone-600">Quản lý thông tin học sinh và phụ huynh.</p>
-        </div>
-        <form action="/admin/students" method="GET" className="flex w-full gap-2 sm:w-auto">
-          <Input name="q" defaultValue={q} placeholder="Tìm tên, SĐT, phụ huynh" className="sm:w-72" />
-          <Button type="submit" variant="secondary">Tìm</Button>
-        </form>
-      </div>
+      <PageHeader
+        title="Học sinh"
+        description="Quản lý thông tin học sinh và phụ huynh."
+        actions={
+          <form action="/admin/students" method="GET" className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Input name="q" defaultValue={q} placeholder="Tìm tên, SĐT, phụ huynh" className="sm:w-64" />
+            <Select name="classId" defaultValue={classId} className="sm:w-48">
+              <option value="">Tất cả lớp</option>
+              {classes.map((classRoom) => (
+                <option key={classRoom.id} value={classRoom.id}>
+                  {classRoom.name}
+                </option>
+              ))}
+            </Select>
+            <Button type="submit" variant="secondary">Tìm</Button>
+          </form>
+        }
+      />
 
       <Panel>
         <h2 className="font-bold">Thêm học sinh</h2>
@@ -89,12 +107,20 @@ export default async function StudentsPage({
       </Panel>
 
       {students.length === 0 ? (
-        <EmptyState title="Chưa có học sinh">Thêm học sinh đầu tiên rồi gán vào lớp tại mục Lớp học.</EmptyState>
+        <EmptyState title={q || classId ? "Không tìm thấy học sinh phù hợp" : "Chưa có học sinh"} icon={<Plus className="h-6 w-6" />}>
+          {selectedClass ? (
+            <>Không có học sinh nào trong lớp <strong>{selectedClass.name}</strong> khớp bộ lọc hiện tại.</>
+          ) : q ? (
+            <>Thử từ khóa khác hoặc bỏ bớt bộ lọc.</>
+          ) : (
+            <>Thêm học sinh đầu tiên rồi gán vào lớp tại mục Lớp học.</>
+          )}
+        </EmptyState>
       ) : (
         <Panel className="overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-stone-50 text-xs uppercase text-stone-500">
+              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Học sinh</th>
                   <th className="px-4 py-3">Phụ huynh</th>
@@ -104,7 +130,7 @@ export default async function StudentsPage({
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100">
+              <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
                 {students.map((student) => (
                   <tr key={student.id}>
                     <td className="whitespace-nowrap px-4 py-3">

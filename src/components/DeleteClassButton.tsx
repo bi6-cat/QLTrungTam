@@ -20,7 +20,7 @@ export function DeleteClassButton({
       <Button
         type="button"
         variant="ghost"
-        className="h-9 w-9 shrink-0 rounded-md px-0 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+        className="h-9 w-9 shrink-0 px-0 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
         title="Xóa lớp"
         onClick={() => setOpen(true)}
       >
