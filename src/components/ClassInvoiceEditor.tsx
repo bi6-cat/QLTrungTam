@@ -74,11 +74,11 @@ export function ClassInvoiceEditor({
   const visibleIds = new Set(visibleRows.map((row) => row.enrollmentId));
   const formId = `class-details-${classId}-${month}-${year}`;
   const submitLabel = editing
-    ? "Lưu tổng"
+    ? "Lưu thay đổi"
     : hasMissingInvoice
     ? `Tạo ${missingInvoiceCount} hóa đơn`
     : hasAnyInvoice
-      ? "Lưu tổng"
+      ? "Lưu thay đổi"
       : "Tạo hóa đơn tháng này";
 
   async function markCashPaid(invoiceId: string) {
@@ -145,7 +145,7 @@ export function ClassInvoiceEditor({
           ) : (
             <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
-              {hasMissingInvoice ? "Sửa trước khi tạo" : hasAnyInvoice ? "Sửa tổng" : "Sửa dự thảo"}
+              {hasMissingInvoice ? "Sửa trước khi tạo" : hasAnyInvoice ? "Sửa" : "Sửa dự thảo"}
             </Button>
           )}
         </div>

@@ -8,11 +8,13 @@ import { Button } from "@/components/ui";
 export function Modal({
   title,
   onClose,
-  children
+  children,
+  maxWidthClassName = "max-w-lg"
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  maxWidthClassName?: string;
 }) {
   const [mounted, setMounted] = useState(false);
 
@@ -42,7 +44,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg animate-scale-in overflow-y-auto rounded-2xl border border-stone-200/80 bg-white p-6 shadow-lift"
+        className={`max-h-[90vh] w-full ${maxWidthClassName} animate-scale-in overflow-y-auto rounded-2xl border border-stone-200/80 bg-white p-6 shadow-lift`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

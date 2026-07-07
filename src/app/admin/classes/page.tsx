@@ -206,11 +206,16 @@ export default async function ClassesPage({
                 <h3 className="font-bold">Học sinh trong lớp</h3>
                 <AddStudentToClassButton
                   classId={selectedClass.id}
-                  students={students.map((student) => ({
-                    id: student.id,
-                    fullName: student.fullName,
-                    phone: student.phone
-                  }))}
+                  students={students
+                    .filter(
+                      (student) =>
+                        !selectedClass.enrollments.some((enrollment) => enrollment.studentId === student.id)
+                    )
+                    .map((student) => ({
+                      id: student.id,
+                      fullName: student.fullName,
+                      phone: student.phone
+                    }))}
                 />
               </div>
               {selectedClass.enrollments.length === 0 ? (

@@ -28,8 +28,10 @@ export function AddStudentToClassButton({
         Thêm học sinh
       </Button>
       {open ? (
-        <Modal title="Thêm học sinh vào lớp" onClose={() => setOpen(false)}>
-          <p className="text-sm text-stone-500">Tìm theo tên hoặc số điện thoại rồi chọn học sinh cần thêm.</p>
+        <Modal title="Thêm học sinh vào lớp" onClose={() => setOpen(false)} maxWidthClassName="max-w-3xl">
+          <p className="text-sm text-stone-500">
+            Tìm theo tên hoặc số điện thoại, có thể chọn nhiều học sinh cùng lúc.
+          </p>
           <StudentEnrollmentPicker classId={classId} students={students} onSuccess={() => setOpen(false)} />
         </Modal>
       ) : null}
