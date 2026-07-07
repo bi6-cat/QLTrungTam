@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   const existing = await prisma.transaction.findUnique({ where: { gatewayRef } });
   if (existing) {
     return NextResponse.json({
-      ok: true,
+      success: true,
       matched: Boolean(existing.matchedInvoiceId),
       duplicate: true
     });
@@ -121,11 +121,11 @@ export async function POST(request: Request) {
       return true;
     });
 
-    return NextResponse.json({ ok: true, matched, reason: matched ? null : match.reason });
+    return NextResponse.json({ success: true, matched, reason: matched ? null : match.reason });
   } catch (error) {
     // Đua tạo trùng gatewayRef (unique constraint) -> coi như bản lặp.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ ok: true, matched: false, duplicate: true });
+      return NextResponse.json({ success: true, matched: false, duplicate: true });
     }
     throw error;
   }

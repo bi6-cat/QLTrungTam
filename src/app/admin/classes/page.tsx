@@ -13,7 +13,7 @@ import { CopyTeacherLinkButton } from "@/components/CopyTeacherLinkButton";
 import { DeleteClassButton } from "@/components/DeleteClassButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
-import { StudentEnrollmentPicker } from "@/components/StudentEnrollmentPicker";
+import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
 
 export const dynamic = "force-dynamic";
 
@@ -201,15 +201,10 @@ export default async function ClassesPage({
               ) : null}
             </div>
 
-            <div className="border-b border-stone-100 bg-stone-50/70 p-6">
-              <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold">Thêm học sinh vào lớp</h3>
-                    <p className="mt-1 text-sm text-stone-500">Tìm theo tên hoặc số điện thoại rồi chọn học sinh cần thêm.</p>
-                  </div>
-                </div>
-                <StudentEnrollmentPicker
+            <div className="p-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-bold">Học sinh trong lớp</h3>
+                <AddStudentToClassButton
                   classId={selectedClass.id}
                   students={students.map((student) => ({
                     id: student.id,
@@ -218,9 +213,6 @@ export default async function ClassesPage({
                   }))}
                 />
               </div>
-            </div>
-
-            <div className="p-6">
               {selectedClass.enrollments.length === 0 ? (
                 <EmptyState title="Lớp chưa có học sinh">Thêm học sinh vào lớp để bắt đầu tạo hóa đơn.</EmptyState>
               ) : (

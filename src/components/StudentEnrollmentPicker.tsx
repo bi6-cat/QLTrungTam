@@ -15,14 +15,27 @@ const PAGE_SIZE = 6;
 
 export function StudentEnrollmentPicker({
   classId,
-  students
+  students,
+  onSuccess
 }: {
   classId: string;
   students: StudentOption[];
+  onSuccess?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState(students[0]?.id ?? "");
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(formData: FormData) {
+    setPending(true);
+    try {
+      await createEnrollmentAction(formData);
+      onSuccess?.();
+    } finally {
+      setPending(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -38,7 +51,7 @@ export function StudentEnrollmentPicker({
   const selected = students.find((student) => student.id === selectedId);
 
   return (
-    <form action={createEnrollmentAction} className="mt-4 grid gap-4">
+    <form action={handleSubmit} className="mt-4 grid gap-4">
       <input type="hidden" name="classId" value={classId} />
       <input type="hidden" name="studentId" value={selectedId} />
 
@@ -125,9 +138,9 @@ export function StudentEnrollmentPicker({
             <option value="on_leave">Bảo lưu</option>
           </Select>
         </Field>
-        <Button type="submit" className="self-end" disabled={!selectedId}>
+        <Button type="submit" className="self-end" disabled={!selectedId || pending}>
           <Plus className="h-4 w-4" />
-          Thêm vào lớp
+          {pending ? "Đang thêm..." : "Thêm vào lớp"}
         </Button>
       </div>
     </form>
