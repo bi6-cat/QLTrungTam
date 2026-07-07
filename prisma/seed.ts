@@ -253,7 +253,7 @@ async function main() {
   ) {
     const sessions = enrollment.sessionsOverride ?? enrollment.defaultSessions;
     const amount = sessions * enrollment.pricePerSession;
-    const memo = buildMemo(enrollment.shortCode, enrollment.phone, m);
+    const memo = buildMemo(enrollment.shortCode, enrollment.phone, m, y);
     const invoice = await prisma.monthlyInvoice.create({
       data: {
         enrollmentId: enrollment.id,
@@ -382,8 +382,8 @@ async function main() {
   }
 
   // 5c. Memo đúng cú pháp nhưng KHÔNG có hoá đơn tương ứng (SĐT lạ).
-  await createUnmatched(buildMemo("L10A", "0900999888", month), 1200000, 18);
-  await createUnmatched(buildMemo("ENA2", "0900777666", month), 1200000, 20);
+  await createUnmatched(buildMemo("L10A", "0900999888", month, year), 1200000, 18);
+  await createUnmatched(buildMemo("ENA2", "0900777666", month, year), 1200000, 20);
 
   // -------------------------------------------------------------------------
   // 6. Tổng kết.

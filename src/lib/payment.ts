@@ -4,21 +4,23 @@ export function normalizePhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
-export function buildMemo(shortCode: string, phone: string, month: number) {
-  return `HP ${shortCode.toUpperCase()} ${normalizePhone(phone)} T${month}`;
+export function buildMemo(shortCode: string, phone: string, month: number, year: number) {
+  const yearCode = String(year % 100).padStart(2, "0");
+  return `HP ${shortCode.toUpperCase()} ${normalizePhone(phone)} ${yearCode}T${month}`;
 }
 
 export function parseMemo(content: string) {
   const match = content
     .toUpperCase()
-    .match(/\bHP\s+([A-Z0-9_-]+)\s+(\d{8,12})\s+T(1[0-2]|[1-9])\b/);
+    .match(/\bHP\s+([A-Z0-9_-]+)\s+(\d{8,12})\s+(?:(\d{2})T|T)(1[0-2]|[1-9])\b/);
 
   if (!match) return null;
 
   return {
     shortCode: match[1],
     phone: normalizePhone(match[2]),
-    month: Number(match[3])
+    year: match[3] ? 2000 + Number(match[3]) : null,
+    month: Number(match[4])
   };
 }
 
@@ -55,6 +57,7 @@ export async function matchInvoiceFromTransaction(args: {
   const invoices = await prisma.monthlyInvoice.findMany({
     where: {
       month: parsed.month,
+      ...(parsed.year ? { year: parsed.year } : {}),
       status: "unpaid",
       enrollment: {
         classRoom: { shortCode: parsed.shortCode },

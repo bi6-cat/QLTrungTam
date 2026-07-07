@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check, CheckCircle2, Copy, ExternalLink, Info, Loader2, QrCode } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Check, CheckCircle2, Copy, ExternalLink, Home, Info, Loader2, QrCode } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 
@@ -53,11 +54,11 @@ function CopyMemoButton({ memo }: { memo: string }) {
 }
 
 export function PaymentFlow({ students }: { students: Student[] }) {
-  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
+  const [studentId, setStudentId] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [statuses, setStatuses] = useState<Record<string, "paid" | "unpaid">>({});
   const selected = useMemo(
-    () => students.find((student) => student.id === studentId) ?? students[0],
+    () => students.find((student) => student.id === studentId) ?? null,
     [studentId, students]
   );
 
@@ -84,7 +85,7 @@ export function PaymentFlow({ students }: { students: Student[] }) {
     return () => window.clearInterval(timer);
   }, [confirmed, selected]);
 
-  if (!selected) {
+  if (students.length === 0) {
     return (
       <div className="rounded-2xl border border-stone-200/80 bg-white p-6 text-center shadow-soft">
         <p className="font-semibold">Lớp này chưa có học sinh.</p>
@@ -92,10 +93,10 @@ export function PaymentFlow({ students }: { students: Student[] }) {
     );
   }
 
-  const visibleInvoices = selected.invoices.map((invoice) => ({
+  const visibleInvoices = selected ? selected.invoices.map((invoice) => ({
     ...invoice,
     status: statuses[invoice.id] ?? invoice.status
-  }));
+  })) : [];
   const unpaidInvoices = visibleInvoices.filter((invoice) => invoice.status === "unpaid");
 
   return (
@@ -113,13 +114,21 @@ export function PaymentFlow({ students }: { students: Student[] }) {
           }}
           className="focus-ring mt-3 h-12 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-base shadow-sm transition-colors hover:border-stone-400 focus:border-primary"
         >
+          <option value="" disabled>
+            Tên học sinh
+          </option>
           {students.map((student) => (
             <option key={student.id} value={student.id}>
               {student.fullName}
             </option>
           ))}
         </select>
-        <Button type="button" className="mt-4 h-12 w-full text-base" onClick={() => setConfirmed(true)}>
+        <Button
+          type="button"
+          className="mt-4 h-12 w-full text-base"
+          disabled={!studentId}
+          onClick={() => setConfirmed(true)}
+        >
           Tiếp theo
           <ArrowRight className="h-5 w-5" />
         </Button>
@@ -137,6 +146,12 @@ export function PaymentFlow({ students }: { students: Student[] }) {
           </span>
           <h2 className="mt-4 text-xl font-bold">Đã đóng đầy đủ học phí</h2>
           <p className="mt-2 text-stone-600">Hệ thống không còn hóa đơn chưa thanh toán cho học sinh này.</p>
+          <Link href="/" className="mt-6 inline-block">
+            <Button type="button" variant="secondary">
+              <Home className="h-4 w-4" />
+              Về trang chủ
+            </Button>
+          </Link>
         </section>
       ) : (
         unpaidInvoices.map((invoice) => (

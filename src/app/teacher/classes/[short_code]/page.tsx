@@ -53,7 +53,7 @@ export default async function TeacherClassPage({
       invoice,
       sessions,
       amount,
-      memo: invoice?.memoContent ?? buildMemo(classRoom.shortCode, enrollment.student.phone, month)
+      memo: invoice?.memoContent ?? buildMemo(classRoom.shortCode, enrollment.student.phone, month, year)
     };
   });
 

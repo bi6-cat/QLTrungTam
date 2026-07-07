@@ -239,7 +239,7 @@ export default async function ClassesPage({
                       enrollmentStatus: enrollment.status,
                       defaultSessions,
                       pricePerSession: selectedClass.pricePerSession,
-                      memoContent: buildMemo(selectedClass.shortCode, enrollment.student.phone, month),
+                      memoContent: buildMemo(selectedClass.shortCode, enrollment.student.phone, month, year),
                       invoice: invoice
                         ? {
                             id: invoice.id,

@@ -19,6 +19,10 @@ function getAmount(value: unknown) {
   return 0;
 }
 
+function getAuthorizationSecret(value: string | null) {
+  return value?.replace(/^(Bearer|Apikey|ApiKey)\s+/i, "").trim() || "";
+}
+
 export async function POST(request: Request) {
   const settings = await getAppSettings();
   const expectedSecret = settings.sepayWebhookSecret || settings.sepayApiKey;
@@ -29,9 +33,9 @@ export async function POST(request: Request) {
   }
 
   const receivedSecret =
-    request.headers.get("x-sepay-secret") ||
-    request.headers.get("x-api-key") ||
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    request.headers.get("x-sepay-secret")?.trim() ||
+    request.headers.get("x-api-key")?.trim() ||
+    getAuthorizationSecret(request.headers.get("authorization"));
 
   if (receivedSecret !== expectedSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

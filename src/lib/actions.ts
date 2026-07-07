@@ -153,7 +153,6 @@ export async function updateClassAction(
       where: { id: data.id },
       data: {
         name: data.name,
-        shortCode: data.shortCode,
         teacherName: data.teacherName,
         pricePerSession: data.pricePerSession,
         sessionsPerMonthDefault: data.sessionsPerMonthDefault
@@ -258,9 +257,10 @@ export async function generateInvoicesAction(formData: FormData) {
 
   for (const enrollment of enrollments) {
     const sessions = enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault;
+    const memoContent = buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year);
     await prisma.monthlyInvoice.upsert({
       where: { enrollmentId_month_year: { enrollmentId: enrollment.id, month, year } },
-      update: {},
+      update: { memoContent },
       create: {
         enrollmentId: enrollment.id,
         month,
@@ -268,7 +268,7 @@ export async function generateInvoicesAction(formData: FormData) {
         sessions,
         pricePerSession: enrollment.classRoom.pricePerSession,
         amount: sessions * enrollment.classRoom.pricePerSession,
-        memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month)
+        memoContent
       }
     });
   }
@@ -324,7 +324,11 @@ export async function updateClassDetailsAction(formData: FormData) {
       if (existingInvoice) {
         await tx.monthlyInvoice.update({
           where: { id: existingInvoice.id },
-          data: { sessions, amount: sessions * existingInvoice.pricePerSession }
+          data: {
+            sessions,
+            amount: sessions * existingInvoice.pricePerSession,
+            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year)
+          }
         });
       } else if (parsed.intent === "create" && status === "active") {
         await tx.monthlyInvoice.create({
@@ -335,7 +339,7 @@ export async function updateClassDetailsAction(formData: FormData) {
             sessions,
             pricePerSession: enrollment.classRoom.pricePerSession,
             amount: sessions * enrollment.classRoom.pricePerSession,
-            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month)
+            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year)
           }
         });
       }

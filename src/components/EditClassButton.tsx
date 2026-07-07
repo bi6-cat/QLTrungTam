@@ -44,8 +44,12 @@ function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose
           <Input name="name" defaultValue={classRoom.name} required />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Mã lớp">
-            <Input name="shortCode" defaultValue={classRoom.shortCode} required />
+          <Field label="Mã lớp" hint="Không thể sửa sau khi tạo">
+            <Input
+              value={classRoom.shortCode}
+              readOnly
+              className="bg-stone-100 font-mono text-stone-500"
+            />
           </Field>
           <Field label="Tên giáo viên">
             <Input name="teacherName" defaultValue={classRoom.teacherName} />

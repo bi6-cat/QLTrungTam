@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { logoutAction } from "@/lib/actions";
 import { requireAdmin } from "@/lib/auth";
@@ -11,7 +12,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-4 py-3 lg:px-8">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="focus-ring flex items-center gap-3 rounded-xl">
             <img
               src="/logo.jpg"
               alt="APLUS ACADEMY"
@@ -21,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <p className="text-sm font-bold tracking-tight text-primary">APLUS ACADEMY</p>
               <p className="text-xs text-stone-500">Xin chào, {session.username}</p>
             </div>
-          </div>
+          </Link>
           <form action={logoutAction}>
             <Button type="submit" variant="secondary">
               <LogOut className="h-4 w-4" />

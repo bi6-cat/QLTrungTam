@@ -82,7 +82,6 @@ export const createClassSchema = z.object({
 export const updateClassSchema = z.object({
   id,
   name: requiredText("Thiếu tên lớp", 120),
-  shortCode,
   teacherName: looseText(120),
   pricePerSession: money,
   sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60).catch(8)
