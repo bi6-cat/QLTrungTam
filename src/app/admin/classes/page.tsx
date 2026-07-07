@@ -31,7 +31,7 @@ export default async function ClassesPage({
       orderBy: { createdAt: "asc" },
       include: {
         enrollments: {
-          orderBy: { createdAt: "asc" },
+          orderBy: { student: { fullName: "asc" } },
           include: {
             student: true,
             invoices: { where: { month, year }, orderBy: { createdAt: "desc" } }
