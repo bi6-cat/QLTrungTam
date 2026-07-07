@@ -91,6 +91,7 @@ model Transaction {
   transferredAt    DateTime
   matchedInvoiceId String?
   rawPayload       Json
+  resolvedAt       DateTime?
   createdAt        DateTime         @default(now())
   matchedInvoice   MonthlyInvoice?  @relation("TransactionMatchedInvoice", fields: [matchedInvoiceId], references: [id])
   invoices         MonthlyInvoice[] @relation("InvoicePaymentTransaction")

@@ -22,18 +22,19 @@ import {
 } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
+import { CENTER_INFO } from "@/lib/center";
 
 /**
  * Thông tin liên hệ hiển thị công khai trên landing page.
- * 👉 Sửa trực tiếp ở đây khi có thông tin chính thức.
+ * 👉 Sửa ở @/lib/center.ts để đồng bộ với báo cáo Excel.
  */
 const CONTACT = {
-  phone: "0865638262",
-  address: "Thôn 1 - Vũ Đoài - Vũ Thư - Thái Bình",
+  phone: CENTER_INFO.phone,
+  address: CENTER_INFO.address,
   hours: "7h00 – 23h00, tất cả các ngày trong tuần",
   facebookUrl: "https://www.facebook.com/apeduvn/",
   facebookLabel: "Luyện thi & bổ trợ kiến thức A+ Academy",
-  email: "quangnn906@gmail.com"
+  email: CENTER_INFO.email
 };
 
 /**

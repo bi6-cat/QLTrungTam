@@ -164,6 +164,10 @@ export const assignTransactionSchema = z.object({
   invoiceId: id
 });
 
+export const resolveTransactionSchema = z.object({
+  transactionId: id
+});
+
 // ---------------------------------------------------------------------------
 // Helpers: FormData -> object -> parse.
 // ---------------------------------------------------------------------------

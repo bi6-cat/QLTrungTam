@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History, Landmark, LinkIcon } from "lucide-react";
-import { assignTransactionAction } from "@/lib/actions";
+import { assignTransactionAction, resolveTransactionAction } from "@/lib/actions";
 import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, Select, StatCard } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +31,7 @@ export default async function TransactionsPage({
 
   const [unmatchedTransactions, allTransactions, paidHistory, allInvoices, unpaidInvoices] = await Promise.all([
     prisma.transaction.findMany({
-      where: { matchedInvoiceId: null },
+      where: { matchedInvoiceId: null, resolvedAt: null },
       orderBy: { transferredAt: "desc" }
     }),
     prisma.transaction.findMany({
@@ -358,8 +358,8 @@ export default async function TransactionsPage({
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{transaction.gatewayRef}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(transaction.amount)}</td>
                     <td className="px-4 py-3">
-                      <Badge tone={transaction.matchedInvoice ? "success" : "warning"}>
-                        {transaction.matchedInvoice ? "Đã khớp" : "Chưa khớp"}
+                      <Badge tone={transaction.matchedInvoice ? "success" : transaction.resolvedAt ? "neutral" : "warning"}>
+                        {transaction.matchedInvoice ? "Đã khớp" : transaction.resolvedAt ? "Đã xử lý" : "Chưa khớp"}
                       </Badge>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
@@ -369,6 +369,8 @@ export default async function TransactionsPage({
                           {transaction.matchedInvoice.enrollment.student.fullName} ·{" "}
                           {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
                         </>
+                      ) : transaction.resolvedAt ? (
+                        "Đã xử lý thủ công (không gán học sinh)"
                       ) : (
                         "-"
                       )}
@@ -426,23 +428,32 @@ export default async function TransactionsPage({
                       <p className="mt-2 max-w-sm break-words font-mono text-xs">{transaction.rawContent}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <form action={assignTransactionAction} className="grid gap-2">
-                        <input type="hidden" name="transactionId" value={transaction.id} />
-                        <Field label="Hóa đơn chưa đóng">
-                          <Select name="invoiceId" required>
-                            {unpaidInvoices.map((invoice) => (
-                              <option key={invoice.id} value={invoice.id}>
-                                {invoice.enrollment.classRoom.shortCode} · {invoice.enrollment.student.fullName} ·{" "}
-                                {formatMonth(invoice.month, invoice.year)} · {formatCurrency(invoice.amount)}
-                              </option>
-                            ))}
-                          </Select>
-                        </Field>
-                        <Button type="submit" disabled={unpaidInvoices.length === 0}>
-                          <LinkIcon className="h-4 w-4" />
-                          Gán và đánh dấu đã đóng
-                        </Button>
-                      </form>
+                      <div className="grid gap-3">
+                        <form action={assignTransactionAction} className="grid gap-2">
+                          <input type="hidden" name="transactionId" value={transaction.id} />
+                          <Field label="Hóa đơn chưa đóng">
+                            <Select name="invoiceId" required>
+                              {unpaidInvoices.map((invoice) => (
+                                <option key={invoice.id} value={invoice.id}>
+                                  {invoice.enrollment.classRoom.shortCode} · {invoice.enrollment.student.fullName} ·{" "}
+                                  {formatMonth(invoice.month, invoice.year)} · {formatCurrency(invoice.amount)}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Button type="submit" disabled={unpaidInvoices.length === 0}>
+                            <LinkIcon className="h-4 w-4" />
+                            Gán và đánh dấu đã đóng
+                          </Button>
+                        </form>
+                        <form action={resolveTransactionAction}>
+                          <input type="hidden" name="transactionId" value={transaction.id} />
+                          <Button type="submit" variant="secondary" className="w-full">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Đã xử lý (không gán học sinh)
+                          </Button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -30,6 +30,7 @@ import {
   loginSchema,
   markCashSchema,
   parseForm,
+  resolveTransactionSchema,
   safeParseForm,
   updateClassDetailsSchema,
   updateClassSchema,
@@ -423,4 +424,14 @@ export async function assignTransactionAction(formData: FormData) {
   ]);
   revalidatePath("/admin/transactions");
   revalidatePath("/admin/classes");
+}
+
+export async function resolveTransactionAction(formData: FormData) {
+  await requireAdmin();
+  const { transactionId } = parseForm(resolveTransactionSchema, formData);
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { resolvedAt: new Date() }
+  });
+  revalidatePath("/admin/transactions");
 }

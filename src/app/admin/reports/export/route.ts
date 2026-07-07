@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/lib/excel-report";
+import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
@@ -14,34 +16,61 @@ export async function GET(request: Request) {
   const month = Number(url.searchParams.get("month") || new Date().getMonth() + 1);
   const year = Number(url.searchParams.get("year") || new Date().getFullYear());
 
-  const invoices = await prisma.monthlyInvoice.findMany({
-    where: {
-      month,
-      year,
-      enrollment: classId ? { classId } : undefined
-    },
-    orderBy: [{ enrollment: { classRoom: { name: "asc" } } }, { enrollment: { student: { fullName: "asc" } } }],
-    include: {
-      enrollment: { include: { student: true, classRoom: true } }
-    }
-  });
+  const [invoices, selectedClass] = await Promise.all([
+    prisma.monthlyInvoice.findMany({
+      where: {
+        month,
+        year,
+        enrollment: classId ? { classId } : undefined
+      },
+      orderBy: [{ enrollment: { classRoom: { name: "asc" } } }, { enrollment: { student: { fullName: "asc" } } }],
+      include: {
+        enrollment: { include: { student: true, classRoom: true } }
+      }
+    }),
+    classId ? prisma.classRoom.findUnique({ where: { id: classId } }) : null
+  ]);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(`T${month}-${year}`);
-  sheet.columns = [
-    { header: "Lớp", key: "className", width: 22 },
-    { header: "Mã lớp", key: "shortCode", width: 12 },
-    { header: "Giáo viên", key: "teacherName", width: 20 },
-    { header: "Học sinh", key: "student", width: 28 },
-    { header: "SĐT", key: "phone", width: 16 },
-    { header: "Tháng", key: "month", width: 10 },
-    { header: "Số buổi", key: "sessions", width: 10 },
-    { header: "Đơn giá", key: "pricePerSession", width: 14 },
-    { header: "Thành tiền", key: "amount", width: 14 },
-    { header: "Trạng thái", key: "status", width: 14 },
-    { header: "Memo", key: "memo", width: 28 }
+  const columns = [
+    { key: "className", width: 22 },
+    { key: "shortCode", width: 12 },
+    { key: "teacherName", width: 20 },
+    { key: "student", width: 26 },
+    { key: "phone", width: 15 },
+    { key: "month", width: 10 },
+    { key: "sessions", width: 10 },
+    { key: "pricePerSession", width: 14 },
+    { key: "amount", width: 14 },
+    { key: "status", width: 13 },
+    { key: "memo", width: 28 }
   ];
+  sheet.columns = columns;
 
+  const headerStartRow = addReportBranding(workbook, sheet, {
+    title: "BÁO CÁO HỌC PHÍ",
+    subtitle: `${formatMonth(month, year)}${selectedClass ? ` · Lớp ${selectedClass.name}` : " · Tất cả các lớp"}`,
+    columnCount: columns.length
+  });
+
+  const headerRow = sheet.getRow(headerStartRow);
+  headerRow.values = [
+    "Lớp",
+    "Mã lớp",
+    "Giáo viên",
+    "Học sinh",
+    "SĐT",
+    "Tháng",
+    "Số buổi",
+    "Đơn giá",
+    "Thành tiền",
+    "Trạng thái",
+    "Memo"
+  ];
+  styleTableHeaderRow(headerRow);
+
+  const firstDataRow = headerStartRow + 1;
   for (const invoice of invoices) {
     sheet.addRow({
       className: invoice.enrollment.classRoom.name,
@@ -57,20 +86,26 @@ export async function GET(request: Request) {
       memo: invoice.memoContent
     });
   }
+  const lastDataRow = firstDataRow + invoices.length - 1;
+  if (invoices.length > 0) {
+    styleTableDataRows(sheet, firstDataRow, lastDataRow, columns.length);
+  }
 
-  sheet.addRow({});
-  sheet.addRow({
-    className: "Tổng dự kiến",
-    amount: invoices.reduce((sum, invoice) => sum + invoice.amount, 0)
-  });
-  sheet.addRow({
-    className: "Tổng đã thu",
-    amount: invoices.filter((invoice) => invoice.status === "paid").reduce((sum, invoice) => sum + invoice.amount, 0)
+  const totalExpected = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalPaid = invoices.filter((invoice) => invoice.status === "paid").reduce((sum, invoice) => sum + invoice.amount, 0);
+
+  sheet.addRow([]);
+  const expectedRow = sheet.addRow({ className: "Tổng dự kiến", amount: totalExpected });
+  const paidRow = sheet.addRow({ className: "Tổng đã thu", amount: totalPaid });
+  const remainingRow = sheet.addRow({ className: "Còn phải thu", amount: Math.max(0, totalExpected - totalPaid) });
+  [expectedRow, paidRow, remainingRow].forEach((row) => {
+    row.getCell("className").font = { bold: true };
+    row.getCell("amount").font = { bold: true };
   });
 
-  sheet.getRow(1).font = { bold: true };
-  sheet.getColumn("amount").numFmt = '#,##0 "VND"';
-  sheet.getColumn("pricePerSession").numFmt = '#,##0 "VND"';
+  sheet.getColumn("amount").numFmt = '#,##0 "₫"';
+  sheet.getColumn("pricePerSession").numFmt = '#,##0 "₫"';
+  sheet.views = [{ state: "frozen", ySplit: headerStartRow }];
 
   const buffer = await workbook.xlsx.writeBuffer();
   return new NextResponse(buffer, {
