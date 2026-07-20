@@ -38,6 +38,7 @@ export default async function PayPage({
   const bankBin = settings.bankBin;
   const accountNumber = settings.bankAccountNumber;
   const accountName = settings.bankAccountName;
+  const returnUrl = `${settings.appUrl.replace(/\/$/, "")}/pay/${encodeURIComponent(short_code)}`;
   const students = classRoom.enrollments.map((enrollment) => ({
     id: enrollment.student.id,
     fullName: enrollment.student.fullName,
@@ -55,7 +56,14 @@ export default async function PayPage({
         amount: invoice.amount,
         memo: invoice.memoContent
       }),
-      deepLink: buildVietQrDeepLink(invoice.memoContent, invoice.amount)
+      deepLink: buildVietQrDeepLink({
+        bankBin,
+        accountNumber,
+        accountName,
+        amount: invoice.amount,
+        memo: invoice.memoContent,
+        returnUrl
+      })
     }))
   }));
 

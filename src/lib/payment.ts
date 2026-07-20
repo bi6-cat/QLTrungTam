@@ -39,9 +39,29 @@ export function buildVietQrImageUrl(params: {
   return `https://img.vietqr.io/image/${params.bankBin}-${params.accountNumber}-compact2.png?${search.toString()}`;
 }
 
-export function buildVietQrDeepLink(memo: string, amount: number) {
-  const search = new URLSearchParams({ memo, amount: String(amount) });
-  return `vietqr://pay?${search.toString()}`;
+export function buildVietQrDeepLink(params: {
+  bankBin: string;
+  accountNumber: string;
+  accountName: string;
+  amount: number;
+  memo: string;
+  returnUrl?: string;
+}) {
+  const search = new URLSearchParams({
+    ba: `${params.accountNumber}@${params.bankBin}`,
+    am: String(params.amount),
+    tn: params.memo,
+    bn: params.accountName
+  });
+
+  if (params.returnUrl) {
+    search.set("url", params.returnUrl);
+  }
+
+  // VietQR redirects this HTTPS universal link to the scheme registered by
+  // the bank app selected on the payment screen. A bare vietqr:// URL is not
+  // registered on iOS and Safari reports it as an invalid address.
+  return `https://dl.vietqr.io/pay?${search.toString()}`;
 }
 
 export async function matchInvoiceFromTransaction(args: {
