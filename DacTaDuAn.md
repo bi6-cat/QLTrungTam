@@ -79,7 +79,7 @@ Ví dụ: `HP L10A 0912345678 T8`
 3. Hệ thống liệt kê **tất cả hoá đơn `unpaid`** của học sinh đó trong lớp (thường chỉ 1, nhưng có thể nhiều nếu nợ từ trước):
    - Nếu không còn hoá đơn unpaid nào → hiện "✅ Đã đóng đầy đủ học phí"
    - Mỗi hoá đơn unpaid hiện riêng: tháng, số tiền, mã VietQR + memo cố định tương ứng (không cho tự nhập tay, tránh sai)
-4. Dưới mỗi QR có nút **"Mở app ngân hàng"** (deep link VietQR, VD `vietqr://...` hoặc link universal của app Techcombank/app ngân hàng bất kỳ hỗ trợ VietQR) — tiện cho phụ huynh xem thẳng trên điện thoại thay vì phải quét QR bằng máy khác
+4. Dưới mỗi QR có ghi chú: phụ huynh chỉ cần quét mã QR rồi chuyển khoản, không cần sửa nội dung chuyển khoản
 5. Trang tự động poll (mỗi 3-5s) trạng thái từng hoá đơn → khi webhook xác nhận, tự chuyển hoá đơn đó sang "✅ Đã nhận thanh toán" mà không cần refresh
 
 ### 4.3. Webhook SePay
@@ -147,7 +147,7 @@ Hệ thống có **2 giao diện rất khác tính chất**, cần thiết kế 
 | Tên | Hex | Dùng cho |
 |---|---|---|
 | `primary` (Indigo đậm) | `#3730A3` | Header, nút chính, link |
-| `accent` (Amber) | `#F59E0B` | Nút CTA nổi bật (VD: nút "Mở app ngân hàng") |
+| `accent` (Amber) | `#F59E0B` | Thành phần CTA cần nhấn mạnh |
 | `success` (Emerald) | `#10B981` | Trạng thái "Đã đóng" |
 | `warning` (Rose) | `#F43F5E` | "Chưa đóng" / quá hạn |
 | `neutral-bg` | `#FAFAF9` | Nền trang |
@@ -158,7 +158,7 @@ Quy tắc: **màu = trạng thái**, dùng nhất quán toàn hệ thống (badg
 ### Trang nộp học phí — lưu ý riêng
 - Chỉ 3 bước trên 1 màn hình di động, không cuộn ngang, chữ tối thiểu 16px.
 - Trạng thái rõ bằng cả màu **và** icon (không chỉ dựa vào màu, tránh khó nhìn với người lớn tuổi).
-- Nút "Mở app ngân hàng" to, nổi bật hơn hẳn phần còn lại (đây là hành động chính).
+- Mã QR là hành động chính, hiển thị to, rõ và kèm hướng dẫn không sửa nội dung chuyển khoản.
 - Có trạng thái loading khi đang chờ webhook xác nhận (spinner + "Đang chờ xác nhận thanh toán...").
 - Có trạng thái lỗi rõ ràng nếu link/lớp không tồn tại ("Không tìm thấy lớp học này, vui lòng liên hệ trung tâm").
 

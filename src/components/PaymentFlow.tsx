@@ -2,34 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CheckCircle2, Copy, ExternalLink, Home, Info, Loader2, QrCode } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Copy, Home, Info, Loader2, QrCode } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
-
-type BankApp = {
-  appId: string;
-  appName: string;
-  bankName: string;
-};
-
-const FALLBACK_BANK_APPS: BankApp[] = [
-  { appId: "tcb", appName: "Techcombank Mobile", bankName: "Techcombank" },
-  { appId: "vcb", appName: "Vietcombank", bankName: "Vietcombank" },
-  { appId: "mb", appName: "MB Bank", bankName: "MB Bank" },
-  { appId: "bidv", appName: "BIDV SmartBanking", bankName: "BIDV" },
-  { appId: "vpb", appName: "VPBank NEO", bankName: "VPBank" },
-  { appId: "acb", appName: "ACB ONE", bankName: "ACB" },
-  { appId: "icb", appName: "VietinBank iPay", bankName: "VietinBank" },
-  { appId: "tpb", appName: "TPBank Mobile", bankName: "TPBank" },
-  { appId: "vib-2", appName: "MyVIB 2.0", bankName: "VIB" },
-  { appId: "vba", appName: "Agribank E-Mobile Banking", bankName: "Agribank" }
-];
-
-function addBankAppToDeepLink(deepLink: string, appId: string) {
-  const url = new URL(deepLink);
-  url.searchParams.set("app", appId);
-  return url.toString();
-}
 
 type Invoice = {
   id: string;
@@ -39,7 +14,6 @@ type Invoice = {
   memoContent: string;
   status: "paid" | "unpaid";
   qrImageUrl: string;
-  deepLink: string;
 };
 
 type Student = {
@@ -82,36 +56,10 @@ export function PaymentFlow({ students }: { students: Student[] }) {
   const [studentId, setStudentId] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [statuses, setStatuses] = useState<Record<string, "paid" | "unpaid">>({});
-  const [bankApps, setBankApps] = useState<BankApp[]>(FALLBACK_BANK_APPS);
-  const [bankAppId, setBankAppId] = useState("");
   const selected = useMemo(
     () => students.find((student) => student.id === studentId) ?? null,
     [studentId, students]
   );
-
-  useEffect(() => {
-    const platform = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "ios" : "android";
-    const controller = new AbortController();
-
-    void fetch(`https://api.vietqr.io/v2/${platform}-app-deeplinks`, {
-      signal: controller.signal
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Không tải được danh sách app ngân hàng");
-        return response.json() as Promise<{ apps?: BankApp[] }>;
-      })
-      .then((data) => {
-        const apps = data.apps?.filter(
-          (app) => app.appId && app.appName && /^[a-z0-9-]+$/i.test(app.appId)
-        );
-        if (apps?.length) setBankApps(apps);
-      })
-      .catch(() => {
-        // Giữ danh sách phổ biến dự phòng khi API VietQR tạm thời không khả dụng.
-      });
-
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     if (!confirmed) return;
@@ -247,43 +195,12 @@ export function PaymentFlow({ students }: { students: Student[] }) {
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-sm text-indigo-800">
                 <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p>
-                  Khi quét mã QR, số tiền và nội dung chuyển khoản sẽ <strong>tự động điền</strong>.
-                  Nút bên dưới sẽ mở app đã chọn; khả năng tự động điền khi mở app tùy từng ngân hàng.
+                  Phụ huynh chỉ cần quét mã QR rồi chuyển khoản, <strong>không cần sửa nội dung chuyển khoản</strong>.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 p-5">
-              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                Chọn app ngân hàng trên điện thoại
-                <select
-                  value={bankAppId}
-                  onChange={(event) => setBankAppId(event.target.value)}
-                  className="focus-ring h-12 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-base font-normal shadow-sm transition-colors hover:border-stone-400 focus:border-primary"
-                >
-                  <option value="">Chọn ngân hàng của bạn</option>
-                  {bankApps.map((app) => (
-                    <option key={app.appId} value={app.appId}>
-                      {app.appName.replace(/^[\u200e\u200f\u202a-\u202e]+/, "")}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <a
-                href={bankAppId ? addBankAppToDeepLink(invoice.deepLink, bankAppId) : undefined}
-                aria-disabled={!bankAppId}
-                onClick={(event) => {
-                  if (!bankAppId) event.preventDefault();
-                }}
-                className={`focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl px-4 text-base font-bold text-white shadow-sm ring-1 ring-inset ring-white/20 transition-all ${
-                  bankAppId
-                    ? "bg-gradient-to-b from-amber-400 to-accent hover:from-amber-500 hover:to-amber-600 hover:shadow-md active:scale-[0.98]"
-                    : "cursor-not-allowed bg-stone-300"
-                }`}
-              >
-                <ExternalLink className="h-5 w-5" />
-                Mở app ngân hàng
-              </a>
+            <div className="p-5">
               <div className="flex items-center justify-center gap-2 text-sm text-stone-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Đang chờ xác nhận thanh toán...

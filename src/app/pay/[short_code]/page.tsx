@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { PaymentFlow } from "@/components/PaymentFlow";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
-import { buildVietQrDeepLink, buildVietQrImageUrl } from "@/lib/payment";
+import { buildVietQrImageUrl } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
 
@@ -38,7 +38,6 @@ export default async function PayPage({
   const bankBin = settings.bankBin;
   const accountNumber = settings.bankAccountNumber;
   const accountName = settings.bankAccountName;
-  const returnUrl = `${settings.appUrl.replace(/\/$/, "")}/pay/${encodeURIComponent(short_code)}`;
   const students = classRoom.enrollments.map((enrollment) => ({
     id: enrollment.student.id,
     fullName: enrollment.student.fullName,
@@ -55,14 +54,6 @@ export default async function PayPage({
         accountName,
         amount: invoice.amount,
         memo: invoice.memoContent
-      }),
-      deepLink: buildVietQrDeepLink({
-        bankBin,
-        accountNumber,
-        accountName,
-        amount: invoice.amount,
-        memo: invoice.memoContent,
-        returnUrl
       })
     }))
   }));
@@ -78,7 +69,7 @@ export default async function PayPage({
               Nộp học phí
             </span>
             <h1 className="mt-3 text-2xl font-bold tracking-tight">{classRoom.name}</h1>
-            <p className="mt-2 text-sm text-white/85">Chọn tên học sinh, kiểm tra số tiền và chuyển khoản đúng nội dung.</p>
+            <p className="mt-2 text-sm text-white/85">Chọn tên học sinh, kiểm tra số tiền rồi quét mã QR để chuyển khoản.</p>
           </div>
         </header>
 
