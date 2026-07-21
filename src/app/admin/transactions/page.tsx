@@ -22,48 +22,69 @@ export default async function TransactionsPage({
 }) {
   const params = await searchParams;
   const now = new Date();
-  const selectedMonth = Math.min(12, Math.max(1, Number(params.month) || now.getMonth() + 1));
-  const selectedYear = Number(params.year) || now.getFullYear();
-  const paidPage = Math.max(1, Number(params.paidPage) || 1);
-  const txPage = Math.max(1, Number(params.txPage) || 1);
-  const unmatchedPage = Math.max(1, Number(params.unmatchedPage) || 1);
+  const parsedMonth = Number(params.month);
+  const selectedMonth =
+    Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+      ? parsedMonth
+      : now.getMonth() + 1;
+  const parsedYear = Number(params.year);
+  const selectedYear =
+    Number.isInteger(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100
+      ? parsedYear
+      : now.getFullYear();
+  const positivePage = (value?: string) => {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : 1;
+  };
+  const requestedPaidPage = positivePage(params.paidPage);
+  const requestedTxPage = positivePage(params.txPage);
+  const requestedUnmatchedPage = positivePage(params.unmatchedPage);
   const periodStart = new Date(selectedYear, selectedMonth - 1, 1);
   const periodEnd = new Date(selectedYear, selectedMonth, 1);
 
-  const [unmatchedTransactions, allTransactions, paidHistory, allInvoices, unpaidInvoices] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { matchedInvoiceId: null, resolvedAt: null, reversedAt: null },
-      orderBy: { transferredAt: "desc" }
+  const transactionPeriodWhere = {
+    transferredAt: { gte: periodStart, lt: periodEnd }
+  };
+  const unmatchedWhere = {
+    matchedInvoiceId: null,
+    resolvedAt: null,
+    reversedAt: null
+  };
+  const paidInvoiceWhere = {
+    status: "paid" as const,
+    month: selectedMonth,
+    year: selectedYear
+  };
+
+  const [
+    paidAggregate,
+    transactionCount,
+    bankTransactionAggregate,
+    unmatchedCount,
+    monthlyGroups,
+    unpaidInvoices
+  ] = await Promise.all([
+    prisma.monthlyInvoice.aggregate({
+      where: paidInvoiceWhere,
+      _count: { _all: true },
+      _sum: { amount: true }
     }),
-    prisma.transaction.findMany({
+    prisma.transaction.count({ where: transactionPeriodWhere }),
+    prisma.transaction.aggregate({
       where: {
-        transferredAt: {
-          gte: periodStart,
-          lt: periodEnd
-        }
+        ...transactionPeriodWhere,
+        paymentMethod: "bank_transfer",
+        reversedAt: null
       },
-      orderBy: { transferredAt: "desc" },
-      take: 120,
-      include: {
-        matchedInvoice: {
-          include: {
-            enrollment: { include: { student: true, classRoom: true } }
-          }
-        }
-      }
+      _count: { _all: true },
+      _sum: { amount: true }
     }),
-    prisma.monthlyInvoice.findMany({
-      where: { status: "paid", month: selectedMonth, year: selectedYear },
-      orderBy: [{ paidAt: "desc" }, { year: "desc" }, { month: "desc" }],
-      include: {
-        transaction: true,
-        enrollment: { include: { student: true, classRoom: true } }
-      }
-    }),
-    prisma.monthlyInvoice.findMany({
-      include: {
-        enrollment: { include: { classRoom: true } }
-      }
+    prisma.transaction.count({ where: unmatchedWhere }),
+    prisma.monthlyInvoice.groupBy({
+      by: ["year", "month", "status"],
+      _count: { _all: true },
+      _sum: { amount: true },
+      orderBy: [{ year: "desc" }, { month: "desc" }]
     }),
     prisma.monthlyInvoice.findMany({
       where: { status: "unpaid" },
@@ -74,8 +95,59 @@ export default async function TransactionsPage({
     })
   ]);
 
+  function pageMeta(requestedPage: number, total: number) {
+    const totalPages = Math.max(1, Math.ceil(total / LIST_PAGE_SIZE));
+    const current = Math.min(requestedPage, totalPages);
+    return {
+      current,
+      totalPages,
+      start: (current - 1) * LIST_PAGE_SIZE,
+      total
+    };
+  }
+
+  const paidMeta = pageMeta(requestedPaidPage, paidAggregate._count._all);
+  const txMeta = pageMeta(requestedTxPage, transactionCount);
+  const unmatchedMeta = pageMeta(requestedUnmatchedPage, unmatchedCount);
+
+  const [paidHistory, allTransactions, unmatchedTransactions] = await Promise.all([
+    prisma.monthlyInvoice.findMany({
+      where: paidInvoiceWhere,
+      orderBy: [{ paidAt: "desc" }, { id: "desc" }],
+      skip: paidMeta.start,
+      take: LIST_PAGE_SIZE,
+      include: {
+        transaction: true,
+        enrollment: { include: { student: true, classRoom: true } }
+      }
+    }),
+    prisma.transaction.findMany({
+      where: transactionPeriodWhere,
+      orderBy: [{ transferredAt: "desc" }, { id: "desc" }],
+      skip: txMeta.start,
+      take: LIST_PAGE_SIZE,
+      include: {
+        matchedInvoice: {
+          include: {
+            enrollment: { include: { student: true, classRoom: true } }
+          }
+        }
+      }
+    }),
+    prisma.transaction.findMany({
+      where: unmatchedWhere,
+      orderBy: [{ transferredAt: "desc" }, { id: "desc" }],
+      skip: unmatchedMeta.start,
+      take: LIST_PAGE_SIZE
+    })
+  ]);
+
+  const paid = { ...paidMeta, rows: paidHistory };
+  const tx = { ...txMeta, rows: allTransactions };
+  const unmatched = { ...unmatchedMeta, rows: unmatchedTransactions };
+
   const monthlySummary = Object.values(
-    allInvoices.reduce<
+    monthlyGroups.reduce<
       Record<
         string,
         {
@@ -91,12 +163,12 @@ export default async function TransactionsPage({
           voidCount: number;
         }
       >
-    >((acc, invoice) => {
-      const key = `${invoice.year}-${String(invoice.month).padStart(2, "0")}`;
+    >((acc, group) => {
+      const key = `${group.year}-${String(group.month).padStart(2, "0")}`;
       acc[key] ??= {
         key,
-        month: invoice.month,
-        year: invoice.year,
+        month: group.month,
+        year: group.year,
         expectedAmount: 0,
         paidAmount: 0,
         invoiceCount: 0,
@@ -105,47 +177,35 @@ export default async function TransactionsPage({
         waivedCount: 0,
         voidCount: 0
       };
-      acc[key].invoiceCount += 1;
-      if (invoice.status === "paid") {
-        acc[key].expectedAmount += invoice.amount;
-        acc[key].paidAmount += invoice.amount;
-        acc[key].paidCount += 1;
-      } else if (invoice.status === "unpaid") {
-        acc[key].expectedAmount += invoice.amount;
-        acc[key].unpaidCount += 1;
-      } else if (invoice.status === "waived") {
-        acc[key].waivedCount += 1;
+      const count = group._count._all;
+      const amount = group._sum.amount ?? 0;
+      acc[key].invoiceCount += count;
+      if (group.status === "paid") {
+        acc[key].expectedAmount += amount;
+        acc[key].paidAmount += amount;
+        acc[key].paidCount += count;
+      } else if (group.status === "unpaid") {
+        acc[key].expectedAmount += amount;
+        acc[key].unpaidCount += count;
+      } else if (group.status === "waived") {
+        acc[key].waivedCount += count;
       } else {
-        acc[key].voidCount += 1;
+        acc[key].voidCount += count;
       }
       return acc;
     }, {})
   ).sort((a, b) => b.key.localeCompare(a.key));
 
-  const totalPaid = paidHistory.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const bankTransactions = allTransactions.filter(
-    (transaction) => transaction.paymentMethod === "bank_transfer" && !transaction.reversedAt
-  );
-  const totalBankTransactions = bankTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
-
-  // Phân trang phía server cho từng danh sách, giữ nguyên tháng/năm và trang của các list khác.
-  function slicePage<T>(items: T[], page: number) {
-    const totalPages = Math.max(1, Math.ceil(items.length / LIST_PAGE_SIZE));
-    const current = Math.min(page, totalPages);
-    const start = (current - 1) * LIST_PAGE_SIZE;
-    return { rows: items.slice(start, start + LIST_PAGE_SIZE), totalPages, current, start, total: items.length };
-  }
-  const paid = slicePage(paidHistory, paidPage);
-  const tx = slicePage(allTransactions, txPage);
-  const unmatched = slicePage(unmatchedTransactions, unmatchedPage);
+  const totalPaid = paidAggregate._sum.amount ?? 0;
+  const totalBankTransactions = bankTransactionAggregate._sum.amount ?? 0;
 
   function pagerHref(param: string, value: number) {
     const search = new URLSearchParams();
     search.set("month", String(selectedMonth));
     search.set("year", String(selectedYear));
-    if (paidPage > 1) search.set("paidPage", String(paidPage));
-    if (txPage > 1) search.set("txPage", String(txPage));
-    if (unmatchedPage > 1) search.set("unmatchedPage", String(unmatchedPage));
+    if (paid.current > 1) search.set("paidPage", String(paid.current));
+    if (tx.current > 1) search.set("txPage", String(tx.current));
+    if (unmatched.current > 1) search.set("unmatchedPage", String(unmatched.current));
     search.set(param, String(value));
     return `/admin/transactions?${search.toString()}`;
   }
@@ -224,20 +284,20 @@ export default async function TransactionsPage({
           label={`Đã ghi nhận ${formatMonth(selectedMonth, selectedYear)}`}
           tone="success"
           value={formatCurrency(totalPaid)}
-          hint={`${paidHistory.length} hóa đơn đã đóng`}
+          hint={`${paid.total} hóa đơn đã đóng`}
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <StatCard
           label={`Chuyển khoản ${formatMonth(selectedMonth, selectedYear)}`}
           tone="primary"
           value={formatCurrency(totalBankTransactions)}
-          hint={`${bankTransactions.length} giao dịch ngân hàng hợp lệ`}
+          hint={`${bankTransactionAggregate._count._all} giao dịch ngân hàng hợp lệ`}
           icon={<Landmark className="h-5 w-5" />}
         />
         <StatCard
           label="Chưa khớp"
           tone="warning"
-          value={unmatchedTransactions.length}
+          value={unmatched.total}
           hint="Cần đối soát thủ công"
           icon={<AlertTriangle className="h-5 w-5" />}
         />
@@ -295,7 +355,7 @@ export default async function TransactionsPage({
           <History className="h-5 w-5 text-primary" />
           <h2 className="font-bold">Lịch sử đóng tiền {formatMonth(selectedMonth, selectedYear)}</h2>
         </div>
-        {paidHistory.length === 0 ? (
+        {paid.total === 0 ? (
           <div className="p-5">
             <EmptyState title="Chưa có học phí đã đóng">Khi webhook hoặc nút test xác nhận thanh toán, lịch sử sẽ xuất hiện tại đây.</EmptyState>
           </div>
@@ -361,7 +421,7 @@ export default async function TransactionsPage({
           <Landmark className="h-5 w-5 text-primary" />
           <h2 className="font-bold">Lịch sử giao dịch {formatMonth(selectedMonth, selectedYear)}</h2>
         </div>
-        {allTransactions.length === 0 ? (
+        {tx.total === 0 ? (
           <div className="p-5">
             <EmptyState title="Chưa có giao dịch">Giao dịch chuyển khoản hoặc tiền mặt sẽ xuất hiện tại đây.</EmptyState>
           </div>
@@ -471,7 +531,7 @@ export default async function TransactionsPage({
           <AlertTriangle className="h-5 w-5 text-warning" />
           <h2 className="font-bold">Giao dịch chưa khớp cần xử lý</h2>
         </div>
-        {unmatchedTransactions.length === 0 ? (
+        {unmatched.total === 0 ? (
           <div className="p-5">
             <EmptyState title="Không có giao dịch chưa khớp">
               Các webhook hiện đều đã được xử lý hoặc chưa có giao dịch mới.

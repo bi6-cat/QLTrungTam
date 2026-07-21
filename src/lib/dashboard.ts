@@ -33,6 +33,7 @@ export async function getCurrentDashboard() {
     year,
     classes: classes.map((classRoom) => {
       const active = classRoom.enrollments.filter((item) => {
+        if (classRoom.archivedAt || item.student.archivedAt) return false;
         const invoice = item.invoices[0];
         return (item.months[0]?.status ?? (invoice ? "active" : item.status)) === "active";
       });
@@ -64,6 +65,6 @@ export async function getCurrentDashboard() {
         waivedAmount: waived.reduce((sum, item) => sum + item.amount, 0),
         remainingAmount: unpaidAmount
       };
-    })
+    }).filter((classRoom) => !classRoom.archivedAt || classRoom.invoiceCount > 0)
   };
 }

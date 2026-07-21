@@ -232,6 +232,12 @@ async function main() {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
 
+  function seedTimestamp(m: number, y: number, day: number, hour: number, minute: number) {
+    const candidate = new Date(y, m - 1, Math.min(28, Math.max(1, day)), hour, minute, 0);
+    if (candidate <= now) return candidate;
+    return new Date(year, month - 1, now.getDate(), 0, 0, 0);
+  }
+
   const studentById = new Map(students.map((student) => [student.id, student]));
   const classById = new Map(classSeed.map((classRoom) => [classRoom.id, classRoom]));
 
@@ -321,7 +327,7 @@ async function main() {
 
   async function payByTransfer(invoiceId: string, amount: number, memo: string, m: number, y: number, day: number) {
     txSeq += 1;
-    const transferredAt = new Date(y, m - 1, Math.min(28, Math.max(1, day)), 9, 0, 0);
+    const transferredAt = seedTimestamp(m, y, day, 9, 0);
     const transaction = await prisma.transaction.create({
       data: {
         gatewayRef: `TF-${y}${String(m).padStart(2, "0")}-${String(txSeq).padStart(5, "0")}`,
@@ -342,7 +348,7 @@ async function main() {
   }
 
   async function payByCash(invoiceId: string, amount: number, studentName: string, shortCode: string, m: number, y: number, day: number) {
-    const paidAt = new Date(y, m - 1, Math.min(28, Math.max(1, day)), 17, 30, 0);
+    const paidAt = seedTimestamp(m, y, day, 17, 30);
     const transaction = await prisma.transaction.create({
       data: {
         gatewayRef: `CASH-${invoiceId}-${paidAt.getTime()}`,
@@ -419,7 +425,7 @@ async function main() {
         gatewayRef: `TF-${year}${String(month).padStart(2, "0")}-U${String(txSeq).padStart(5, "0")}`,
         amount,
         rawContent,
-        transferredAt: new Date(year, month - 1, Math.min(28, Math.max(1, day)), 10, 15, 0),
+        transferredAt: seedTimestamp(month, year, day, 10, 15),
         matchedInvoiceId: null,
         rawPayload: { source: "sepay", gateway: "MB", content: rawContent, transferAmount: amount }
       }

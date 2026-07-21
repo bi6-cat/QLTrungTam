@@ -20,7 +20,7 @@ export default async function PayPage({
       enrollments: {
         where: {
           OR: [
-            { status: "active" },
+            { status: "active", student: { archivedAt: null } },
             { invoices: { some: { status: "unpaid" } } }
           ]
         },
@@ -44,7 +44,12 @@ export default async function PayPage({
   const bankBin = settings.bankBin;
   const accountNumber = settings.bankAccountNumber;
   const accountName = settings.bankAccountName;
-  const students = classRoom.enrollments.map((enrollment) => ({
+  const payableEnrollments = classRoom.enrollments.filter(
+    (enrollment) =>
+      enrollment.invoices.some((invoice) => invoice.status === "unpaid") ||
+      (!classRoom.archivedAt && !enrollment.student.archivedAt)
+  );
+  const students = payableEnrollments.map((enrollment) => ({
     id: enrollment.student.id,
     fullName: enrollment.student.fullName,
     invoices: enrollment.invoices.map((invoice) => ({
@@ -84,8 +89,8 @@ export default async function PayPage({
             <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-50 text-warning">
               <AlertCircle className="h-7 w-7" />
             </span>
-            <h2 className="mt-4 text-lg font-bold">Lớp chưa có học sinh đang học</h2>
-            <p className="mt-2 text-stone-600">Vui lòng liên hệ trung tâm để kiểm tra lại đường dẫn.</p>
+            <h2 className="mt-4 text-lg font-bold">Không có khoản cần thanh toán</h2>
+            <p className="mt-2 text-stone-600">Lớp chưa có học sinh đang học hoặc mọi khoản đã được xử lý.</p>
           </section>
         ) : (
           <PaymentFlow students={students} />

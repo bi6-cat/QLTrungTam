@@ -5,6 +5,13 @@ import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/li
 import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
+const INVOICE_STATUS_LABEL = {
+  paid: "Đã đóng",
+  unpaid: "Chưa đóng",
+  waived: "Đã miễn",
+  void: "Đã hủy"
+} as const;
+
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
@@ -13,8 +20,25 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const classId = url.searchParams.get("classId") || undefined;
-  const month = Number(url.searchParams.get("month") || new Date().getMonth() + 1);
-  const year = Number(url.searchParams.get("year") || new Date().getFullYear());
+  const now = new Date();
+  const rawMonth = url.searchParams.get("month");
+  const rawYear = url.searchParams.get("year");
+  const month = rawMonth === null || rawMonth.trim() === "" ? now.getMonth() + 1 : Number(rawMonth);
+  const year = rawYear === null || rawYear.trim() === "" ? now.getFullYear() : Number(rawYear);
+
+  if (
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12 ||
+    !Number.isInteger(year) ||
+    year < 2000 ||
+    year > 2100
+  ) {
+    return NextResponse.json(
+      { error: "Tháng phải từ 1-12 và năm phải từ 2000-2100." },
+      { status: 400 }
+    );
+  }
 
   const [invoices, selectedClass] = await Promise.all([
     prisma.monthlyInvoice.findMany({
@@ -23,7 +47,11 @@ export async function GET(request: Request) {
         year,
         enrollment: classId ? { classId } : undefined
       },
-      orderBy: [{ enrollment: { classRoom: { name: "asc" } } }, { enrollment: { student: { fullName: "asc" } } }],
+      orderBy: [
+        { classNameSnapshot: "asc" },
+        { studentNameSnapshot: "asc" },
+        { id: "asc" }
+      ],
       include: {
         enrollment: { include: { student: true, classRoom: true } }
       }
@@ -44,13 +72,14 @@ export async function GET(request: Request) {
     { key: "pricePerSession", width: 14 },
     { key: "amount", width: 14 },
     { key: "status", width: 13 },
+    { key: "statusReason", width: 28 },
     { key: "memo", width: 28 }
   ];
   sheet.columns = columns;
 
   const headerStartRow = addReportBranding(workbook, sheet, {
     title: "BÁO CÁO HỌC PHÍ",
-    subtitle: `${formatMonth(month, year)}${selectedClass ? ` · Lớp ${selectedClass.name}` : " · Tất cả các lớp"}`,
+    subtitle: `${formatMonth(month, year)}${selectedClass ? ` · Lớp ${invoices.find((invoice) => invoice.classNameSnapshot)?.classNameSnapshot ?? selectedClass.name}` : " · Tất cả các lớp"}`,
     columnCount: columns.length
   });
 
@@ -66,6 +95,7 @@ export async function GET(request: Request) {
     "Đơn giá",
     "Thành tiền",
     "Trạng thái",
+    "Lý do trạng thái",
     "Memo"
   ];
   styleTableHeaderRow(headerRow);
@@ -73,16 +103,18 @@ export async function GET(request: Request) {
   const firstDataRow = headerStartRow + 1;
   for (const invoice of invoices) {
     sheet.addRow({
-      className: invoice.enrollment.classRoom.name,
-      shortCode: invoice.enrollment.classRoom.shortCode,
-      teacherName: invoice.enrollment.classRoom.teacherName,
-      student: invoice.enrollment.student.fullName,
-      phone: invoice.enrollment.student.phone,
+      className: invoice.classNameSnapshot ?? invoice.enrollment.classRoom.name,
+      shortCode: invoice.classShortCodeSnapshot ?? invoice.enrollment.classRoom.shortCode,
+      teacherName:
+        (invoice.teacherNameSnapshot ?? invoice.enrollment.classRoom.teacherName) || "-",
+      student: invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName,
+      phone: invoice.studentPhoneSnapshot ?? invoice.enrollment.student.phone,
       month: `${invoice.month}/${invoice.year}`,
       sessions: invoice.sessions,
       pricePerSession: invoice.pricePerSession,
       amount: invoice.amount,
-      status: invoice.status === "paid" ? "Đã đóng" : "Chưa đóng",
+      status: INVOICE_STATUS_LABEL[invoice.status],
+      statusReason: invoice.statusReason ?? "-",
       memo: invoice.memoContent
     });
   }
@@ -91,14 +123,26 @@ export async function GET(request: Request) {
     styleTableDataRows(sheet, firstDataRow, lastDataRow, columns.length);
   }
 
-  const totalExpected = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPaid = invoices.filter((invoice) => invoice.status === "paid").reduce((sum, invoice) => sum + invoice.amount, 0);
+  const paidInvoices = invoices.filter((invoice) => invoice.status === "paid");
+  const unpaidInvoices = invoices.filter((invoice) => invoice.status === "unpaid");
+  const waivedInvoices = invoices.filter((invoice) => invoice.status === "waived");
+  const voidInvoices = invoices.filter((invoice) => invoice.status === "void");
+  const totalPaid = paidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalUnpaid = unpaidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalCollectible = totalPaid + totalUnpaid;
+  const totalWaived = waivedInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalVoid = voidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
 
   sheet.addRow([]);
-  const expectedRow = sheet.addRow({ className: "Tổng dự kiến", amount: totalExpected });
+  const collectibleRow = sheet.addRow({
+    className: "Đã phát hành có thể thu",
+    amount: totalCollectible
+  });
   const paidRow = sheet.addRow({ className: "Tổng đã thu", amount: totalPaid });
-  const remainingRow = sheet.addRow({ className: "Còn phải thu", amount: Math.max(0, totalExpected - totalPaid) });
-  [expectedRow, paidRow, remainingRow].forEach((row) => {
+  const remainingRow = sheet.addRow({ className: "Công nợ chưa thu", amount: totalUnpaid });
+  const waivedRow = sheet.addRow({ className: "Đã miễn", amount: totalWaived });
+  const voidRow = sheet.addRow({ className: "Đã hủy", amount: totalVoid });
+  [collectibleRow, paidRow, remainingRow, waivedRow, voidRow].forEach((row) => {
     row.getCell("className").font = { bold: true };
     row.getCell("amount").font = { bold: true };
   });

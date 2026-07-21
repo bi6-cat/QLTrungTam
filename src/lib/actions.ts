@@ -56,6 +56,124 @@ function clampSessions(value: FormDataEntryValue | null) {
   return Math.min(60, parsed);
 }
 
+const MAX_SERIALIZABLE_ACTION_ATTEMPTS = 3;
+
+async function runSerializableAction<T>(
+  work: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ACTION_ATTEMPTS; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      });
+    } catch (error) {
+      const isWriteConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+      if (isWriteConflict && attempt < MAX_SERIALIZABLE_ACTION_ATTEMPTS) continue;
+      if (isWriteConflict) {
+        throw new Error("Dữ liệu vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại.");
+      }
+      throw error;
+    }
+  }
+
+  throw new Error("Không thể hoàn tất thao tác do xung đột dữ liệu.");
+}
+
+type ArchiveEntity = "class" | "student";
+type ArchiveMode = "archive" | "restore";
+
+function parseArchiveInput(formData: FormData) {
+  const { id } = parseForm(idSchema, formData);
+  const rawReason = formData.get("reason");
+  const reason = typeof rawReason === "string" ? rawReason.trim() : "";
+  if (!reason || reason.length > 500) {
+    throw new Error("Lý do phải có từ 1 đến 500 ký tự.");
+  }
+  return { id, reason };
+}
+
+async function changeArchiveState(input: {
+  entity: ArchiveEntity;
+  mode: ArchiveMode;
+  id: string;
+  reason: string;
+  actor: { userId: string; username: string };
+}) {
+  return runSerializableAction(async (tx) => {
+    const current =
+      input.entity === "class"
+        ? await tx.classRoom.findUnique({
+            where: { id: input.id },
+            select: { id: true, archivedAt: true }
+          })
+        : await tx.student.findUnique({
+            where: { id: input.id },
+            select: { id: true, archivedAt: true }
+          });
+
+    const entityLabel = input.entity === "class" ? "lớp học" : "học sinh";
+    if (!current) throw new Error(`Không tìm thấy ${entityLabel}.`);
+    if (input.mode === "archive" && current.archivedAt) {
+      throw new Error(`${input.entity === "class" ? "Lớp học" : "Học sinh"} đã được lưu trữ.`);
+    }
+    if (input.mode === "restore" && !current.archivedAt) {
+      throw new Error(`${input.entity === "class" ? "Lớp học" : "Học sinh"} đang hoạt động.`);
+    }
+
+    const nextArchivedAt = input.mode === "archive" ? new Date() : null;
+    const changed =
+      input.entity === "class"
+        ? await tx.classRoom.updateMany({
+            where: { id: current.id, archivedAt: current.archivedAt },
+            data: { archivedAt: nextArchivedAt }
+          })
+        : await tx.student.updateMany({
+            where: { id: current.id, archivedAt: current.archivedAt },
+            data: { archivedAt: nextArchivedAt }
+          });
+
+    if (changed.count !== 1) {
+      throw new Error(`${input.entity === "class" ? "Lớp học" : "Học sinh"} vừa được thay đổi. Vui lòng tải lại.`);
+    }
+
+    const entityType = input.entity === "class" ? "ClassRoom" : "Student";
+    await tx.auditLog.create({
+      data: {
+        actorUserId: input.actor.userId,
+        actorUsername: input.actor.username.trim(),
+        action: `${input.entity}.${input.mode === "archive" ? "archived" : "restored"}`,
+        entityType,
+        entityId: current.id,
+        reason: input.reason,
+        metadata: {
+          previousArchivedAt: current.archivedAt?.toISOString() ?? null,
+          archivedAt: nextArchivedAt?.toISOString() ?? null
+        }
+      }
+    });
+
+    return { archivedAt: nextArchivedAt };
+  });
+}
+
+function revalidateClassArchivePaths() {
+  revalidatePath("/admin");
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/transactions");
+  revalidatePath("/pay/[short_code]", "page");
+  revalidatePath("/teacher/classes/[short_code]", "page");
+}
+
+function revalidateStudentArchivePaths() {
+  revalidatePath("/admin");
+  revalidatePath("/admin/students");
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/transactions");
+  revalidatePath("/pay/[short_code]", "page");
+  revalidatePath("/teacher/classes/[short_code]", "page");
+}
+
 export async function loginAction(_prevState: { error: string }, formData: FormData) {
   const ip = await getClientIp();
   const rlKey = `login:${ip}`;
@@ -155,6 +273,30 @@ export async function deleteClassAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+export async function archiveClassAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "class", mode: "archive", id, reason, actor });
+    revalidateClassArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể lưu trữ lớp học." };
+  }
+}
+
+export async function restoreClassAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "class", mode: "restore", id, reason, actor });
+    revalidateClassArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể khôi phục lớp học." };
+  }
+}
+
 export type EditState = { error: string; ok: boolean };
 
 export async function updateClassAction(
@@ -216,6 +358,30 @@ export async function deleteStudentAction(formData: FormData) {
   revalidatePath("/admin/students");
 }
 
+export async function archiveStudentAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "student", mode: "archive", id, reason, actor });
+    revalidateStudentArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể lưu trữ học sinh." };
+  }
+}
+
+export async function restoreStudentAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "student", mode: "restore", id, reason, actor });
+    revalidateStudentArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể khôi phục học sinh." };
+  }
+}
+
 export async function updateStudentAction(
   _prevState: EditState,
   formData: FormData
@@ -243,17 +409,35 @@ export async function updateStudentAction(
 export async function createEnrollmentAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(enrollmentSchema, formData);
-  await prisma.enrollment.upsert({
-    where: {
-      studentId_classId: { studentId: data.studentId, classId: data.classId }
-    },
-    update: { sessionsOverride: data.sessionsOverride, status: data.status },
-    create: {
-      studentId: data.studentId,
-      classId: data.classId,
-      sessionsOverride: data.sessionsOverride,
-      status: data.status
-    }
+  await runSerializableAction(async (tx) => {
+    const [student, classRoom] = await Promise.all([
+      tx.student.findUnique({
+        where: { id: data.studentId },
+        select: { id: true, archivedAt: true }
+      }),
+      tx.classRoom.findUnique({
+        where: { id: data.classId },
+        select: { id: true, archivedAt: true }
+      })
+    ]);
+
+    if (!student) throw new Error("Không tìm thấy học sinh.");
+    if (!classRoom) throw new Error("Không tìm thấy lớp học.");
+    if (student.archivedAt) throw new Error("Không thể ghi danh học sinh đã lưu trữ.");
+    if (classRoom.archivedAt) throw new Error("Không thể ghi danh vào lớp đã lưu trữ.");
+
+    await tx.enrollment.upsert({
+      where: {
+        studentId_classId: { studentId: data.studentId, classId: data.classId }
+      },
+      update: { sessionsOverride: data.sessionsOverride, status: data.status },
+      create: {
+        studentId: data.studentId,
+        classId: data.classId,
+        sessionsOverride: data.sessionsOverride,
+        status: data.status
+      }
+    });
   });
   revalidatePath("/admin/classes");
   revalidatePath("/admin/students");
@@ -276,10 +460,18 @@ export async function generateInvoicesAction(formData: FormData) {
   const year = data.year || new Date().getFullYear();
   const periodEnd = new Date(year, month, 1);
 
-  await prisma.$transaction(async (tx) => {
+  await runSerializableAction(async (tx) => {
+    const classState = await tx.classRoom.findUnique({
+      where: { id: data.classId },
+      select: { archivedAt: true }
+    });
+    if (!classState) throw new Error("Không tìm thấy lớp học.");
+    if (classState.archivedAt) throw new Error("Không thể tạo hóa đơn cho lớp đã lưu trữ.");
+
     const enrollments = await tx.enrollment.findMany({
       where: {
         classId: data.classId,
+        student: { archivedAt: null },
         OR: [
           { createdAt: { lt: periodEnd } },
           { months: { some: { month, year } } },
@@ -418,7 +610,16 @@ export async function updateClassDetailsAction(formData: FormData) {
     new Set(formData.getAll("enrollmentId").map((value) => String(value)).filter(Boolean))
   );
 
-  await prisma.$transaction(async (tx) => {
+  await runSerializableAction(async (tx) => {
+    const classState = await tx.classRoom.findUnique({
+      where: { id: parsed.classId },
+      select: { archivedAt: true }
+    });
+    if (!classState) throw new Error("Không tìm thấy lớp học.");
+    if (classState.archivedAt) {
+      throw new Error("Không thể tạo hoặc sửa kế hoạch tháng của lớp đã lưu trữ.");
+    }
+
     for (const enrollmentId of enrollmentIds) {
       const enrollment = await tx.enrollment.findUnique({
         where: { id: enrollmentId },
@@ -429,7 +630,13 @@ export async function updateClassDetailsAction(formData: FormData) {
           invoices: { where: { month, year }, take: 1 }
         }
       });
-      if (!enrollment || enrollment.classId !== parsed.classId) continue;
+      if (
+        !enrollment ||
+        enrollment.classId !== parsed.classId ||
+        enrollment.student.archivedAt
+      ) {
+        continue;
+      }
 
       const existingInvoice = enrollment.invoices[0];
       const existingMonth = enrollment.months[0];

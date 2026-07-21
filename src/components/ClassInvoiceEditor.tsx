@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Banknote, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
 import { updateClassDetailsAction } from "@/lib/actions";
@@ -12,6 +12,7 @@ type InvoiceRow = {
   enrollmentId: string;
   studentName: string;
   phone: string;
+  studentArchived: boolean;
   monthlyStatus: "active" | "on_leave";
   periodInitialized: boolean;
   invoice: null | {
@@ -42,22 +43,31 @@ export function ClassInvoiceEditor({
   classId,
   month,
   year,
-  rows
+  rows,
+  billingLocked = false
 }: {
   classId: string;
   month: number;
   year: number;
   rows: InvoiceRow[];
+  billingLocked?: boolean;
 }) {
   const router = useRouter();
   const hasAnyInvoice = rows.some((row) => row.invoice);
-  const missingInvoiceCount = rows.filter((row) => !row.invoice && row.monthlyStatus === "active").length;
+  const missingInvoiceCount = rows.filter(
+    (row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active"
+  ).length;
   const hasMissingInvoice = missingInvoiceCount > 0;
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
   const [cashSubmittingId, setCashSubmittingId] = useState<string | null>(null);
   const [cashError, setCashError] = useState("");
+  useEffect(() => {
+    if (!billingLocked) return;
+    setEditing(false);
+    setSessionDrafts({});
+  }, [billingLocked]);
   const summary = useMemo(
     () =>
       rows.reduce(
@@ -66,21 +76,24 @@ export function ClassInvoiceEditor({
           if (invoice?.status === "void" || invoice?.status === "waived") return acc;
 
           const draftKey = invoice?.id ?? row.enrollmentId;
-          const sessions = sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
+          const planningLocked = billingLocked || row.studentArchived || Boolean(invoice && invoice.status !== "unpaid");
+          const sessions = planningLocked
+            ? invoice?.sessions ?? row.defaultSessions
+            : sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
           if (invoice) {
-            const amount = sessionDrafts[draftKey] === undefined
+            const amount = planningLocked || sessionDrafts[draftKey] === undefined
               ? invoice.amount
               : sessions * invoice.pricePerSession;
             if (invoice.status === "paid") acc.paid += invoice.amount;
             if (invoice.status === "unpaid") acc.unpaid += amount;
-          } else if (row.monthlyStatus === "active") {
+          } else if (!billingLocked && !row.studentArchived && row.monthlyStatus === "active") {
             acc.planned += sessions * row.pricePerSession;
           }
           return acc;
         },
         { paid: 0, unpaid: 0, planned: 0 }
       ),
-    [rows, sessionDrafts]
+    [billingLocked, rows, sessionDrafts]
   );
   const issuedAmount = summary.paid + summary.unpaid;
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -137,7 +150,11 @@ export function ClassInvoiceEditor({
                 Kế hoạch chưa phát hành: <strong className="text-stone-700">{formatCurrency(summary.planned)}</strong>
               </span>
             ) : null}
-            {hasMissingInvoice ? (
+            {billingLocked ? (
+              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600 ring-1 ring-inset ring-stone-500/15">
+                Lớp đã lưu trữ · không phát hành mới
+              </span>
+            ) : hasMissingInvoice ? (
               <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Cần tạo {missingInvoiceCount} hóa đơn
               </span>
@@ -163,12 +180,12 @@ export function ClassInvoiceEditor({
               Hủy
             </Button>
             </>
-          ) : (
+          ) : !billingLocked ? (
             <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
               {hasMissingInvoice ? "Sửa trước khi tạo" : hasAnyInvoice ? "Sửa" : "Sửa dự thảo"}
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -185,7 +202,11 @@ export function ClassInvoiceEditor({
           .filter((row) => !visibleIds.has(row.enrollmentId))
           .map((row) => {
             const draftKey = row.invoice?.id ?? row.enrollmentId;
-            const sessions = sessionDrafts[draftKey] ?? row.invoice?.sessions ?? row.defaultSessions;
+            const planningLocked =
+              billingLocked || row.studentArchived || Boolean(row.invoice && row.invoice.status !== "unpaid");
+            const sessions = planningLocked
+              ? row.invoice?.sessions ?? row.defaultSessions
+              : sessionDrafts[draftKey] ?? row.invoice?.sessions ?? row.defaultSessions;
             return (
               <div key={row.enrollmentId} className="hidden">
                 <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
@@ -223,16 +244,19 @@ export function ClassInvoiceEditor({
                 const invoice = row.invoice;
                 const isPaid = invoice?.status === "paid";
                 const isLocked = Boolean(invoice && invoice.status !== "unpaid");
+                const planningLocked = billingLocked || row.studentArchived || isLocked;
                 const draftKey = invoice?.id ?? row.enrollmentId;
-                const sessions = sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
+                const sessions = planningLocked
+                  ? invoice?.sessions ?? row.defaultSessions
+                  : sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
                 const displayUnitPrice = invoice?.pricePerSession ?? row.pricePerSession;
-                const displayAmount = invoice && (isLocked || sessionDrafts[draftKey] === undefined)
+                const displayAmount = invoice && (planningLocked || sessionDrafts[draftKey] === undefined)
                   ? invoice.amount
                   : sessions * displayUnitPrice;
                 return (
                   <tr
                     key={row.enrollmentId}
-                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
+                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing && !row.studentArchived ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
                   >
                     <td className="whitespace-nowrap px-2 py-3">
                       <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
@@ -241,7 +265,7 @@ export function ClassInvoiceEditor({
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       <div className="grid gap-1">
-                        {editing && !isLocked ? (
+                        {editing && !planningLocked ? (
                           <Select name={`status:${row.enrollmentId}`} defaultValue={row.monthlyStatus} className="w-full min-w-0">
                             <option value="active">Đang học</option>
                             <option value="on_leave">Bảo lưu</option>
@@ -249,7 +273,7 @@ export function ClassInvoiceEditor({
                         ) : (
                           <span className="inline-flex items-center gap-1">
                             <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
-                            {isLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
+                            {planningLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
                             <span className={row.monthlyStatus === "active" ? "font-semibold text-primary" : "font-semibold text-amber-700"}>
                               {row.monthlyStatus === "active" ? "Đang học" : "Bảo lưu"}
                             </span>
@@ -258,6 +282,11 @@ export function ClassInvoiceEditor({
                         {!row.periodInitialized ? (
                           <span className="whitespace-normal text-[11px] font-medium text-amber-700">
                             Chưa khởi tạo tháng
+                          </span>
+                        ) : null}
+                        {row.studentArchived ? (
+                          <span className="whitespace-normal text-[11px] font-medium text-stone-500">
+                            Học sinh đã lưu trữ · kế hoạch được khóa
                           </span>
                         ) : null}
                       </div>
@@ -279,7 +308,7 @@ export function ClassInvoiceEditor({
                       )}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
-                      {editing && !isLocked ? (
+                      {editing && !planningLocked ? (
                         <Input
                           name={`sessions:${row.enrollmentId}`}
                           type="number"
@@ -296,7 +325,7 @@ export function ClassInvoiceEditor({
                       ) : (
                         <span className="inline-flex items-center gap-1 font-semibold">
                           <input type="hidden" name={`sessions:${row.enrollmentId}`} value={sessions} />
-                          {isLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
+                          {planningLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
                           {sessions}
                         </span>
                       )}
@@ -387,7 +416,7 @@ export function ClassInvoiceEditor({
           </div>
         ) : null}
 
-        {editing || hasMissingInvoice ? (
+        {!billingLocked && (editing || hasMissingInvoice) ? (
           <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50/95 px-5 py-4 shadow-[0_-8px_20px_rgba(0,0,0,0.04)] backdrop-blur">
             <p className="text-sm text-stone-600">
               {editing

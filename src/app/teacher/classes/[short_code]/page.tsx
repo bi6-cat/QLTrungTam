@@ -31,10 +31,21 @@ export default async function TeacherClassPage({
     include: {
       enrollments: {
         where: {
-          OR: [
-            { createdAt: { lt: periodEnd } },
-            { months: { some: { month, year } } },
-            { invoices: { some: { month, year } } }
+          AND: [
+            {
+              OR: [
+                { createdAt: { lt: periodEnd } },
+                { months: { some: { month, year } } },
+                { invoices: { some: { month, year } } }
+              ]
+            },
+            {
+              OR: [
+                { student: { archivedAt: null } },
+                { months: { some: { month, year } } },
+                { invoices: { some: { month, year } } }
+              ]
+            }
           ]
         },
         orderBy: { student: { fullName: "asc" } },
@@ -54,11 +65,22 @@ export default async function TeacherClassPage({
     notFound();
   }
 
-  const rows = classRoom.enrollments.map((enrollment) => {
+  const visibleEnrollments = classRoom.archivedAt
+    ? classRoom.enrollments.filter(
+        (enrollment) => enrollment.months.length > 0 || enrollment.invoices.length > 0
+      )
+    : classRoom.enrollments;
+  const rows = visibleEnrollments.map((enrollment) => {
     const invoice = enrollment.invoices[0] ?? null;
     const period = enrollment.months[0] ?? null;
     const periodInitialized = Boolean(period || invoice);
-    const monthlyStatus = period?.status ?? (invoice ? "active" : isPastPeriod ? null : enrollment.status);
+    const monthlyStatus =
+      period?.status ??
+      (invoice
+        ? "active"
+        : isPastPeriod || classRoom.archivedAt || enrollment.student.archivedAt
+          ? null
+          : enrollment.status);
     const sessions = invoice?.sessions ?? period?.sessions ?? (monthlyStatus ? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault : 0);
     const pricePerSession = invoice?.pricePerSession ?? period?.pricePerSession ?? classRoom.pricePerSession;
     const amount = invoice?.amount ?? (monthlyStatus === "active" ? sessions * pricePerSession : 0);
@@ -97,6 +119,9 @@ export default async function TeacherClassPage({
               <div>
                 <p className="text-xs font-bold uppercase text-primary">APLUS ACADEMY</p>
                 <h1 className="mt-1 text-2xl font-bold text-neutralText">{classRoom.name}</h1>
+                {classRoom.archivedAt ? (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Lớp đã lưu trữ · chỉ xem lịch sử</p>
+                ) : null}
                 <p className="mt-2 text-sm text-stone-600">
                   {classRoom.shortCode}
                   {classRoom.teacherName ? ` · GV: ${classRoom.teacherName}` : ""} ·{" "}
@@ -178,7 +203,11 @@ export default async function TeacherClassPage({
 
           {rows.length === 0 ? (
             <div className="p-5">
-              <EmptyState title="Lớp chưa có học sinh">Khi trung tâm thêm học sinh vào lớp, danh sách sẽ hiển thị tại đây.</EmptyState>
+              <EmptyState title={classRoom.archivedAt ? "Không có lịch sử trong tháng này" : "Lớp chưa có học sinh"}>
+                {classRoom.archivedAt
+                  ? "Chọn tháng khác để xem dữ liệu đã chốt trước khi lớp được lưu trữ."
+                  : "Khi trung tâm thêm học sinh vào lớp, danh sách sẽ hiển thị tại đây."}
+              </EmptyState>
             </div>
           ) : (
             <div className="overflow-x-auto">

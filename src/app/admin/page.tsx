@@ -84,7 +84,10 @@ export default async function AdminHomePage() {
                   <tr key={classRoom.id} className="transition-colors hover:bg-indigo-50/40">
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="font-semibold">{classRoom.name}</div>
-                      <div className="text-xs text-stone-500">{classRoom.shortCode}</div>
+                      <div className="flex items-center gap-2 text-xs text-stone-500">
+                        <span>{classRoom.shortCode}</span>
+                        {classRoom.archivedAt ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">{classRoom.teacherName || "-"}</td>
                     <td className="px-4 py-3">

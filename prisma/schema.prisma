@@ -32,11 +32,13 @@ model ClassRoom {
   teacherName             String       @default("")
   pricePerSession         Int
   sessionsPerMonthDefault Int
+  archivedAt              DateTime?
   createdAt               DateTime     @default(now())
   enrollments             Enrollment[]
 
   @@index([shortCode])
   @@index([publicToken])
+  @@index([archivedAt])
 }
 
 model Student {
@@ -46,10 +48,12 @@ model Student {
   address     String
   parentName  String?
   note        String?
+  archivedAt  DateTime?
   createdAt   DateTime     @default(now())
   enrollments Enrollment[]
 
   @@index([phone])
+  @@index([archivedAt])
 }
 
 model Enrollment {
@@ -135,6 +139,8 @@ model Transaction {
   invoice             MonthlyInvoice? @relation("InvoicePaymentTransaction")
 
   @@index([matchedInvoiceId])
+  @@index([transferredAt, id])
+  @@index([matchedInvoiceId, resolvedAt, reversedAt, transferredAt, id], map: "Transaction_open_match_lookup_idx")
 }
 
 model AdminUser {
