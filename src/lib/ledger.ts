@@ -13,6 +13,7 @@ export type LedgerErrorCode =
   | "TRANSACTION_ALREADY_RESOLVED"
   | "TRANSACTION_REVERSED"
   | "INVOICE_ALREADY_PAID"
+  | "INVOICE_NOT_PAYABLE"
   | "AMOUNT_MISMATCH"
   | "INCONSISTENT_LEDGER"
   | "CONCURRENT_MODIFICATION";
@@ -149,8 +150,15 @@ function assertTransactionAvailable(transaction: {
 }
 
 function assertInvoiceAvailable(invoice: { status: string; transactionId: string | null }) {
+  if (invoice.status === "void" || invoice.status === "waived") {
+    const statusLabel = invoice.status === "void" ? "đã hủy" : "đã miễn";
+    throw new LedgerError(
+      "INVOICE_NOT_PAYABLE",
+      `Hóa đơn này ${statusLabel} và không thể nhận thanh toán. Hãy khôi phục hóa đơn trước nếu cần thu lại.`
+    );
+  }
   if (invoice.status !== "unpaid" || invoice.transactionId) {
-    throw new LedgerError("INVOICE_ALREADY_PAID", "Hóa đơn này không còn ở trạng thái chờ thanh toán.");
+    throw new LedgerError("INVOICE_ALREADY_PAID", "Hóa đơn này đã được thanh toán.");
   }
 }
 

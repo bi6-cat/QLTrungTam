@@ -11,6 +11,7 @@ function ledgerErrorStatus(error: LedgerError) {
     case "INVOICE_NOT_FOUND":
       return 404;
     case "INVOICE_ALREADY_PAID":
+    case "INVOICE_NOT_PAYABLE":
     case "CONCURRENT_MODIFICATION":
     case "INCONSISTENT_LEDGER":
       return 409;

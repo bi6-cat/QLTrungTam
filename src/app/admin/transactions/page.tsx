@@ -86,6 +86,9 @@ export default async function TransactionsPage({
           paidAmount: number;
           invoiceCount: number;
           paidCount: number;
+          unpaidCount: number;
+          waivedCount: number;
+          voidCount: number;
         }
       >
     >((acc, invoice) => {
@@ -97,13 +100,23 @@ export default async function TransactionsPage({
         expectedAmount: 0,
         paidAmount: 0,
         invoiceCount: 0,
-        paidCount: 0
+        paidCount: 0,
+        unpaidCount: 0,
+        waivedCount: 0,
+        voidCount: 0
       };
-      acc[key].expectedAmount += invoice.amount;
       acc[key].invoiceCount += 1;
       if (invoice.status === "paid") {
+        acc[key].expectedAmount += invoice.amount;
         acc[key].paidAmount += invoice.amount;
         acc[key].paidCount += 1;
+      } else if (invoice.status === "unpaid") {
+        acc[key].expectedAmount += invoice.amount;
+        acc[key].unpaidCount += 1;
+      } else if (invoice.status === "waived") {
+        acc[key].waivedCount += 1;
+      } else {
+        acc[key].voidCount += 1;
       }
       return acc;
     }, {})
@@ -248,8 +261,9 @@ export default async function TransactionsPage({
                   <th className="px-4 py-3">Hóa đơn</th>
                   <th className="px-4 py-3">Đã đóng</th>
                   <th className="px-4 py-3">Chưa đóng</th>
+                  <th className="px-4 py-3">Miễn / Hủy</th>
                   <th className="px-4 py-3">Đã thu</th>
-                  <th className="px-4 py-3">Dự kiến</th>
+                  <th className="px-4 py-3">Đã phát hành thu</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
@@ -261,10 +275,11 @@ export default async function TransactionsPage({
                       <Badge tone="success">{item.paidCount}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={item.invoiceCount - item.paidCount > 0 ? "warning" : "neutral"}>
-                        {item.invoiceCount - item.paidCount}
+                      <Badge tone={item.unpaidCount > 0 ? "warning" : "neutral"}>
+                        {item.unpaidCount}
                       </Badge>
                     </td>
+                    <td className="px-4 py-3">{item.waivedCount} / {item.voidCount}</td>
                     <td className="px-4 py-3 font-semibold">{formatCurrency(item.paidAmount)}</td>
                     <td className="px-4 py-3">{formatCurrency(item.expectedAmount)}</td>
                   </tr>

@@ -185,6 +185,9 @@ export class LedgerTestHarness {
     await prisma.monthlyInvoice.deleteMany({
       where: { enrollmentId: { startsWith: this.entityPrefix } }
     });
+    await prisma.enrollmentMonth.deleteMany({
+      where: { enrollmentId: { startsWith: this.entityPrefix } }
+    });
     await prisma.classRoom.deleteMany({
       where: { id: { startsWith: this.entityPrefix } }
     });

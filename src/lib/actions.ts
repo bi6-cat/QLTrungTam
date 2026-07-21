@@ -143,11 +143,12 @@ export async function createClassAction(formData: FormData) {
 export async function deleteClassAction(formData: FormData) {
   await requireAdmin();
   const { id } = parseForm(idSchema, formData);
-  const invoiceCount = await prisma.monthlyInvoice.count({
-    where: { enrollment: { classId: id } }
-  });
-  if (invoiceCount > 0) {
-    throw new Error("Không thể xóa lớp đã có hóa đơn. Hãy lưu trữ lớp để giữ lịch sử tài chính.");
+  const [invoiceCount, monthCount] = await Promise.all([
+    prisma.monthlyInvoice.count({ where: { enrollment: { classId: id } } }),
+    prisma.enrollmentMonth.count({ where: { enrollment: { classId: id } } })
+  ]);
+  if (invoiceCount > 0 || monthCount > 0) {
+    throw new Error("Không thể xóa lớp đã có lịch sử theo tháng. Hãy lưu trữ lớp để giữ dữ liệu.");
   }
   await prisma.classRoom.delete({ where: { id } });
   revalidatePath("/admin/classes");
@@ -204,11 +205,12 @@ export async function createStudentAction(formData: FormData) {
 export async function deleteStudentAction(formData: FormData) {
   await requireAdmin();
   const { id } = parseForm(idSchema, formData);
-  const invoiceCount = await prisma.monthlyInvoice.count({
-    where: { enrollment: { studentId: id } }
-  });
-  if (invoiceCount > 0) {
-    throw new Error("Không thể xóa học sinh đã có hóa đơn. Hãy lưu trữ hồ sơ để giữ lịch sử tài chính.");
+  const [invoiceCount, monthCount] = await Promise.all([
+    prisma.monthlyInvoice.count({ where: { enrollment: { studentId: id } } }),
+    prisma.enrollmentMonth.count({ where: { enrollment: { studentId: id } } })
+  ]);
+  if (invoiceCount > 0 || monthCount > 0) {
+    throw new Error("Không thể xóa học sinh đã có lịch sử theo tháng. Hãy lưu trữ hồ sơ để giữ dữ liệu.");
   }
   await prisma.student.delete({ where: { id } });
   revalidatePath("/admin/students");
@@ -273,38 +275,62 @@ export async function generateInvoicesAction(formData: FormData) {
   const month = data.month || new Date().getMonth() + 1;
   const year = data.year || new Date().getFullYear();
 
-  const enrollments = await prisma.enrollment.findMany({
-    where: { classId: data.classId, status: "active" },
-    include: { student: true, classRoom: true }
-  });
-
-  for (const enrollment of enrollments) {
-    const sessions = enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault;
-    const memoContent = buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year);
-    const existingInvoice = await prisma.monthlyInvoice.findUnique({
-      where: { enrollmentId_month_year: { enrollmentId: enrollment.id, month, year } },
-      select: { id: true, status: true, transactionId: true }
+  await prisma.$transaction(async (tx) => {
+    const enrollments = await tx.enrollment.findMany({
+      where: { classId: data.classId },
+      include: {
+        student: true,
+        classRoom: true,
+        months: { where: { month, year }, take: 1 },
+        invoices: { where: { month, year }, take: 1 }
+      }
     });
 
-    if (!existingInvoice) {
-      await prisma.monthlyInvoice.create({
+    for (const enrollment of enrollments) {
+      const existingMonth = enrollment.months[0];
+      const monthlyStatus = existingMonth?.status ?? enrollment.status;
+      const sessions =
+        monthlyStatus === "active"
+          ? existingMonth?.sessions ?? enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault
+          : 0;
+      const pricePerSession = existingMonth?.pricePerSession ?? enrollment.classRoom.pricePerSession;
+
+      if (!existingMonth) {
+        await tx.enrollmentMonth.create({
+          data: {
+            enrollmentId: enrollment.id,
+            month,
+            year,
+            status: monthlyStatus,
+            sessions,
+            pricePerSession
+          }
+        });
+      }
+
+      if (monthlyStatus !== "active" || enrollment.invoices[0]) continue;
+      if (sessions <= 0) {
+        throw new Error(`Số buổi của ${enrollment.student.fullName} phải lớn hơn 0 trước khi tạo hóa đơn.`);
+      }
+
+      await tx.monthlyInvoice.create({
         data: {
           enrollmentId: enrollment.id,
           month,
           year,
           sessions,
-          pricePerSession: enrollment.classRoom.pricePerSession,
-          amount: sessions * enrollment.classRoom.pricePerSession,
-          memoContent
+          pricePerSession,
+          amount: sessions * pricePerSession,
+          memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year),
+          studentNameSnapshot: enrollment.student.fullName,
+          studentPhoneSnapshot: enrollment.student.phone,
+          classNameSnapshot: enrollment.classRoom.name,
+          classShortCodeSnapshot: enrollment.classRoom.shortCode,
+          teacherNameSnapshot: enrollment.classRoom.teacherName
         }
       });
-    } else if (existingInvoice.status === "unpaid" && !existingInvoice.transactionId) {
-      await prisma.monthlyInvoice.updateMany({
-        where: { id: existingInvoice.id, status: "unpaid", transactionId: null },
-        data: { memoContent }
-      });
     }
-  }
+  });
 
   revalidatePath("/admin/classes");
   revalidatePath("/admin/invoices");
@@ -314,15 +340,60 @@ export async function generateInvoicesAction(formData: FormData) {
 export async function updateInvoiceAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(updateInvoiceSchema, formData);
-  const updated = await prisma.monthlyInvoice.updateMany({
-    where: { id: data.invoiceId, status: "unpaid", transactionId: null },
-    data: {
-      sessions: data.sessions,
-      pricePerSession: data.pricePerSession,
-      amount: data.amount ?? data.sessions * data.pricePerSession
-    }
+  if (data.sessions <= 0) {
+    throw new Error("Số buổi phải lớn hơn 0 đối với hóa đơn đang thu.");
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const invoice = await tx.monthlyInvoice.findUnique({
+      where: { id: data.invoiceId },
+      select: {
+        id: true,
+        enrollmentId: true,
+        month: true,
+        year: true,
+        status: true,
+        transactionId: true,
+        updatedAt: true
+      }
+    });
+    if (!invoice || invoice.status !== "unpaid" || invoice.transactionId) return 0;
+
+    const result = await tx.monthlyInvoice.updateMany({
+      where: {
+        id: invoice.id,
+        status: "unpaid",
+        transactionId: null,
+        updatedAt: invoice.updatedAt
+      },
+      data: {
+        sessions: data.sessions,
+        pricePerSession: data.pricePerSession,
+        amount: data.sessions * data.pricePerSession
+      }
+    });
+    if (result.count !== 1) return 0;
+
+    await tx.enrollmentMonth.upsert({
+      where: {
+        enrollmentId_month_year: {
+          enrollmentId: invoice.enrollmentId,
+          month: invoice.month,
+          year: invoice.year
+        }
+      },
+      update: { status: "active", sessions: data.sessions, pricePerSession: data.pricePerSession },
+      create: {
+        enrollmentId: invoice.enrollmentId,
+        month: invoice.month,
+        year: invoice.year,
+        status: "active",
+        sessions: data.sessions,
+        pricePerSession: data.pricePerSession
+      }
+    });
+    return result.count;
   });
-  if (updated.count !== 1) {
+  if (updated !== 1) {
     throw new Error("Hóa đơn đã được thanh toán hoặc vừa thay đổi; không thể sửa số tiền.");
   }
   revalidatePath("/admin/classes");
@@ -340,25 +411,49 @@ export async function updateClassDetailsAction(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     for (const enrollmentId of enrollmentIds) {
-      const existingInvoice = await tx.monthlyInvoice.findUnique({
-        where: { enrollmentId_month_year: { enrollmentId, month, year } }
+      const enrollment = await tx.enrollment.findUnique({
+        where: { id: enrollmentId },
+        include: {
+          classRoom: true,
+          student: true,
+          months: { where: { month, year }, take: 1 },
+          invoices: { where: { month, year }, take: 1 }
+        }
       });
+      if (!enrollment || enrollment.classId !== parsed.classId) continue;
 
-      if (existingInvoice?.status === "paid") {
+      const existingInvoice = enrollment.invoices[0];
+      if (existingInvoice && existingInvoice.status !== "unpaid") {
         continue;
       }
 
       const status =
         String(formData.get(`status:${enrollmentId}`)) === "on_leave" ? "on_leave" : "active";
-      const sessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
-      const enrollment = await tx.enrollment.update({
-        where: { id: enrollmentId },
-        data: { status, sessionsOverride: sessions > 0 ? sessions : null },
-        include: { classRoom: true, student: true }
+      const requestedSessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
+      const sessions = status === "active" ? requestedSessions : 0;
+      const periodPricePerSession =
+        enrollment.months[0]?.pricePerSession ??
+        existingInvoice?.pricePerSession ??
+        enrollment.classRoom.pricePerSession;
+      if (status === "active" && sessions <= 0) {
+        throw new Error(`Số buổi của ${enrollment.student.fullName} phải lớn hơn 0.`);
+      }
+
+      await tx.enrollmentMonth.upsert({
+        where: { enrollmentId_month_year: { enrollmentId, month, year } },
+        update: { status, sessions },
+        create: {
+          enrollmentId,
+          month,
+          year,
+          status,
+          sessions,
+          pricePerSession: periodPricePerSession
+        }
       });
 
-      if (existingInvoice) {
-        await tx.monthlyInvoice.updateMany({
+      if (existingInvoice?.status === "unpaid" && status === "active") {
+        const updatedInvoice = await tx.monthlyInvoice.updateMany({
           where: {
             id: existingInvoice.id,
             status: "unpaid",
@@ -367,20 +462,27 @@ export async function updateClassDetailsAction(formData: FormData) {
           },
           data: {
             sessions,
-            amount: sessions * existingInvoice.pricePerSession,
-            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year)
+            amount: sessions * existingInvoice.pricePerSession
           }
         });
-      } else if (parsed.intent === "create" && status === "active") {
+        if (updatedInvoice.count !== 1) {
+          throw new Error(`Hóa đơn của ${enrollment.student.fullName} vừa được thanh toán hoặc thay đổi. Vui lòng tải lại.`);
+        }
+      } else if (!existingInvoice && parsed.intent === "create" && status === "active") {
         await tx.monthlyInvoice.create({
           data: {
             enrollmentId,
             month,
             year,
             sessions,
-            pricePerSession: enrollment.classRoom.pricePerSession,
-            amount: sessions * enrollment.classRoom.pricePerSession,
-            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year)
+            pricePerSession: periodPricePerSession,
+            amount: sessions * periodPricePerSession,
+            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year),
+            studentNameSnapshot: enrollment.student.fullName,
+            studentPhoneSnapshot: enrollment.student.phone,
+            classNameSnapshot: enrollment.classRoom.name,
+            classShortCodeSnapshot: enrollment.classRoom.shortCode,
+            teacherNameSnapshot: enrollment.classRoom.teacherName
           }
         });
       }

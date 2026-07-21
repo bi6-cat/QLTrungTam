@@ -13,7 +13,8 @@ export async function getCurrentDashboard() {
           student: true,
           invoices: {
             where: { month, year }
-          }
+          },
+          months: { where: { month, year }, take: 1 }
         }
       }
     }
@@ -23,25 +24,37 @@ export async function getCurrentDashboard() {
     month,
     year,
     classes: classes.map((classRoom) => {
-      const active = classRoom.enrollments.filter((item) => item.status === "active");
-      const invoices = active.flatMap((item) => item.invoices);
+      const active = classRoom.enrollments.filter((item) => {
+        const invoice = item.invoices[0];
+        return (item.months[0]?.status ?? (invoice ? "active" : item.status)) === "active";
+      });
+      const invoices = classRoom.enrollments.flatMap((item) => item.invoices);
       const paid = invoices.filter((item) => item.status === "paid");
-      const expectedAmount = active.reduce((sum, enrollment) => {
-        const invoice = enrollment.invoices[0];
-        if (invoice) return sum + invoice.amount;
-        const sessions = enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
-        return sum + sessions * classRoom.pricePerSession;
+      const unpaid = invoices.filter((item) => item.status === "unpaid");
+      const waived = invoices.filter((item) => item.status === "waived");
+      const voided = invoices.filter((item) => item.status === "void");
+      const plannedAmount = active.reduce((sum, enrollment) => {
+        const period = enrollment.months[0];
+        const sessions = period?.sessions ?? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
+        const pricePerSession = period?.pricePerSession ?? classRoom.pricePerSession;
+        return sum + sessions * pricePerSession;
       }, 0);
       const paidAmount = paid.reduce((sum, item) => sum + item.amount, 0);
+      const unpaidAmount = unpaid.reduce((sum, item) => sum + item.amount, 0);
       return {
         ...classRoom,
         activeStudents: active.length,
         invoiceCount: invoices.length,
         paidCount: paid.length,
-        unpaidCount: active.length - paid.length,
-        expectedAmount,
+        unpaidCount: unpaid.length,
+        waivedCount: waived.length,
+        voidCount: voided.length,
+        unissuedCount: active.filter((item) => item.invoices.length === 0).length,
+        expectedAmount: paidAmount + unpaidAmount,
+        plannedAmount,
         paidAmount,
-        remainingAmount: Math.max(0, expectedAmount - paidAmount)
+        waivedAmount: waived.reduce((sum, item) => sum + item.amount, 0),
+        remainingAmount: unpaidAmount
       };
     })
   };

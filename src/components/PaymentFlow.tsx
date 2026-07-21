@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CheckCircle2, Copy, Home, Info, Loader2, QrCode } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Copy, FileClock, Home, Info, Loader2, QrCode } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
+
+type InvoiceStatus = "paid" | "unpaid" | "void" | "waived";
 
 type Invoice = {
   id: string;
@@ -12,7 +14,7 @@ type Invoice = {
   year: number;
   amount: number;
   memoContent: string;
-  status: "paid" | "unpaid";
+  status: InvoiceStatus;
   qrImageUrl: string;
 };
 
@@ -55,7 +57,7 @@ function CopyMemoButton({ memo }: { memo: string }) {
 export function PaymentFlow({ students }: { students: Student[] }) {
   const [studentId, setStudentId] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [statuses, setStatuses] = useState<Record<string, "paid" | "unpaid">>({});
+  const [statuses, setStatuses] = useState<Record<string, InvoiceStatus>>({});
   const selected = useMemo(
     () => students.find((student) => student.id === studentId) ?? null,
     [studentId, students]
@@ -64,24 +66,40 @@ export function PaymentFlow({ students }: { students: Student[] }) {
   useEffect(() => {
     if (!confirmed) return;
     if (!selected) return;
-    const ids = selected.invoices.map((invoice) => invoice.id);
+    const ids = selected.invoices
+      .filter((invoice) => invoice.status === "unpaid")
+      .map((invoice) => invoice.id);
     if (ids.length === 0) return;
+    let cancelled = false;
+    let timer: number | undefined;
 
     const poll = async () => {
       const entries = await Promise.all(
         ids.map(async (id) => {
           const response = await fetch(`/api/pay/invoices/${id}`, { cache: "no-store" });
-          if (!response.ok) return [id, "unpaid"] as const;
-          const data = (await response.json()) as { status: "paid" | "unpaid" };
+          if (!response.ok) return null;
+          const data = (await response.json()) as { status: InvoiceStatus };
           return [id, data.status] as const;
         })
       );
-      setStatuses((current) => ({ ...current, ...Object.fromEntries(entries) }));
+      const validEntries = entries.filter(
+        (entry): entry is readonly [string, InvoiceStatus] => entry !== null
+      );
+      if (validEntries.length > 0) {
+        setStatuses((current) => ({ ...current, ...Object.fromEntries(validEntries) }));
+      }
+      const shouldContinue =
+        validEntries.length < ids.length || validEntries.some(([, status]) => status === "unpaid");
+      if (!cancelled && shouldContinue) {
+        timer = window.setTimeout(poll, 4000);
+      }
     };
 
     void poll();
-    const timer = window.setInterval(poll, 4000);
-    return () => window.clearInterval(timer);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [confirmed, selected]);
 
   if (students.length === 0) {
@@ -138,13 +156,21 @@ export function PaymentFlow({ students }: { students: Student[] }) {
           <QrCode className="h-5 w-5 shrink-0 text-stone-400" />
           Chọn đúng tên học sinh rồi bấm <strong className="font-semibold text-neutralText">Tiếp theo</strong> để xem học phí và mã QR.
         </section>
+      ) : visibleInvoices.length === 0 ? (
+        <section className="rounded-2xl border border-amber-100 bg-white p-8 text-center shadow-soft">
+          <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-amber-50 text-amber-700">
+            <FileClock className="h-9 w-9" />
+          </span>
+          <h2 className="mt-4 text-xl font-bold">Chưa phát hành hóa đơn</h2>
+          <p className="mt-2 text-stone-600">Trung tâm chưa tạo học phí cho học sinh này.</p>
+        </section>
       ) : unpaidInvoices.length === 0 ? (
         <section className="rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-soft">
           <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-50 text-success">
             <CheckCircle2 className="h-9 w-9" />
           </span>
-          <h2 className="mt-4 text-xl font-bold">Đã đóng đầy đủ học phí</h2>
-          <p className="mt-2 text-stone-600">Hệ thống không còn hóa đơn chưa thanh toán cho học sinh này.</p>
+          <h2 className="mt-4 text-xl font-bold">Không còn khoản cần thanh toán</h2>
+          <p className="mt-2 text-stone-600">Các hóa đơn đã được thanh toán hoặc trung tâm đã xử lý.</p>
           <Link href="/" className="mt-6 inline-block">
             <Button type="button" variant="secondary">
               <Home className="h-4 w-4" />

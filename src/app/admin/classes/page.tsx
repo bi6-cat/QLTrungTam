@@ -34,7 +34,8 @@ export default async function ClassesPage({
           orderBy: { student: { fullName: "asc" } },
           include: {
             student: true,
-            invoices: { where: { month, year }, orderBy: { createdAt: "desc" } }
+            invoices: { where: { month, year }, orderBy: { createdAt: "desc" } },
+            months: { where: { month, year }, take: 1 }
           }
         }
       }
@@ -227,15 +228,23 @@ export default async function ClassesPage({
                   year={year}
                   rows={selectedClass.enrollments.map((enrollment) => {
                     const invoice = enrollment.invoices[0];
+                    const enrollmentMonth = enrollment.months[0];
+                    const monthlyStatus = enrollmentMonth?.status ?? (invoice ? "active" : enrollment.status);
                     const defaultSessions =
-                      enrollment.sessionsOverride ?? selectedClass.sessionsPerMonthDefault;
+                      invoice?.sessions ??
+                      enrollmentMonth?.sessions ??
+                      enrollment.sessionsOverride ??
+                      selectedClass.sessionsPerMonthDefault;
                     return {
                       enrollmentId: enrollment.id,
                       studentName: enrollment.student.fullName,
                       phone: enrollment.student.phone,
-                      enrollmentStatus: enrollment.status,
+                      monthlyStatus,
                       defaultSessions,
-                      pricePerSession: selectedClass.pricePerSession,
+                      pricePerSession:
+                        invoice?.pricePerSession ??
+                        enrollmentMonth?.pricePerSession ??
+                        selectedClass.pricePerSession,
                       memoContent: buildMemo(selectedClass.shortCode, enrollment.student.phone, month, year),
                       invoice: invoice
                         ? {
@@ -246,7 +255,8 @@ export default async function ClassesPage({
                             pricePerSession: invoice.pricePerSession,
                             amount: invoice.amount,
                             memoContent: invoice.memoContent,
-                            status: invoice.status
+                            status: invoice.status,
+                            statusReason: invoice.statusReason
                           }
                         : null
                     };

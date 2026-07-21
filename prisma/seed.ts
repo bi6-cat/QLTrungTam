@@ -171,6 +171,7 @@ async function main() {
   await prisma.monthlyInvoice.updateMany({ data: { transactionId: null } });
   await prisma.transaction.deleteMany({});
   await prisma.monthlyInvoice.deleteMany({});
+  await prisma.enrollmentMonth.deleteMany({});
   await prisma.enrollment.deleteMany({});
   await prisma.student.deleteMany({});
   await prisma.classRoom.deleteMany({});
@@ -231,6 +232,23 @@ async function main() {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
 
+  const studentById = new Map(students.map((student) => [student.id, student]));
+  const classById = new Map(classSeed.map((classRoom) => [classRoom.id, classRoom]));
+
+  await prisma.enrollmentMonth.createMany({
+    data: enrollments.map((enrollment) => ({
+      enrollmentId: enrollment.id,
+      month,
+      year,
+      status: enrollment.status,
+      sessions:
+        enrollment.status === "active"
+          ? enrollment.sessionsOverride ?? enrollment.defaultSessions
+          : 0,
+      pricePerSession: enrollment.pricePerSession
+    }))
+  });
+
   const counters = {
     unpaid: 0,
     paidTransfer: 0,
@@ -248,12 +266,40 @@ async function main() {
   async function createInvoice(
     enrollment: EnrollmentSeed,
     m: number,
-    y: number,
-    opts: { transferredAtDay: number }
+    y: number
   ) {
     const sessions = enrollment.sessionsOverride ?? enrollment.defaultSessions;
     const amount = sessions * enrollment.pricePerSession;
     const memo = buildMemo(enrollment.shortCode, enrollment.phone, m, y);
+    const student = studentById.get(enrollment.studentId);
+    const classRoom = classById.get(enrollment.classId);
+    if (!student || !classRoom) {
+      throw new Error(`Seed invoice references missing enrollment owner: ${enrollment.id}`);
+    }
+
+    await prisma.enrollmentMonth.upsert({
+      where: {
+        enrollmentId_month_year: {
+          enrollmentId: enrollment.id,
+          month: m,
+          year: y
+        }
+      },
+      update: {
+        status: "active",
+        sessions,
+        pricePerSession: enrollment.pricePerSession
+      },
+      create: {
+        enrollmentId: enrollment.id,
+        month: m,
+        year: y,
+        status: "active",
+        sessions,
+        pricePerSession: enrollment.pricePerSession
+      }
+    });
+
     const invoice = await prisma.monthlyInvoice.create({
       data: {
         enrollmentId: enrollment.id,
@@ -262,7 +308,12 @@ async function main() {
         sessions,
         pricePerSession: enrollment.pricePerSession,
         amount,
-        memoContent: memo
+        memoContent: memo,
+        studentNameSnapshot: student.fullName,
+        studentPhoneSnapshot: student.phone,
+        classNameSnapshot: classRoom.name,
+        classShortCodeSnapshot: classRoom.shortCode,
+        teacherNameSnapshot: classRoom.teacherName
       }
     });
     return { invoice, amount, memo };
@@ -277,7 +328,10 @@ async function main() {
         amount,
         rawContent: memo,
         transferredAt,
+        paymentMethod: "bank_transfer",
         matchedInvoiceId: invoiceId,
+        matchedAt: transferredAt,
+        matchReason: "seed_auto_match",
         rawPayload: { source: "sepay", gateway: "VCB", content: memo, transferAmount: amount }
       }
     });
@@ -295,7 +349,10 @@ async function main() {
         amount,
         rawContent: `Thu tiền mặt: ${studentName} - ${shortCode} - T${m}/${y}`,
         transferredAt: paidAt,
+        paymentMethod: "cash",
         matchedInvoiceId: invoiceId,
+        matchedAt: paidAt,
+        matchReason: "manual_cash_payment",
         rawPayload: { method: "cash", source: "admin_manual", invoiceId }
       }
     });
@@ -304,8 +361,6 @@ async function main() {
       data: { status: "paid", paidAt, transactionId: transaction.id }
     });
   }
-
-  const studentById = new Map(students.map((s) => [s.id, s]));
 
   for (const enrollment of enrollments) {
     const studentName = studentById.get(enrollment.studentId)?.fullName ?? "Học sinh";
@@ -323,7 +378,7 @@ async function main() {
     }
 
     const day = 1 + Math.floor(rand() * 27);
-    const { invoice, amount, memo } = await createInvoice(enrollment, month, year, { transferredAtDay: day });
+    const { invoice, amount, memo } = await createInvoice(enrollment, month, year);
     currentInvoiceRefs.push({ memo, amount, shortCode: enrollment.shortCode, phone: enrollment.phone });
 
     const roll = rand();
@@ -340,7 +395,7 @@ async function main() {
     // Hoá đơn tháng trước cho ~45% HS -> test điều hướng tháng + lịch sử.
     if (chance(0.45)) {
       const prevDay = 1 + Math.floor(rand() * 27);
-      const prev = await createInvoice(enrollment, prevMonth, prevYear, { transferredAtDay: prevDay });
+      const prev = await createInvoice(enrollment, prevMonth, prevYear);
       counters.prevInvoices += 1;
       // Đa số tháng trước đã đóng; một ít vẫn nợ.
       if (chance(0.85)) {

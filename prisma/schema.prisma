@@ -15,6 +15,8 @@ enum EnrollmentStatus {
 enum InvoiceStatus {
   unpaid
   paid
+  void
+  waived
 }
 
 enum PaymentMethod {
@@ -51,37 +53,61 @@ model Student {
 }
 
 model Enrollment {
-  id               String           @id @default(cuid())
+  id               String            @id @default(cuid())
   studentId        String
   classId          String
   sessionsOverride Int?
-  status           EnrollmentStatus @default(active)
-  createdAt        DateTime         @default(now())
-  classRoom        ClassRoom        @relation(fields: [classId], references: [id], onDelete: Cascade)
-  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status           EnrollmentStatus  @default(active)
+  createdAt        DateTime          @default(now())
+  classRoom        ClassRoom         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   invoices         MonthlyInvoice[]
+  months           EnrollmentMonth[]
 
   @@unique([studentId, classId])
   @@index([classId, status])
 }
 
+model EnrollmentMonth {
+  id              String           @id @default(cuid())
+  enrollmentId    String
+  month           Int
+  year            Int
+  status          EnrollmentStatus @default(active)
+  sessions        Int
+  pricePerSession Int
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  enrollment      Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+
+  @@unique([enrollmentId, month, year])
+  @@index([year, month, status])
+}
+
 model MonthlyInvoice {
-  id                 String        @id @default(cuid())
-  enrollmentId       String
-  month              Int
-  year               Int
-  sessions           Int
-  pricePerSession    Int
-  amount             Int
-  memoContent        String
-  status             InvoiceStatus @default(unpaid)
-  paidAt             DateTime?
-  transactionId      String?       @unique
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  enrollment         Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
-  transaction        Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
-  matchedTransaction Transaction?  @relation("TransactionMatchedInvoice")
+  id                     String        @id @default(cuid())
+  enrollmentId           String
+  month                  Int
+  year                   Int
+  sessions               Int
+  pricePerSession        Int
+  amount                 Int
+  memoContent            String
+  status                 InvoiceStatus @default(unpaid)
+  statusReason           String?
+  statusChangedAt        DateTime?
+  paidAt                 DateTime?
+  transactionId          String?       @unique
+  studentNameSnapshot    String?
+  studentPhoneSnapshot   String?
+  classNameSnapshot      String?
+  classShortCodeSnapshot String?
+  teacherNameSnapshot    String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  enrollment             Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  transaction            Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
+  matchedTransaction     Transaction?  @relation("TransactionMatchedInvoice")
 
   @@unique([enrollmentId, month, year])
   @@index([status, month, year])

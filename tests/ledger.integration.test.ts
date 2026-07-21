@@ -213,6 +213,57 @@ describe("financial ledger integration", { concurrency: false }, () => {
     assert.equal(assignmentAudits, 1);
   });
 
+  test("distinguishes void and waived invoices from invoices that were paid", async () => {
+    const fixture = await harness.createFixture();
+    const voidInvoice = await harness.createInvoice(fixture);
+    const waivedInvoice = await harness.createInvoice(fixture);
+    const transaction = await harness.createBankTransaction();
+
+    await prisma.monthlyInvoice.update({
+      where: { id: voidInvoice.id },
+      data: {
+        status: "void",
+        statusReason: "Phát hành nhầm",
+        statusChangedAt: new Date()
+      }
+    });
+    await prisma.monthlyInvoice.update({
+      where: { id: waivedInvoice.id },
+      data: {
+        status: "waived",
+        statusReason: "Miễn học phí",
+        statusChangedAt: new Date()
+      }
+    });
+
+    await expectLedgerError(
+      () =>
+        assignTransactionToInvoice({
+          transactionId: transaction.id,
+          invoiceId: voidInvoice.id,
+          actor: harness.actor
+        }),
+      "INVOICE_NOT_PAYABLE"
+    );
+    await expectLedgerError(
+      () => recordCashPayment({ invoiceId: waivedInvoice.id, actor: harness.actor }),
+      "INVOICE_NOT_PAYABLE"
+    );
+
+    const [storedTransaction, storedVoid, storedWaived, auditCount] = await Promise.all([
+      prisma.transaction.findUniqueOrThrow({ where: { id: transaction.id } }),
+      prisma.monthlyInvoice.findUniqueOrThrow({ where: { id: voidInvoice.id } }),
+      prisma.monthlyInvoice.findUniqueOrThrow({ where: { id: waivedInvoice.id } }),
+      prisma.auditLog.count({ where: { actorUserId: harness.actor.userId } })
+    ]);
+    assert.equal(storedTransaction.matchedInvoiceId, null);
+    assert.equal(storedVoid.status, "void");
+    assert.equal(storedVoid.transactionId, null);
+    assert.equal(storedWaived.status, "waived");
+    assert.equal(storedWaived.transactionId, null);
+    assert.equal(auditCount, 0);
+  });
+
   test("unassigns atomically and preserves a reasoned audit trail", async () => {
     const fixture = await harness.createFixture();
     const invoice = await harness.createInvoice(fixture);

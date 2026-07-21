@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit",
     "test:unit": "tsx --test tests/format.test.ts tests/password.test.ts tests/payment.test.ts tests/public-token.test.ts",
-    "test:integration": "tsx --test tests/ledger.integration.test.ts",
+    "test:integration": "tsx --test tests/ledger.integration.test.ts tests/invoice-lifecycle.integration.test.ts",
     "audit:data": "tsx scripts/audit-financial-data.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",

@@ -18,11 +18,17 @@ export default async function PayPage({
     where: { publicToken: short_code },
     include: {
       enrollments: {
-        where: { status: "active" },
+        where: {
+          OR: [
+            { status: "active" },
+            { invoices: { some: { status: "unpaid" } } }
+          ]
+        },
         orderBy: { student: { fullName: "asc" } },
         include: {
           student: true,
           invoices: {
+            where: { status: { in: ["unpaid", "paid", "waived", "void"] } },
             orderBy: [{ year: "desc" }, { month: "desc" }]
           }
         }

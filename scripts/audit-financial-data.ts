@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 /**
  * Đối soát dữ liệu tài chính hiện tại.
@@ -80,21 +80,6 @@ function isValidDate(value: Date) {
   return Number.isFinite(value.getTime());
 }
 
-function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function jsonString(value: Prisma.JsonValue | undefined) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
 function printFindingSection(title: string, groups: FindingGroup[]) {
   console.log(`\n${title}`);
   if (groups.length === 0) {
@@ -129,26 +114,29 @@ async function main() {
         pricePerSession: true,
         amount: true,
         status: true,
+        statusReason: true,
+        statusChangedAt: true,
         paidAt: true,
         transactionId: true,
         createdAt: true,
-        updatedAt: true,
-        enrollment: {
-          select: { status: true }
-        }
+        updatedAt: true
       },
       orderBy: [{ year: "asc" }, { month: "asc" }, { id: "asc" }]
     }),
     prisma.transaction.findMany({
       select: {
         id: true,
-        gatewayRef: true,
         amount: true,
-        rawContent: true,
         transferredAt: true,
+        paymentMethod: true,
         matchedInvoiceId: true,
-        rawPayload: true,
+        matchedAt: true,
+        matchReason: true,
+        matchOverrideReason: true,
         resolvedAt: true,
+        resolvedNote: true,
+        reversedAt: true,
+        reversalReason: true,
         createdAt: true
       },
       orderBy: [{ transferredAt: "asc" }, { id: "asc" }]
@@ -294,6 +282,25 @@ async function main() {
       }
     }
 
+    if (invoice.statusChangedAt && !isValidDate(invoice.statusChangedAt)) {
+      findings.add({
+        code: "INV_INVALID_STATUS_CHANGED_AT",
+        severity: "critical",
+        title: "Hóa đơn có ngày đổi trạng thái không hợp lệ",
+        sample: label
+      });
+    } else if (
+      invoice.statusChangedAt &&
+      invoice.statusChangedAt.getTime() > now.getTime() + FUTURE_TOLERANCE_MS
+    ) {
+      findings.add({
+        code: "INV_FUTURE_STATUS_CHANGED_AT",
+        severity: "warning",
+        title: "Hóa đơn có ngày đổi trạng thái ở tương lai",
+        sample: label
+      });
+    }
+
     const hasAnyTransactionLink = Boolean(invoice.transactionId) || matchingTransactions.length > 0;
 
     if (invoice.status === "paid") {
@@ -313,7 +320,7 @@ async function main() {
           sample: label
         });
       }
-    } else {
+    } else if (invoice.status === "unpaid") {
       if (invoice.paidAt) {
         findings.add({
           code: "INV_UNPAID_WITH_PAID_AT",
@@ -330,13 +337,22 @@ async function main() {
           sample: label
         });
       }
-
-      if (invoice.enrollment.status === "on_leave") {
+    } else {
+      if (invoice.paidAt || hasAnyTransactionLink) {
         findings.add({
-          code: "INV_UNPAID_ON_LEAVE",
+          code: "INV_NONPAYABLE_WITH_PAYMENT_DATA",
+          severity: "critical",
+          title: "Hóa đơn đã miễn/hủy nhưng vẫn còn dữ liệu thanh toán",
+          sample: `${label}: status=${invoice.status}`
+        });
+      }
+
+      if (!invoice.statusReason?.trim() || !invoice.statusChangedAt) {
+        findings.add({
+          code: "INV_LIFECYCLE_AUDIT_INCOMPLETE",
           severity: "warning",
-          title: "Hóa đơn chưa đóng thuộc học sinh đang bảo lưu",
-          sample: label
+          title: "Hóa đơn đã miễn/hủy thiếu lý do hoặc thời điểm đổi trạng thái",
+          sample: `${label}: status=${invoice.status}`
         });
       }
     }
@@ -363,6 +379,27 @@ async function main() {
   }
 
   const checkedAmountPairs = new Set<string>();
+  const paymentMethodCounts = { bank_transfer: 0, cash: 0 };
+  const transactionStateCounts = { open: 0, matched: 0, resolved: 0, reversed: 0 };
+
+  function checkMatchedAmount(
+    transaction: (typeof transactions)[number],
+    invoice: (typeof invoices)[number]
+  ) {
+    const pairKey = `${transaction.id}:${invoice.id}`;
+    if (checkedAmountPairs.has(pairKey) || transaction.amount === invoice.amount) return;
+
+    checkedAmountPairs.add(pairKey);
+    const hasApprovedOverride = Boolean(transaction.matchOverrideReason?.trim());
+    findings.add({
+      code: hasApprovedOverride ? "TX_INVOICE_AMOUNT_OVERRIDE" : "TX_INVOICE_AMOUNT_MISMATCH",
+      severity: hasApprovedOverride ? "warning" : "critical",
+      title: hasApprovedOverride
+        ? "Giao dịch được cưỡng chế khớp lệch tiền và có lưu lý do"
+        : "Số tiền giao dịch khác số tiền hóa đơn nhưng thiếu lý do cưỡng chế",
+      sample: `${transactionLabel(transaction)}, ${invoiceLabel(invoice)}: giao dịch ${formatMoney(transaction.amount)}, hóa đơn ${formatMoney(invoice.amount)}`
+    });
+  }
 
   for (const transaction of transactions) {
     const label = transactionLabel(transaction);
@@ -370,6 +407,15 @@ async function main() {
     const matchedInvoice = transaction.matchedInvoiceId
       ? invoiceById.get(transaction.matchedInvoiceId)
       : undefined;
+    const isReversed = Boolean(transaction.reversedAt);
+    const isMatched = Boolean(transaction.matchedInvoiceId);
+    const isResolved = Boolean(transaction.resolvedAt) && !isReversed;
+
+    paymentMethodCounts[transaction.paymentMethod] += 1;
+    if (isReversed) transactionStateCounts.reversed += 1;
+    else if (isMatched) transactionStateCounts.matched += 1;
+    else if (isResolved) transactionStateCounts.resolved += 1;
+    else transactionStateCounts.open += 1;
 
     if (!Number.isInteger(transaction.amount) || transaction.amount <= 0) {
       findings.add({
@@ -433,13 +479,160 @@ async function main() {
       });
     }
 
-    if (transaction.matchedInvoiceId && transaction.resolvedAt) {
+    if (transaction.matchedAt && !isValidDate(transaction.matchedAt)) {
+      findings.add({
+        code: "TX_INVALID_MATCHED_AT",
+        severity: "critical",
+        title: "Giao dịch có ngày khớp không hợp lệ",
+        sample: label
+      });
+    } else if (
+      transaction.matchedAt &&
+      transaction.matchedAt.getTime() > now.getTime() + FUTURE_TOLERANCE_MS
+    ) {
+      findings.add({
+        code: "TX_FUTURE_MATCHED_AT",
+        severity: "warning",
+        title: "Giao dịch có ngày khớp ở tương lai",
+        sample: label
+      });
+    }
+
+    if (transaction.reversedAt && !isValidDate(transaction.reversedAt)) {
+      findings.add({
+        code: "TX_INVALID_REVERSED_AT",
+        severity: "critical",
+        title: "Giao dịch có ngày hoàn tác không hợp lệ",
+        sample: label
+      });
+    } else if (
+      transaction.reversedAt &&
+      transaction.reversedAt.getTime() > now.getTime() + FUTURE_TOLERANCE_MS
+    ) {
+      findings.add({
+        code: "TX_FUTURE_REVERSED_AT",
+        severity: "warning",
+        title: "Giao dịch có ngày hoàn tác ở tương lai",
+        sample: label
+      });
+    }
+
+    if (transaction.matchedInvoiceId && transaction.reversedAt) {
+      findings.add({
+        code: "TX_MATCHED_AND_REVERSED",
+        severity: "critical",
+        title: "Giao dịch đã hoàn tác nhưng vẫn còn liên kết hóa đơn",
+        sample: label
+      });
+    } else if (transaction.matchedInvoiceId && transaction.resolvedAt) {
       findings.add({
         code: "TX_MATCHED_AND_RESOLVED",
         severity: "critical",
         title: "Giao dịch vừa được khớp vừa được đánh dấu đã xử lý",
         sample: label
       });
+    }
+
+    if (transaction.reversedAt) {
+      if (!transaction.resolvedAt) {
+        findings.add({
+          code: "TX_REVERSED_WITHOUT_RESOLVED_AT",
+          severity: "critical",
+          title: "Giao dịch hoàn tác thiếu dấu đã xử lý tương thích",
+          sample: label
+        });
+      } else if (transaction.resolvedAt.getTime() !== transaction.reversedAt.getTime()) {
+        findings.add({
+          code: "TX_REVERSED_TIMESTAMP_MISMATCH",
+          severity: "warning",
+          title: "Thời điểm hoàn tác và thời điểm xử lý của giao dịch khác nhau",
+          sample: label
+        });
+      }
+
+      if (!transaction.reversalReason?.trim()) {
+        findings.add({
+          code: "TX_REVERSED_WITHOUT_REASON",
+          severity: "critical",
+          title: "Giao dịch đã hoàn tác nhưng thiếu lý do",
+          sample: label
+        });
+      }
+
+      if (
+        transaction.matchedAt ||
+        transaction.matchReason ||
+        transaction.matchOverrideReason
+      ) {
+        findings.add({
+          code: "TX_REVERSED_WITH_STALE_MATCH_DATA",
+          severity: "warning",
+          title: "Giao dịch hoàn tác vẫn còn metadata của lần khớp",
+          sample: label
+        });
+      }
+
+      if (referencedInvoices.length > 0) {
+        findings.add({
+          code: "TX_REVERSED_STILL_REFERENCED",
+          severity: "critical",
+          title: "Giao dịch hoàn tác vẫn được hóa đơn sử dụng",
+          sample: label
+        });
+      }
+    } else {
+      if (transaction.reversalReason?.trim()) {
+        findings.add({
+          code: "TX_REVERSAL_REASON_WITHOUT_REVERSAL",
+          severity: "warning",
+          title: "Giao dịch chưa hoàn tác nhưng lại có lý do hoàn tác",
+          sample: label
+        });
+      }
+
+      if (transaction.matchedInvoiceId) {
+        if (!transaction.matchedAt) {
+          findings.add({
+            code: "TX_MATCHED_WITHOUT_MATCHED_AT",
+            severity: "critical",
+            title: "Giao dịch đã khớp nhưng thiếu thời điểm khớp",
+            sample: label
+          });
+        }
+        if (!transaction.matchReason?.trim()) {
+          findings.add({
+            code: "TX_MATCHED_WITHOUT_REASON",
+            severity: "warning",
+            title: "Giao dịch đã khớp nhưng thiếu nguồn/lý do khớp",
+            sample: label
+          });
+        }
+      } else {
+        if (transaction.matchedAt || transaction.matchOverrideReason) {
+          findings.add({
+            code: "TX_UNMATCHED_WITH_STALE_MATCH_DATA",
+            severity: "warning",
+            title: "Giao dịch chưa khớp vẫn còn metadata của lần khớp",
+            sample: label
+          });
+        }
+        if (transaction.resolvedAt && !transaction.resolvedNote?.trim()) {
+          findings.add({
+            code: "TX_RESOLVED_WITHOUT_NOTE",
+            severity: "warning",
+            title: "Giao dịch đã xử lý nhưng thiếu ghi chú xử lý",
+            sample: label
+          });
+        }
+        if (transaction.paymentMethod === "cash" && !transaction.resolvedAt) {
+          findings.add({
+            code: "TX_UNMATCHED_CASH",
+            severity: "warning",
+            title: "Giao dịch tiền mặt đang mở nhưng chưa liên kết hóa đơn",
+            sample: label
+          });
+        }
+      }
     }
 
     if (transaction.matchedInvoiceId && !matchedInvoice) {
@@ -461,36 +654,18 @@ async function main() {
 
       if (matchedInvoice.status !== "paid") {
         findings.add({
-          code: "TX_MATCHED_TO_UNPAID_INVOICE",
+          code: "TX_MATCHED_TO_NONPAID_INVOICE",
           severity: "critical",
-          title: "Giao dịch đã khớp vào hóa đơn chưa đóng",
+          title: "Giao dịch đã khớp vào hóa đơn không ở trạng thái đã đóng",
           sample: `${label}, ${invoiceLabel(matchedInvoice)}`
         });
       }
 
-      const pairKey = `${transaction.id}:${matchedInvoice.id}`;
-      if (!checkedAmountPairs.has(pairKey) && transaction.amount !== matchedInvoice.amount) {
-        checkedAmountPairs.add(pairKey);
-        findings.add({
-          code: "TX_INVOICE_AMOUNT_MISMATCH",
-          severity: "critical",
-          title: "Số tiền giao dịch khác số tiền hóa đơn được khớp",
-          sample: `${label}, ${invoiceLabel(matchedInvoice)}: giao dịch ${formatMoney(transaction.amount)}, hóa đơn ${formatMoney(matchedInvoice.amount)}`
-        });
-      }
+      checkMatchedAmount(transaction, matchedInvoice);
     }
 
     for (const invoice of referencedInvoices) {
-      const pairKey = `${transaction.id}:${invoice.id}`;
-      if (!checkedAmountPairs.has(pairKey) && transaction.amount !== invoice.amount) {
-        checkedAmountPairs.add(pairKey);
-        findings.add({
-          code: "TX_INVOICE_AMOUNT_MISMATCH",
-          severity: "critical",
-          title: "Số tiền giao dịch khác số tiền hóa đơn được khớp",
-          sample: `${label}, ${invoiceLabel(invoice)}: giao dịch ${formatMoney(transaction.amount)}, hóa đơn ${formatMoney(invoice.amount)}`
-        });
-      }
+      checkMatchedAmount(transaction, invoice);
     }
   }
 
@@ -518,56 +693,16 @@ async function main() {
     });
   }
 
-  const cashCandidates: Array<{ id: string; confidence: "cao" | "cần xem lại" }> = [];
-  let bankCandidates = 0;
-
-  for (const transaction of transactions) {
-    const payload = isJsonObject(transaction.rawPayload) ? transaction.rawPayload : undefined;
-    const payloadMethod = jsonString(payload?.method);
-    const payloadSource = jsonString(payload?.source);
-    const gatewaySaysCash = /^cash-/i.test(transaction.gatewayRef);
-    const payloadSaysCash = payloadMethod === "cash";
-    const contentSaysCash = normalizeText(transaction.rawContent).includes("tien mat");
-    const sourceSaysManual = payloadSource === "admin_manual";
-    const signalCount = [gatewaySaysCash, payloadSaysCash, contentSaysCash, sourceSaysManual].filter(
-      Boolean
-    ).length;
-    const isCashCandidate = signalCount > 0;
-
-    if (isCashCandidate) {
-      cashCandidates.push({
-        id: transaction.id,
-        confidence: gatewaySaysCash && (payloadSaysCash || sourceSaysManual) ? "cao" : "cần xem lại"
-      });
-    } else {
-      bankCandidates += 1;
-    }
-
-    if (gatewaySaysCash && payloadMethod && !payloadSaysCash) {
-      findings.add({
-        code: "TX_CASH_MARKER_CONFLICT",
-        severity: "warning",
-        title: "Dấu hiệu phân loại tiền mặt trong giao dịch bị mâu thuẫn",
-        sample: transactionLabel(transaction)
-      });
-    }
-
-    if (isCashCandidate && !transaction.matchedInvoiceId && (invoicesByTransactionId.get(transaction.id) ?? []).length === 0) {
-      findings.add({
-        code: "TX_UNMATCHED_CASH_CANDIDATE",
-        severity: "warning",
-        title: "Ứng viên giao dịch tiền mặt chưa liên kết hóa đơn",
-        sample: transactionLabel(transaction)
-      });
-    }
-  }
-
   const criticalGroups = findings.list("critical");
   const warningGroups = findings.list("warning");
   const criticalCount = findings.count("critical");
   const warningCount = findings.count("warning");
-  const highConfidenceCash = cashCandidates.filter((candidate) => candidate.confidence === "cao");
-  const reviewCash = cashCandidates.filter((candidate) => candidate.confidence === "cần xem lại");
+  const invoiceStatusCounts = {
+    unpaid: invoices.filter((invoice) => invoice.status === "unpaid").length,
+    paid: invoices.filter((invoice) => invoice.status === "paid").length,
+    void: invoices.filter((invoice) => invoice.status === "void").length,
+    waived: invoices.filter((invoice) => invoice.status === "waived").length
+  };
 
   console.log("============================================================");
   console.log("ĐỐI SOÁT DỮ LIỆU TÀI CHÍNH (CHỈ ĐỌC)");
@@ -579,21 +714,21 @@ async function main() {
   printFindingSection(`LỖI NGHIÊM TRỌNG (${criticalCount})`, criticalGroups);
   printFindingSection(`CẢNH BÁO CẦN XEM LẠI (${warningCount})`, warningGroups);
 
-  console.log("\nỨNG VIÊN BACKFILL PHƯƠNG THỨC THANH TOÁN");
-  console.log(`  Tiền mặt - độ tin cậy cao: ${highConfidenceCash.length}`);
-  console.log(`  Tiền mặt - cần xem lại:    ${reviewCash.length}`);
-  console.log(`  Chuyển khoản dự kiến:      ${bankCandidates}`);
-  if (cashCandidates.length > 0) {
-    console.log("  Mẫu ứng viên tiền mặt (chỉ in ID nội bộ):");
-    for (const candidate of cashCandidates.slice(0, MAX_SAMPLES_PER_CHECK)) {
-      console.log(`    - transactionId=${candidate.id} (${candidate.confidence})`);
-    }
-    if (cashCandidates.length > MAX_SAMPLES_PER_CHECK) {
-      console.log(
-        `    - ... và ${cashCandidates.length - MAX_SAMPLES_PER_CHECK} ứng viên khác`
-      );
-    }
-  }
+  console.log("\nTRẠNG THÁI HÓA ĐƠN");
+  console.log(`  Chưa đóng: ${invoiceStatusCounts.unpaid}`);
+  console.log(`  Đã đóng:   ${invoiceStatusCounts.paid}`);
+  console.log(`  Đã hủy:    ${invoiceStatusCounts.void}`);
+  console.log(`  Đã miễn:   ${invoiceStatusCounts.waived}`);
+
+  console.log("\nPHƯƠNG THỨC THANH TOÁN (THEO TRƯỜNG paymentMethod)");
+  console.log(`  Chuyển khoản: ${paymentMethodCounts.bank_transfer}`);
+  console.log(`  Tiền mặt:     ${paymentMethodCounts.cash}`);
+
+  console.log("\nTRẠNG THÁI GIAO DỊCH");
+  console.log(`  Đang chờ xử lý: ${transactionStateCounts.open}`);
+  console.log(`  Đã khớp:        ${transactionStateCounts.matched}`);
+  console.log(`  Đã xử lý:       ${transactionStateCounts.resolved}`);
+  console.log(`  Đã hoàn tác:    ${transactionStateCounts.reversed}`);
 
   console.log("\nKẾT LUẬN");
   if (criticalCount > 0) {
