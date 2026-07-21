@@ -149,7 +149,6 @@ export async function POST(request: Request) {
 
   if (
     !gatewayRef ||
-    !rawContent.trim() ||
     amount === null ||
     amount <= 0 ||
     !transferredAt ||

@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { LedgerError, recordCashPayment } from "@/lib/ledger";
+import { prisma } from "@/lib/prisma";
 
 function ledgerErrorStatus(error: LedgerError) {
   switch (error.code) {
@@ -54,6 +55,36 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof LedgerError) {
+      if (error.code === "INVOICE_ALREADY_PAID") {
+        const existing = await prisma.monthlyInvoice.findUnique({
+          where: { id: invoiceId },
+          select: {
+            status: true,
+            transaction: {
+              select: {
+                id: true,
+                paymentMethod: true,
+                matchedInvoiceId: true,
+                reversedAt: true
+              }
+            }
+          }
+        });
+
+        if (
+          existing?.status === "paid" &&
+          existing.transaction?.paymentMethod === "cash" &&
+          existing.transaction.matchedInvoiceId === invoiceId &&
+          !existing.transaction.reversedAt
+        ) {
+          return NextResponse.json({
+            ok: true,
+            alreadyPaid: true,
+            transactionId: existing.transaction.id
+          });
+        }
+      }
+
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: ledgerErrorStatus(error) }
