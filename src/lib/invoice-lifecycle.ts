@@ -102,12 +102,20 @@ function assertTransition(input: {
   currentStatus: string;
   targetStatus: InvoiceLifecycleStatus;
   transactionId: string | null;
+  matchedTransactionId: string | null;
   paidAt: Date | null;
 }) {
   if (input.currentStatus === "paid") {
     throw new InvoiceLifecycleError(
       "INVOICE_PAID",
       "Hóa đơn đã thanh toán. Cần hoàn tác giao dịch trước khi đổi trạng thái hóa đơn."
+    );
+  }
+
+  if (input.transactionId || input.matchedTransactionId || input.paidAt) {
+    throw new InvoiceLifecycleError(
+      "INVOICE_HAS_PAYMENT_DATA",
+      "Hóa đơn còn dữ liệu thanh toán. Cần hoàn tác hoặc đối soát trước khi đổi trạng thái."
     );
   }
 
@@ -129,13 +137,6 @@ function assertTransition(input: {
     throw new InvoiceLifecycleError(
       "INVALID_TRANSITION",
       "Chuyển đổi trạng thái hóa đơn không hợp lệ. Hóa đơn miễn hoặc hủy chỉ có thể phục hồi về chưa thanh toán."
-    );
-  }
-
-  if (input.transactionId || input.paidAt) {
-    throw new InvoiceLifecycleError(
-      "INVOICE_HAS_PAYMENT_DATA",
-      "Hóa đơn còn dữ liệu thanh toán. Cần hoàn tác hoặc đối soát trước khi đổi trạng thái."
     );
   }
 }
@@ -162,7 +163,8 @@ export async function changeInvoiceLifecycle(
         paidAt: true,
         amount: true,
         month: true,
-        year: true
+        year: true,
+        matchedTransaction: { select: { id: true } }
       }
     });
 
@@ -177,6 +179,7 @@ export async function changeInvoiceLifecycle(
       currentStatus: invoice.status,
       targetStatus: input.targetStatus,
       transactionId: invoice.transactionId,
+      matchedTransactionId: invoice.matchedTransaction?.id ?? null,
       paidAt: invoice.paidAt
     });
 
@@ -188,6 +191,7 @@ export async function changeInvoiceLifecycle(
         status: previousStatus,
         transactionId: null,
         paidAt: null,
+        matchedTransaction: { is: null },
         amount: invoice.amount,
         month: invoice.month,
         year: invoice.year

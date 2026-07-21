@@ -13,6 +13,7 @@ type InvoiceRow = {
   studentName: string;
   phone: string;
   monthlyStatus: "active" | "on_leave";
+  periodInitialized: boolean;
   invoice: null | {
     id: string;
     month: number;
@@ -96,6 +97,7 @@ export function ClassInvoiceEditor({
       : "Tạo hóa đơn tháng này";
 
   async function markCashPaid(invoiceId: string) {
+    if (editing) return;
     setCashError("");
     setCashSubmittingId(invoiceId);
     try {
@@ -238,20 +240,27 @@ export function ClassInvoiceEditor({
                       <div className="text-xs text-stone-500">{row.phone}</div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
-                      {editing && !isLocked ? (
-                        <Select name={`status:${row.enrollmentId}`} defaultValue={row.monthlyStatus} className="w-full min-w-0">
-                          <option value="active">Đang học</option>
-                          <option value="on_leave">Bảo lưu</option>
-                        </Select>
-                      ) : (
-                        <span className="inline-flex items-center gap-1">
-                          <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
-                          {isLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
-                          <span className={row.monthlyStatus === "active" ? "font-semibold text-primary" : "font-semibold text-amber-700"}>
-                            {row.monthlyStatus === "active" ? "Đang học" : "Bảo lưu"}
+                      <div className="grid gap-1">
+                        {editing && !isLocked ? (
+                          <Select name={`status:${row.enrollmentId}`} defaultValue={row.monthlyStatus} className="w-full min-w-0">
+                            <option value="active">Đang học</option>
+                            <option value="on_leave">Bảo lưu</option>
+                          </Select>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
+                            {isLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
+                            <span className={row.monthlyStatus === "active" ? "font-semibold text-primary" : "font-semibold text-amber-700"}>
+                              {row.monthlyStatus === "active" ? "Đang học" : "Bảo lưu"}
+                            </span>
                           </span>
-                        </span>
-                      )}
+                        )}
+                        {!row.periodInitialized ? (
+                          <span className="whitespace-normal text-[11px] font-medium text-amber-700">
+                            Chưa khởi tạo tháng
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       {invoice ? (
@@ -315,14 +324,18 @@ export function ClassInvoiceEditor({
                             type="button"
                             variant="secondary"
                             className="ml-auto h-8 w-full px-1 text-xs"
-                            disabled={cashSubmittingId === invoice.id}
+                            disabled={editing || cashSubmittingId === invoice.id}
                             onClick={() => markCashPaid(invoice.id)}
-                            title="Ghi nhận học sinh đã nộp tiền mặt"
+                            title={
+                              editing
+                                ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền mặt"
+                                : "Ghi nhận học sinh đã nộp tiền mặt"
+                            }
                           >
                             <Banknote className="h-3.5 w-3.5" />
                             {cashSubmittingId === invoice.id ? "Đang ghi..." : "Tiền mặt"}
                           </Button>
-                          <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" />
+                          <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" disabled={editing} />
                         </div>
                       ) : invoice?.status === "paid" ? (
                         <span className="inline-flex items-center justify-end gap-1 text-xs font-semibold text-success">
@@ -330,7 +343,7 @@ export function ClassInvoiceEditor({
                           Đã khóa
                         </span>
                       ) : invoice ? (
-                        <InvoiceLifecycleActions invoiceId={invoice.id} status={invoice.status} />
+                        <InvoiceLifecycleActions invoiceId={invoice.id} status={invoice.status} disabled={editing} />
                       ) : (
                         <span className="text-xs text-stone-400">-</span>
                       )}
@@ -378,7 +391,7 @@ export function ClassInvoiceEditor({
           <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50/95 px-5 py-4 shadow-[0_-8px_20px_rgba(0,0,0,0.04)] backdrop-blur">
             <p className="text-sm text-stone-600">
               {editing
-                ? "Lưu thay đổi số buổi và trạng thái học. Thao tác này không tạo hóa đơn mới."
+                ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền hay đổi trạng thái hóa đơn."
                 : hasMissingInvoice
                 ? "Tạo hóa đơn cho các học sinh đang học chưa có hóa đơn trong tháng này. Có thể sửa số buổi trước khi tạo."
                 : "Chỉ sửa số buổi và trạng thái học cho hóa đơn chưa đóng. Hóa đơn đã đóng, hủy hoặc miễn được khóa để giữ đúng lịch sử."}

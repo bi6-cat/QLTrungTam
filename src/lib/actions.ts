@@ -274,10 +274,18 @@ export async function generateInvoicesAction(formData: FormData) {
   const data = parseForm(generateInvoicesSchema, formData);
   const month = data.month || new Date().getMonth() + 1;
   const year = data.year || new Date().getFullYear();
+  const periodEnd = new Date(year, month, 1);
 
   await prisma.$transaction(async (tx) => {
     const enrollments = await tx.enrollment.findMany({
-      where: { classId: data.classId },
+      where: {
+        classId: data.classId,
+        OR: [
+          { createdAt: { lt: periodEnd } },
+          { months: { some: { month, year } } },
+          { invoices: { some: { month, year } } }
+        ]
+      },
       include: {
         student: true,
         classRoom: true,
@@ -405,6 +413,7 @@ export async function updateClassDetailsAction(formData: FormData) {
   const parsed = parseForm(updateClassDetailsSchema, formData);
   const month = parsed.month || new Date().getMonth() + 1;
   const year = parsed.year || new Date().getFullYear();
+  const periodEnd = new Date(year, month, 1);
   const enrollmentIds = Array.from(
     new Set(formData.getAll("enrollmentId").map((value) => String(value)).filter(Boolean))
   );
@@ -423,6 +432,10 @@ export async function updateClassDetailsAction(formData: FormData) {
       if (!enrollment || enrollment.classId !== parsed.classId) continue;
 
       const existingInvoice = enrollment.invoices[0];
+      const existingMonth = enrollment.months[0];
+      if (enrollment.createdAt >= periodEnd && !existingMonth && !existingInvoice) {
+        throw new Error(`${enrollment.student.fullName} chưa tham gia lớp trong tháng ${month}/${year}.`);
+      }
       if (existingInvoice && existingInvoice.status !== "unpaid") {
         continue;
       }
@@ -432,7 +445,7 @@ export async function updateClassDetailsAction(formData: FormData) {
       const requestedSessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
       const sessions = status === "active" ? requestedSessions : 0;
       const periodPricePerSession =
-        enrollment.months[0]?.pricePerSession ??
+        existingMonth?.pricePerSession ??
         existingInvoice?.pricePerSession ??
         enrollment.classRoom.pricePerSession;
       if (status === "active" && sessions <= 0) {

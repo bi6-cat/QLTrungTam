@@ -24,13 +24,22 @@ export default async function ClassesPage({
 }) {
   const params = await searchParams;
   const now = new Date();
-  const month = Number(params.month || now.getMonth() + 1);
-  const year = Number(params.year || now.getFullYear());
+  const month = Math.min(12, Math.max(1, Number(params.month) || now.getMonth() + 1));
+  const year = Number(params.year) || now.getFullYear();
+  const periodEnd = new Date(year, month, 1);
+  const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
   const [classes, students, settings] = await Promise.all([
     prisma.classRoom.findMany({
       orderBy: { createdAt: "asc" },
       include: {
         enrollments: {
+          where: {
+            OR: [
+              { createdAt: { lt: periodEnd } },
+              { months: { some: { month, year } } },
+              { invoices: { some: { month, year } } }
+            ]
+          },
           orderBy: { student: { fullName: "asc" } },
           include: {
             student: true,
@@ -205,19 +214,23 @@ export default async function ClassesPage({
             <div className="p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-bold">Học sinh trong lớp</h3>
-                <AddStudentToClassButton
-                  classId={selectedClass.id}
-                  students={students
-                    .filter(
-                      (student) =>
-                        !selectedClass.enrollments.some((enrollment) => enrollment.studentId === student.id)
-                    )
-                    .map((student) => ({
-                      id: student.id,
-                      fullName: student.fullName,
-                      phone: student.phone
-                    }))}
-                />
+                {isPastPeriod ? (
+                  <p className="text-xs font-medium text-stone-500">Chuyển về tháng hiện tại để thêm học sinh mới.</p>
+                ) : (
+                  <AddStudentToClassButton
+                    classId={selectedClass.id}
+                    students={students
+                      .filter(
+                        (student) =>
+                          !selectedClass.enrollments.some((enrollment) => enrollment.studentId === student.id)
+                      )
+                      .map((student) => ({
+                        id: student.id,
+                        fullName: student.fullName,
+                        phone: student.phone
+                      }))}
+                  />
+                )}
               </div>
               {selectedClass.enrollments.length === 0 ? (
                 <EmptyState title="Lớp chưa có học sinh">Thêm học sinh vào lớp để bắt đầu tạo hóa đơn.</EmptyState>
@@ -237,9 +250,10 @@ export default async function ClassesPage({
                       selectedClass.sessionsPerMonthDefault;
                     return {
                       enrollmentId: enrollment.id,
-                      studentName: enrollment.student.fullName,
-                      phone: enrollment.student.phone,
+                      studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
+                      phone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
                       monthlyStatus,
+                      periodInitialized: Boolean(enrollmentMonth || invoice),
                       defaultSessions,
                       pricePerSession:
                         invoice?.pricePerSession ??

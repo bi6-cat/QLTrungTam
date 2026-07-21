@@ -4,11 +4,19 @@ export async function getCurrentDashboard() {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
+  const periodEnd = new Date(year, month, 1);
 
   const classes = await prisma.classRoom.findMany({
     orderBy: { createdAt: "asc" },
     include: {
       enrollments: {
+        where: {
+          OR: [
+            { createdAt: { lt: periodEnd } },
+            { months: { some: { month, year } } },
+            { invoices: { some: { month, year } } }
+          ]
+        },
         include: {
           student: true,
           invoices: {

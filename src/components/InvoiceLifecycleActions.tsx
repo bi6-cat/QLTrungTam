@@ -28,10 +28,12 @@ const COPY = {
 
 export function InvoiceLifecycleActions({
   invoiceId,
-  status
+  status,
+  disabled = false
 }: {
   invoiceId: string;
   status: InvoiceStatus;
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const [target, setTarget] = useState<InvoiceStatus | null>(null);
@@ -40,6 +42,7 @@ export function InvoiceLifecycleActions({
   const [pending, setPending] = useState(false);
 
   function open(nextTarget: InvoiceStatus) {
+    if (disabled) return;
     setReason("");
     setError("");
     setTarget(nextTarget);
@@ -47,7 +50,7 @@ export function InvoiceLifecycleActions({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!target) return;
+    if (!target || disabled) return;
     setPending(true);
     setError("");
     try {
@@ -73,17 +76,38 @@ export function InvoiceLifecycleActions({
       <div className="flex flex-wrap justify-end gap-1">
         {status === "unpaid" ? (
           <>
-            <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={() => open("void")}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-8 px-2 text-xs"
+              disabled={disabled}
+              title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : undefined}
+              onClick={() => open("void")}
+            >
               <Ban className="h-3.5 w-3.5" />
               Hủy
             </Button>
-            <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={() => open("waived")}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-8 px-2 text-xs"
+              disabled={disabled}
+              title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : undefined}
+              onClick={() => open("waived")}
+            >
               <Gift className="h-3.5 w-3.5" />
               Miễn
             </Button>
           </>
         ) : (
-          <Button type="button" variant="secondary" className="h-8 px-2 text-xs" onClick={() => open("unpaid")}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-8 px-2 text-xs"
+            disabled={disabled}
+            title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : undefined}
+            onClick={() => open("unpaid")}
+          >
             <RotateCcw className="h-3.5 w-3.5" />
             Khôi phục
           </Button>
@@ -100,7 +124,7 @@ export function InvoiceLifecycleActions({
                 onChange={(event) => setReason(event.target.value)}
                 required
                 maxLength={500}
-                disabled={pending}
+                disabled={pending || disabled}
                 autoFocus
                 placeholder="Nhập lý do để lưu vào lịch sử đối soát..."
               />
@@ -110,7 +134,11 @@ export function InvoiceLifecycleActions({
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setTarget(null)}>
                 Đóng
               </Button>
-              <Button type="submit" variant={target === "void" ? "danger" : "primary"} disabled={pending || !reason.trim()}>
+              <Button
+                type="submit"
+                variant={target === "void" ? "danger" : "primary"}
+                disabled={pending || disabled || !reason.trim()}
+              >
                 {pending ? "Đang lưu..." : COPY[target].label}
               </Button>
             </div>

@@ -321,11 +321,19 @@ export default async function TransactionsPage({
                       {invoice.paidAt ? invoice.paidAt.toLocaleString("vi-VN") : "-"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="font-semibold">{invoice.enrollment.student.fullName}</div>
-                      <div className="text-xs text-stone-500">{invoice.enrollment.student.phone}</div>
+                      <div className="font-semibold">
+                        {invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName}
+                      </div>
+                      <div className="text-xs text-stone-500">
+                        {invoice.studentPhoneSnapshot ?? invoice.enrollment.student.phone}
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">{invoice.enrollment.classRoom.name}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{invoice.enrollment.classRoom.teacherName || "-"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {invoice.classNameSnapshot ?? invoice.enrollment.classRoom.name}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {(invoice.teacherNameSnapshot ?? invoice.enrollment.classRoom.teacherName) || "-"}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">{formatMonth(invoice.month, invoice.year)}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(invoice.amount)}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
@@ -418,8 +426,10 @@ export default async function TransactionsPage({
                     <td className="whitespace-nowrap px-4 py-3">
                       {transaction.matchedInvoice ? (
                         <>
-                          {transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
-                          {transaction.matchedInvoice.enrollment.student.fullName} ·{" "}
+                          {transaction.matchedInvoice.classShortCodeSnapshot ??
+                            transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
+                          {transaction.matchedInvoice.studentNameSnapshot ??
+                            transaction.matchedInvoice.enrollment.student.fullName} ·{" "}
                           {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
                         </>
                       ) : transaction.reversedAt ? (
@@ -499,7 +509,7 @@ export default async function TransactionsPage({
                         invoices={unpaidInvoices.map((invoice) => ({
                           id: invoice.id,
                           amount: invoice.amount,
-                          label: `${invoice.enrollment.classRoom.shortCode} · ${invoice.enrollment.student.fullName} · ${formatMonth(invoice.month, invoice.year)} · ${formatCurrency(invoice.amount)}`
+                          label: `${invoice.classShortCodeSnapshot ?? invoice.enrollment.classRoom.shortCode} · ${invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName} · ${formatMonth(invoice.month, invoice.year)} · ${formatCurrency(invoice.amount)}`
                         }))}
                       />
                     </td>
