@@ -42,7 +42,7 @@ services:
     image: node:22-alpine
     profiles: ["tools"]
     working_dir: /app
-    command: sh -c "npm install && npx prisma migrate deploy"
+    command: sh -c "npm ci && npx prisma migrate deploy"
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-hoctro}:${DB_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-hoctro}?schema=public

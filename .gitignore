@@ -7,4 +7,5 @@ coverage
 *.log
 db_data
 backups
+.deploy
 *.tsbuildinfo
