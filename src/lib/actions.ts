@@ -5,6 +5,14 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout, requireAdmin } from "@/lib/auth";
+import {
+  assignTransactionToInvoice,
+  LedgerError,
+  recordCashPayment,
+  resolveUnmatchedTransaction,
+  reverseTransaction,
+  unassignTransaction
+} from "@/lib/ledger";
 import { buildMemo } from "@/lib/payment";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +39,9 @@ import {
   markCashSchema,
   parseForm,
   resolveTransactionSchema,
+  reverseTransactionSchema,
   safeParseForm,
+  unassignTransactionSchema,
   updateClassDetailsSchema,
   updateClassSchema,
   updateEnrollmentStatusSchema,
@@ -133,6 +143,12 @@ export async function createClassAction(formData: FormData) {
 export async function deleteClassAction(formData: FormData) {
   await requireAdmin();
   const { id } = parseForm(idSchema, formData);
+  const invoiceCount = await prisma.monthlyInvoice.count({
+    where: { enrollment: { classId: id } }
+  });
+  if (invoiceCount > 0) {
+    throw new Error("Không thể xóa lớp đã có hóa đơn. Hãy lưu trữ lớp để giữ lịch sử tài chính.");
+  }
   await prisma.classRoom.delete({ where: { id } });
   revalidatePath("/admin/classes");
   revalidatePath("/admin");
@@ -188,6 +204,12 @@ export async function createStudentAction(formData: FormData) {
 export async function deleteStudentAction(formData: FormData) {
   await requireAdmin();
   const { id } = parseForm(idSchema, formData);
+  const invoiceCount = await prisma.monthlyInvoice.count({
+    where: { enrollment: { studentId: id } }
+  });
+  if (invoiceCount > 0) {
+    throw new Error("Không thể xóa học sinh đã có hóa đơn. Hãy lưu trữ hồ sơ để giữ lịch sử tài chính.");
+  }
   await prisma.student.delete({ where: { id } });
   revalidatePath("/admin/students");
 }
@@ -259,19 +281,29 @@ export async function generateInvoicesAction(formData: FormData) {
   for (const enrollment of enrollments) {
     const sessions = enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault;
     const memoContent = buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year);
-    await prisma.monthlyInvoice.upsert({
+    const existingInvoice = await prisma.monthlyInvoice.findUnique({
       where: { enrollmentId_month_year: { enrollmentId: enrollment.id, month, year } },
-      update: { memoContent },
-      create: {
-        enrollmentId: enrollment.id,
-        month,
-        year,
-        sessions,
-        pricePerSession: enrollment.classRoom.pricePerSession,
-        amount: sessions * enrollment.classRoom.pricePerSession,
-        memoContent
-      }
+      select: { id: true, status: true, transactionId: true }
     });
+
+    if (!existingInvoice) {
+      await prisma.monthlyInvoice.create({
+        data: {
+          enrollmentId: enrollment.id,
+          month,
+          year,
+          sessions,
+          pricePerSession: enrollment.classRoom.pricePerSession,
+          amount: sessions * enrollment.classRoom.pricePerSession,
+          memoContent
+        }
+      });
+    } else if (existingInvoice.status === "unpaid" && !existingInvoice.transactionId) {
+      await prisma.monthlyInvoice.updateMany({
+        where: { id: existingInvoice.id, status: "unpaid", transactionId: null },
+        data: { memoContent }
+      });
+    }
   }
 
   revalidatePath("/admin/classes");
@@ -282,14 +314,17 @@ export async function generateInvoicesAction(formData: FormData) {
 export async function updateInvoiceAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(updateInvoiceSchema, formData);
-  await prisma.monthlyInvoice.update({
-    where: { id: data.invoiceId },
+  const updated = await prisma.monthlyInvoice.updateMany({
+    where: { id: data.invoiceId, status: "unpaid", transactionId: null },
     data: {
       sessions: data.sessions,
       pricePerSession: data.pricePerSession,
       amount: data.amount ?? data.sessions * data.pricePerSession
     }
   });
+  if (updated.count !== 1) {
+    throw new Error("Hóa đơn đã được thanh toán hoặc vừa thay đổi; không thể sửa số tiền.");
+  }
   revalidatePath("/admin/classes");
   revalidatePath("/admin/invoices");
 }
@@ -323,8 +358,13 @@ export async function updateClassDetailsAction(formData: FormData) {
       });
 
       if (existingInvoice) {
-        await tx.monthlyInvoice.update({
-          where: { id: existingInvoice.id },
+        await tx.monthlyInvoice.updateMany({
+          where: {
+            id: existingInvoice.id,
+            status: "unpaid",
+            transactionId: null,
+            updatedAt: existingInvoice.updatedAt
+          },
           data: {
             sessions,
             amount: sessions * existingInvoice.pricePerSession,
@@ -361,77 +401,124 @@ export async function updateSettingsAction(formData: FormData) {
 }
 
 export async function markInvoiceCashPaidAction(formData: FormData) {
-  await requireAdmin();
+  const session = await requireAdmin();
   const { invoiceId, returnTo } = parseForm(markCashSchema, formData);
-  const invoice = await prisma.monthlyInvoice.findUnique({
-    where: { id: invoiceId },
-    include: { enrollment: { include: { student: true, classRoom: true } } }
-  });
-
-  if (!invoice || invoice.status === "paid") {
-    revalidatePath("/admin/classes");
-    revalidatePath("/admin/transactions");
-    if (returnTo.startsWith("/admin/classes")) {
-      redirect(returnTo);
+  try {
+    await recordCashPayment({ invoiceId, actor: session });
+  } catch (error) {
+    // Giữ tính idempotent cho form cũ: bấm lặp hóa đơn đã đóng không tạo thêm giao dịch.
+    if (!(error instanceof LedgerError && error.code === "INVOICE_ALREADY_PAID")) {
+      throw error;
     }
-    return;
   }
 
-  const paidAt = new Date();
-  await prisma.$transaction(async (tx) => {
-    const claimed = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "unpaid" },
-      data: { status: "paid", paidAt }
-    });
-    if (claimed.count === 0) return;
-
-    const transaction = await tx.transaction.create({
-      data: {
-        gatewayRef: `CASH-${invoice.id}-${paidAt.getTime()}`,
-        amount: invoice.amount,
-        rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
-        transferredAt: paidAt,
-        matchedInvoiceId: invoice.id,
-        rawPayload: { method: "cash", source: "admin_manual", invoiceId: invoice.id }
-      }
-    });
-    await tx.monthlyInvoice.update({
-      where: { id: invoice.id },
-      data: { transactionId: transaction.id }
-    });
-  });
-
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/transactions");
-  revalidatePath("/pay/[short_code]", "page");
+  revalidateFinancialPaths();
   if (returnTo.startsWith("/admin/classes")) {
     redirect(returnTo);
   }
 }
 
-export async function assignTransactionAction(formData: FormData) {
-  await requireAdmin();
-  const { transactionId, invoiceId } = parseForm(assignTransactionSchema, formData);
-  await prisma.$transaction([
-    prisma.transaction.update({
-      where: { id: transactionId },
-      data: { matchedInvoiceId: invoiceId }
-    }),
-    prisma.monthlyInvoice.update({
-      where: { id: invoiceId },
-      data: { status: "paid", paidAt: new Date(), transactionId }
-    })
-  ]);
-  revalidatePath("/admin/transactions");
+export type TransactionActionState = { error: string; success: string };
+
+function revalidateFinancialPaths() {
+  revalidatePath("/admin");
   revalidatePath("/admin/classes");
+  revalidatePath("/admin/invoices");
+  revalidatePath("/admin/transactions");
+  revalidatePath("/pay/[short_code]", "page");
+  revalidatePath("/teacher/classes/[short_code]", "page");
 }
 
-export async function resolveTransactionAction(formData: FormData) {
-  await requireAdmin();
-  const { transactionId } = parseForm(resolveTransactionSchema, formData);
-  await prisma.transaction.update({
-    where: { id: transactionId },
-    data: { resolvedAt: new Date() }
-  });
-  revalidatePath("/admin/transactions");
+function transactionActionFailure(error: unknown): TransactionActionState {
+  if (error instanceof LedgerError) {
+    return { error: error.message, success: "" };
+  }
+  console.error("Financial ledger action failed", error);
+  return { error: "Không thể cập nhật giao dịch. Vui lòng tải lại trang và thử lại.", success: "" };
+}
+
+export async function assignTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(assignTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await assignTransactionToInvoice({
+      transactionId: data.transactionId,
+      invoiceId: data.invoiceId,
+      actor: session,
+      force: data.allowAmountMismatch,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã gán giao dịch và ghi nhận thanh toán." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
+}
+
+export async function resolveTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(resolveTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await resolveUnmatchedTransaction({
+      transactionId: data.transactionId,
+      actor: session,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã đánh dấu giao dịch là đã xử lý." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
+}
+
+export async function unassignTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(unassignTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await unassignTransaction({
+      transactionId: data.transactionId,
+      actor: session,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã bỏ gán; hóa đơn trở lại trạng thái chưa đóng." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
+}
+
+export async function reverseTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(reverseTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await reverseTransaction({
+      transactionId: data.transactionId,
+      actor: session,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã hoàn tác giao dịch và giữ lại lịch sử đối soát." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
 }

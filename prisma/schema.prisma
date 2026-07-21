@@ -17,6 +17,11 @@ enum InvoiceStatus {
   paid
 }
 
+enum PaymentMethod {
+  bank_transfer
+  cash
+}
+
 model ClassRoom {
   id                      String       @id @default(cuid())
   name                    String
@@ -61,22 +66,22 @@ model Enrollment {
 }
 
 model MonthlyInvoice {
-  id              String        @id @default(cuid())
-  enrollmentId    String
-  month           Int
-  year            Int
-  sessions        Int
-  pricePerSession Int
-  amount          Int
-  memoContent     String
-  status          InvoiceStatus @default(unpaid)
-  paidAt          DateTime?
-  transactionId   String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  enrollment      Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  transaction     Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
-  matchedTransactions Transaction[] @relation("TransactionMatchedInvoice")
+  id                 String        @id @default(cuid())
+  enrollmentId       String
+  month              Int
+  year               Int
+  sessions           Int
+  pricePerSession    Int
+  amount             Int
+  memoContent        String
+  status             InvoiceStatus @default(unpaid)
+  paidAt             DateTime?
+  transactionId      String?       @unique
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  enrollment         Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  transaction        Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
+  matchedTransaction Transaction?  @relation("TransactionMatchedInvoice")
 
   @@unique([enrollmentId, month, year])
   @@index([status, month, year])
@@ -84,26 +89,52 @@ model MonthlyInvoice {
 }
 
 model Transaction {
-  id               String           @id @default(cuid())
-  gatewayRef       String           @unique
-  amount           Int
-  rawContent       String
-  transferredAt    DateTime
-  matchedInvoiceId String?
-  rawPayload       Json
-  resolvedAt       DateTime?
-  createdAt        DateTime         @default(now())
-  matchedInvoice   MonthlyInvoice?  @relation("TransactionMatchedInvoice", fields: [matchedInvoiceId], references: [id])
-  invoices         MonthlyInvoice[] @relation("InvoicePaymentTransaction")
+  id                  String          @id @default(cuid())
+  gatewayRef          String          @unique
+  amount              Int
+  rawContent          String
+  transferredAt       DateTime
+  paymentMethod       PaymentMethod   @default(bank_transfer)
+  matchedInvoiceId    String?         @unique
+  matchedAt           DateTime?
+  matchReason         String?
+  matchOverrideReason String?
+  reversedAt          DateTime?
+  reversalReason      String?
+  rawPayload          Json
+  resolvedAt          DateTime?
+  resolvedNote        String?
+  createdAt           DateTime        @default(now())
+  matchedInvoice      MonthlyInvoice? @relation("TransactionMatchedInvoice", fields: [matchedInvoiceId], references: [id])
+  invoice             MonthlyInvoice? @relation("InvoicePaymentTransaction")
 
   @@index([matchedInvoiceId])
 }
 
 model AdminUser {
-  id           String   @id @default(cuid())
-  username     String   @unique
+  id           String     @id @default(cuid())
+  username     String     @unique
   passwordHash String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime   @default(now())
+  auditLogs    AuditLog[]
+}
+
+model AuditLog {
+  id            String     @id @default(cuid())
+  actorUserId   String?
+  actorUsername String
+  action        String
+  entityType    String
+  entityId      String
+  reason        String?
+  metadata      Json?
+  createdAt     DateTime   @default(now())
+  actorUser     AdminUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
 }
 
 model AppSetting {

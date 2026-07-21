@@ -161,11 +161,27 @@ export const markCashSchema = z.object({
 
 export const assignTransactionSchema = z.object({
   transactionId: id,
-  invoiceId: id
+  invoiceId: id,
+  allowAmountMismatch: z
+    .string()
+    .optional()
+    .transform((value) => value === "true" || value === "1" || value === "on"),
+  reason: looseText(500)
 });
 
 export const resolveTransactionSchema = z.object({
-  transactionId: id
+  transactionId: id,
+  reason: requiredText("Vui lòng nhập lý do xử lý giao dịch", 500)
+});
+
+export const unassignTransactionSchema = z.object({
+  transactionId: id,
+  reason: requiredText("Vui lòng nhập lý do bỏ gán", 500)
+});
+
+export const reverseTransactionSchema = z.object({
+  transactionId: id,
+  reason: requiredText("Vui lòng nhập lý do hoàn tác", 500)
 });
 
 // ---------------------------------------------------------------------------

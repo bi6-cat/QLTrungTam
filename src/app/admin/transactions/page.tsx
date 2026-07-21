@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History, Landmark, LinkIcon } from "lucide-react";
-import { assignTransactionAction, resolveTransactionAction } from "@/lib/actions";
-import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, Select, StatCard } from "@/components/ui";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History, Landmark } from "lucide-react";
+import { TransactionMatchForm } from "@/components/TransactionMatchForm";
+import { TransactionReviewActions } from "@/components/TransactionReviewActions";
+import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -31,7 +32,7 @@ export default async function TransactionsPage({
 
   const [unmatchedTransactions, allTransactions, paidHistory, allInvoices, unpaidInvoices] = await Promise.all([
     prisma.transaction.findMany({
-      where: { matchedInvoiceId: null, resolvedAt: null },
+      where: { matchedInvoiceId: null, resolvedAt: null, reversedAt: null },
       orderBy: { transferredAt: "desc" }
     }),
     prisma.transaction.findMany({
@@ -109,7 +110,10 @@ export default async function TransactionsPage({
   ).sort((a, b) => b.key.localeCompare(a.key));
 
   const totalPaid = paidHistory.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalBankTransactions = allTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const bankTransactions = allTransactions.filter(
+    (transaction) => transaction.paymentMethod === "bank_transfer" && !transaction.reversedAt
+  );
+  const totalBankTransactions = bankTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
 
   // Phân trang phía server cho từng danh sách, giữ nguyên tháng/năm và trang của các list khác.
   function slicePage<T>(items: T[], page: number) {
@@ -211,10 +215,10 @@ export default async function TransactionsPage({
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <StatCard
-          label={`Giao dịch ${formatMonth(selectedMonth, selectedYear)}`}
+          label={`Chuyển khoản ${formatMonth(selectedMonth, selectedYear)}`}
           tone="primary"
           value={formatCurrency(totalBankTransactions)}
-          hint={`${allTransactions.length} giao dịch trong tháng`}
+          hint={`${bankTransactions.length} giao dịch ngân hàng hợp lệ`}
           icon={<Landmark className="h-5 w-5" />}
         />
         <StatCard
@@ -336,19 +340,21 @@ export default async function TransactionsPage({
         </div>
         {allTransactions.length === 0 ? (
           <div className="p-5">
-            <EmptyState title="Chưa có giao dịch ngân hàng">Webhook SePay sẽ ghi log giao dịch tại đây.</EmptyState>
+            <EmptyState title="Chưa có giao dịch">Giao dịch chuyển khoản hoặc tiền mặt sẽ xuất hiện tại đây.</EmptyState>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-left text-sm">
+            <table className="w-full min-w-[1320px] text-left text-sm">
               <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Thời gian</th>
                   <th className="px-4 py-3">Mã GD</th>
+                  <th className="px-4 py-3">Phương thức</th>
                   <th className="px-4 py-3">Số tiền</th>
                   <th className="px-4 py-3">Trạng thái</th>
                   <th className="px-4 py-3">Hóa đơn khớp</th>
                   <th className="px-4 py-3">Nội dung</th>
+                  <th className="px-4 py-3">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
@@ -356,11 +362,43 @@ export default async function TransactionsPage({
                   <tr key={transaction.id}>
                     <td className="whitespace-nowrap px-4 py-3">{transaction.transferredAt.toLocaleString("vi-VN")}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{transaction.gatewayRef}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <Badge tone="neutral">
+                        {transaction.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản"}
+                      </Badge>
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(transaction.amount)}</td>
                     <td className="px-4 py-3">
-                      <Badge tone={transaction.matchedInvoice ? "success" : transaction.resolvedAt ? "neutral" : "warning"}>
-                        {transaction.matchedInvoice ? "Đã khớp" : transaction.resolvedAt ? "Đã xử lý" : "Chưa khớp"}
+                      <Badge
+                        tone={
+                          transaction.reversedAt
+                            ? "warning"
+                            : transaction.matchedInvoice
+                              ? "success"
+                              : transaction.resolvedAt
+                                ? "neutral"
+                                : "warning"
+                        }
+                      >
+                        {transaction.reversedAt
+                          ? "Đã hoàn tác"
+                          : transaction.matchedInvoice
+                            ? "Đã khớp"
+                            : transaction.resolvedAt
+                              ? "Đã xử lý"
+                              : "Chưa khớp"}
                       </Badge>
+                      {transaction.reversalReason ? (
+                        <p className="mt-1 max-w-xs text-xs text-stone-500">{transaction.reversalReason}</p>
+                      ) : null}
+                      {transaction.matchedInvoice && transaction.matchOverrideReason ? (
+                        <p className="mt-1 max-w-xs text-xs font-medium text-amber-700">
+                          Gán lệch {formatCurrency(Math.abs(transaction.amount - transaction.matchedInvoice.amount))}: {transaction.matchOverrideReason}
+                        </p>
+                      ) : null}
+                      {!transaction.reversedAt && transaction.resolvedNote ? (
+                        <p className="mt-1 max-w-xs text-xs text-stone-500">{transaction.resolvedNote}</p>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {transaction.matchedInvoice ? (
@@ -369,6 +407,8 @@ export default async function TransactionsPage({
                           {transaction.matchedInvoice.enrollment.student.fullName} ·{" "}
                           {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
                         </>
+                      ) : transaction.reversedAt ? (
+                        "Liên kết đã được hoàn tác"
                       ) : transaction.resolvedAt ? (
                         "Đã xử lý thủ công (không gán học sinh)"
                       ) : (
@@ -377,6 +417,13 @@ export default async function TransactionsPage({
                     </td>
                     <td className="px-4 py-3">
                       <p className="max-w-lg break-words font-mono text-xs">{transaction.rawContent}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {transaction.matchedInvoice && !transaction.reversedAt ? (
+                        <TransactionReviewActions transactionId={transaction.id} />
+                      ) : (
+                        "-"
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -425,35 +472,21 @@ export default async function TransactionsPage({
                     <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(transaction.amount)}</td>
                     <td className="px-4 py-3">
                       <Badge tone="warning">Chưa khớp</Badge>
+                      {transaction.matchReason ? (
+                        <p className="mt-2 max-w-sm text-xs font-medium text-amber-700">{transaction.matchReason}</p>
+                      ) : null}
                       <p className="mt-2 max-w-sm break-words font-mono text-xs">{transaction.rawContent}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="grid gap-3">
-                        <form action={assignTransactionAction} className="grid gap-2">
-                          <input type="hidden" name="transactionId" value={transaction.id} />
-                          <Field label="Hóa đơn chưa đóng">
-                            <Select name="invoiceId" required>
-                              {unpaidInvoices.map((invoice) => (
-                                <option key={invoice.id} value={invoice.id}>
-                                  {invoice.enrollment.classRoom.shortCode} · {invoice.enrollment.student.fullName} ·{" "}
-                                  {formatMonth(invoice.month, invoice.year)} · {formatCurrency(invoice.amount)}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                          <Button type="submit" disabled={unpaidInvoices.length === 0}>
-                            <LinkIcon className="h-4 w-4" />
-                            Gán và đánh dấu đã đóng
-                          </Button>
-                        </form>
-                        <form action={resolveTransactionAction}>
-                          <input type="hidden" name="transactionId" value={transaction.id} />
-                          <Button type="submit" variant="secondary" className="w-full">
-                            <CheckCircle2 className="h-4 w-4" />
-                            Đã xử lý (không gán học sinh)
-                          </Button>
-                        </form>
-                      </div>
+                      <TransactionMatchForm
+                        transactionId={transaction.id}
+                        transactionAmount={transaction.amount}
+                        invoices={unpaidInvoices.map((invoice) => ({
+                          id: invoice.id,
+                          amount: invoice.amount,
+                          label: `${invoice.enrollment.classRoom.shortCode} · ${invoice.enrollment.student.fullName} · ${formatMonth(invoice.month, invoice.year)} · ${formatCurrency(invoice.amount)}`
+                        }))}
+                      />
                     </td>
                   </tr>
                 ))}
