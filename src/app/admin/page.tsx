@@ -10,7 +10,8 @@ export default async function AdminHomePage() {
   const dashboard = await getCurrentDashboard();
   const totalExpected = dashboard.classes.reduce((sum, item) => sum + item.expectedAmount, 0);
   const totalPaid = dashboard.classes.reduce((sum, item) => sum + item.paidAmount, 0);
-  const totalRemaining = Math.max(0, totalExpected - totalPaid);
+  const totalRemaining = dashboard.classes.reduce((sum, item) => sum + item.remainingAmount, 0);
+  const totalUnissued = dashboard.classes.reduce((sum, item) => sum + item.unissuedCount, 0);
   const totalStudents = dashboard.classes.reduce((sum, item) => sum + item.activeStudents, 0);
   const totalUnpaid = dashboard.classes.reduce((sum, item) => sum + item.unpaidCount, 0);
 
@@ -23,10 +24,10 @@ export default async function AdminHomePage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Cần nộp"
+          label="Đã phát hành"
           tone="primary"
           value={formatCurrency(totalExpected)}
-          hint="Không tính học sinh bảo lưu"
+          hint="Chỉ gồm hóa đơn đã đóng và chưa đóng"
           icon={<CircleDollarSign className="h-5 w-5" />}
         />
         <StatCard
@@ -37,17 +38,17 @@ export default async function AdminHomePage() {
           icon={<Wallet className="h-5 w-5" />}
         />
         <StatCard
-          label="Còn lại"
+          label="Công nợ chưa thu"
           tone="warning"
           value={formatCurrency(totalRemaining)}
-          hint={`${totalUnpaid} học sinh chưa hoàn tất`}
+          hint={`${totalUnpaid} hóa đơn chưa thanh toán`}
           icon={<ReceiptText className="h-5 w-5" />}
         />
         <StatCard
           label="Học sinh đang học"
           tone="neutral"
           value={totalStudents}
-          hint="Tính theo từng lớp"
+          hint={`${totalUnissued} học sinh đang học chưa phát hành hóa đơn`}
           icon={<Users className="h-5 w-5" />}
         />
       </div>
@@ -72,9 +73,9 @@ export default async function AdminHomePage() {
                   <th className="px-4 py-3">Học sinh</th>
                   <th className="px-4 py-3">Đã đóng</th>
                   <th className="px-4 py-3">Chưa đóng</th>
-                  <th className="px-4 py-3">Cần nộp</th>
+                  <th className="px-4 py-3">Đã phát hành</th>
                   <th className="px-4 py-3">Đã nộp</th>
-                  <th className="px-4 py-3">Còn lại</th>
+                  <th className="px-4 py-3">Công nợ</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -83,10 +84,18 @@ export default async function AdminHomePage() {
                   <tr key={classRoom.id} className="transition-colors hover:bg-indigo-50/40">
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="font-semibold">{classRoom.name}</div>
-                      <div className="text-xs text-stone-500">{classRoom.shortCode}</div>
+                      <div className="flex items-center gap-2 text-xs text-stone-500">
+                        <span>{classRoom.shortCode}</span>
+                        {classRoom.archivedAt ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">{classRoom.teacherName || "-"}</td>
-                    <td className="px-4 py-3">{classRoom.activeStudents}</td>
+                    <td className="px-4 py-3">
+                      {classRoom.activeStudents}
+                      {classRoom.unissuedCount > 0 ? (
+                        <div className="text-xs text-amber-700">{classRoom.unissuedCount} chưa phát hành</div>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       <Badge tone="success" dot>{classRoom.paidCount}</Badge>
                     </td>

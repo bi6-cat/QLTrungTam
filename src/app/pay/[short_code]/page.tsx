@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { PaymentFlow } from "@/components/PaymentFlow";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
-import { buildVietQrDeepLink, buildVietQrImageUrl } from "@/lib/payment";
+import { buildVietQrImageUrl } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
 
@@ -18,11 +18,17 @@ export default async function PayPage({
     where: { publicToken: short_code },
     include: {
       enrollments: {
-        where: { status: "active" },
+        where: {
+          OR: [
+            { status: "active", student: { archivedAt: null } },
+            { invoices: { some: { status: "unpaid" } } }
+          ]
+        },
         orderBy: { student: { fullName: "asc" } },
         include: {
           student: true,
           invoices: {
+            where: { status: { in: ["unpaid", "paid", "waived", "void"] } },
             orderBy: [{ year: "desc" }, { month: "desc" }]
           }
         }
@@ -38,8 +44,12 @@ export default async function PayPage({
   const bankBin = settings.bankBin;
   const accountNumber = settings.bankAccountNumber;
   const accountName = settings.bankAccountName;
-  const returnUrl = `${settings.appUrl.replace(/\/$/, "")}/pay/${encodeURIComponent(short_code)}`;
-  const students = classRoom.enrollments.map((enrollment) => ({
+  const payableEnrollments = classRoom.enrollments.filter(
+    (enrollment) =>
+      enrollment.invoices.some((invoice) => invoice.status === "unpaid") ||
+      (!classRoom.archivedAt && !enrollment.student.archivedAt)
+  );
+  const students = payableEnrollments.map((enrollment) => ({
     id: enrollment.student.id,
     fullName: enrollment.student.fullName,
     invoices: enrollment.invoices.map((invoice) => ({
@@ -55,14 +65,6 @@ export default async function PayPage({
         accountName,
         amount: invoice.amount,
         memo: invoice.memoContent
-      }),
-      deepLink: buildVietQrDeepLink({
-        bankBin,
-        accountNumber,
-        accountName,
-        amount: invoice.amount,
-        memo: invoice.memoContent,
-        returnUrl
       })
     }))
   }));
@@ -78,7 +80,7 @@ export default async function PayPage({
               Nộp học phí
             </span>
             <h1 className="mt-3 text-2xl font-bold tracking-tight">{classRoom.name}</h1>
-            <p className="mt-2 text-sm text-white/85">Chọn tên học sinh, kiểm tra số tiền và chuyển khoản đúng nội dung.</p>
+            <p className="mt-2 text-sm text-white/85">Chọn tên học sinh, kiểm tra số tiền rồi quét mã QR để chuyển khoản.</p>
           </div>
         </header>
 
@@ -87,8 +89,8 @@ export default async function PayPage({
             <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-50 text-warning">
               <AlertCircle className="h-7 w-7" />
             </span>
-            <h2 className="mt-4 text-lg font-bold">Lớp chưa có học sinh đang học</h2>
-            <p className="mt-2 text-stone-600">Vui lòng liên hệ trung tâm để kiểm tra lại đường dẫn.</p>
+            <h2 className="mt-4 text-lg font-bold">Không có khoản cần thanh toán</h2>
+            <p className="mt-2 text-stone-600">Lớp chưa có học sinh đang học hoặc mọi khoản đã được xử lý.</p>
           </section>
         ) : (
           <PaymentFlow students={students} />

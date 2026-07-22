@@ -2,34 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CheckCircle2, Copy, ExternalLink, Home, Info, Loader2, QrCode } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Copy, FileClock, Home, Info, Loader2, QrCode } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 
-type BankApp = {
-  appId: string;
-  appName: string;
-  bankName: string;
-};
-
-const FALLBACK_BANK_APPS: BankApp[] = [
-  { appId: "tcb", appName: "Techcombank Mobile", bankName: "Techcombank" },
-  { appId: "vcb", appName: "Vietcombank", bankName: "Vietcombank" },
-  { appId: "mb", appName: "MB Bank", bankName: "MB Bank" },
-  { appId: "bidv", appName: "BIDV SmartBanking", bankName: "BIDV" },
-  { appId: "vpb", appName: "VPBank NEO", bankName: "VPBank" },
-  { appId: "acb", appName: "ACB ONE", bankName: "ACB" },
-  { appId: "icb", appName: "VietinBank iPay", bankName: "VietinBank" },
-  { appId: "tpb", appName: "TPBank Mobile", bankName: "TPBank" },
-  { appId: "vib-2", appName: "MyVIB 2.0", bankName: "VIB" },
-  { appId: "vba", appName: "Agribank E-Mobile Banking", bankName: "Agribank" }
-];
-
-function addBankAppToDeepLink(deepLink: string, appId: string) {
-  const url = new URL(deepLink);
-  url.searchParams.set("app", appId);
-  return url.toString();
-}
+type InvoiceStatus = "paid" | "unpaid" | "void" | "waived";
 
 type Invoice = {
   id: string;
@@ -37,9 +14,8 @@ type Invoice = {
   year: number;
   amount: number;
   memoContent: string;
-  status: "paid" | "unpaid";
+  status: InvoiceStatus;
   qrImageUrl: string;
-  deepLink: string;
 };
 
 type Student = {
@@ -81,59 +57,49 @@ function CopyMemoButton({ memo }: { memo: string }) {
 export function PaymentFlow({ students }: { students: Student[] }) {
   const [studentId, setStudentId] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [statuses, setStatuses] = useState<Record<string, "paid" | "unpaid">>({});
-  const [bankApps, setBankApps] = useState<BankApp[]>(FALLBACK_BANK_APPS);
-  const [bankAppId, setBankAppId] = useState("");
+  const [statuses, setStatuses] = useState<Record<string, InvoiceStatus>>({});
   const selected = useMemo(
     () => students.find((student) => student.id === studentId) ?? null,
     [studentId, students]
   );
 
   useEffect(() => {
-    const platform = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "ios" : "android";
-    const controller = new AbortController();
-
-    void fetch(`https://api.vietqr.io/v2/${platform}-app-deeplinks`, {
-      signal: controller.signal
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Không tải được danh sách app ngân hàng");
-        return response.json() as Promise<{ apps?: BankApp[] }>;
-      })
-      .then((data) => {
-        const apps = data.apps?.filter(
-          (app) => app.appId && app.appName && /^[a-z0-9-]+$/i.test(app.appId)
-        );
-        if (apps?.length) setBankApps(apps);
-      })
-      .catch(() => {
-        // Giữ danh sách phổ biến dự phòng khi API VietQR tạm thời không khả dụng.
-      });
-
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
     if (!confirmed) return;
     if (!selected) return;
-    const ids = selected.invoices.map((invoice) => invoice.id);
+    const ids = selected.invoices
+      .filter((invoice) => invoice.status === "unpaid")
+      .map((invoice) => invoice.id);
     if (ids.length === 0) return;
+    let cancelled = false;
+    let timer: number | undefined;
 
     const poll = async () => {
       const entries = await Promise.all(
         ids.map(async (id) => {
           const response = await fetch(`/api/pay/invoices/${id}`, { cache: "no-store" });
-          if (!response.ok) return [id, "unpaid"] as const;
-          const data = (await response.json()) as { status: "paid" | "unpaid" };
+          if (!response.ok) return null;
+          const data = (await response.json()) as { status: InvoiceStatus };
           return [id, data.status] as const;
         })
       );
-      setStatuses((current) => ({ ...current, ...Object.fromEntries(entries) }));
+      const validEntries = entries.filter(
+        (entry): entry is readonly [string, InvoiceStatus] => entry !== null
+      );
+      if (validEntries.length > 0) {
+        setStatuses((current) => ({ ...current, ...Object.fromEntries(validEntries) }));
+      }
+      const shouldContinue =
+        validEntries.length < ids.length || validEntries.some(([, status]) => status === "unpaid");
+      if (!cancelled && shouldContinue) {
+        timer = window.setTimeout(poll, 4000);
+      }
     };
 
     void poll();
-    const timer = window.setInterval(poll, 4000);
-    return () => window.clearInterval(timer);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [confirmed, selected]);
 
   if (students.length === 0) {
@@ -190,13 +156,21 @@ export function PaymentFlow({ students }: { students: Student[] }) {
           <QrCode className="h-5 w-5 shrink-0 text-stone-400" />
           Chọn đúng tên học sinh rồi bấm <strong className="font-semibold text-neutralText">Tiếp theo</strong> để xem học phí và mã QR.
         </section>
+      ) : visibleInvoices.length === 0 ? (
+        <section className="rounded-2xl border border-amber-100 bg-white p-8 text-center shadow-soft">
+          <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-amber-50 text-amber-700">
+            <FileClock className="h-9 w-9" />
+          </span>
+          <h2 className="mt-4 text-xl font-bold">Chưa phát hành hóa đơn</h2>
+          <p className="mt-2 text-stone-600">Trung tâm chưa tạo học phí cho học sinh này.</p>
+        </section>
       ) : unpaidInvoices.length === 0 ? (
         <section className="rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-soft">
           <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-50 text-success">
             <CheckCircle2 className="h-9 w-9" />
           </span>
-          <h2 className="mt-4 text-xl font-bold">Đã đóng đầy đủ học phí</h2>
-          <p className="mt-2 text-stone-600">Hệ thống không còn hóa đơn chưa thanh toán cho học sinh này.</p>
+          <h2 className="mt-4 text-xl font-bold">Không còn khoản cần thanh toán</h2>
+          <p className="mt-2 text-stone-600">Các hóa đơn đã được thanh toán hoặc trung tâm đã xử lý.</p>
           <Link href="/" className="mt-6 inline-block">
             <Button type="button" variant="secondary">
               <Home className="h-4 w-4" />
@@ -247,43 +221,12 @@ export function PaymentFlow({ students }: { students: Student[] }) {
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-sm text-indigo-800">
                 <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p>
-                  Khi quét mã QR, số tiền và nội dung chuyển khoản sẽ <strong>tự động điền</strong>.
-                  Nút bên dưới sẽ mở app đã chọn; khả năng tự động điền khi mở app tùy từng ngân hàng.
+                  Phụ huynh chỉ cần quét mã QR rồi chuyển khoản, <strong>không cần sửa nội dung chuyển khoản</strong>.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 p-5">
-              <label className="grid gap-1.5 text-sm font-semibold text-stone-700">
-                Chọn app ngân hàng trên điện thoại
-                <select
-                  value={bankAppId}
-                  onChange={(event) => setBankAppId(event.target.value)}
-                  className="focus-ring h-12 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-base font-normal shadow-sm transition-colors hover:border-stone-400 focus:border-primary"
-                >
-                  <option value="">Chọn ngân hàng của bạn</option>
-                  {bankApps.map((app) => (
-                    <option key={app.appId} value={app.appId}>
-                      {app.appName.replace(/^[\u200e\u200f\u202a-\u202e]+/, "")}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <a
-                href={bankAppId ? addBankAppToDeepLink(invoice.deepLink, bankAppId) : undefined}
-                aria-disabled={!bankAppId}
-                onClick={(event) => {
-                  if (!bankAppId) event.preventDefault();
-                }}
-                className={`focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl px-4 text-base font-bold text-white shadow-sm ring-1 ring-inset ring-white/20 transition-all ${
-                  bankAppId
-                    ? "bg-gradient-to-b from-amber-400 to-accent hover:from-amber-500 hover:to-amber-600 hover:shadow-md active:scale-[0.98]"
-                    : "cursor-not-allowed bg-stone-300"
-                }`}
-              >
-                <ExternalLink className="h-5 w-5" />
-                Mở app ngân hàng
-              </a>
+            <div className="p-5">
               <div className="flex items-center justify-center gap-2 text-sm text-stone-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Đang chờ xác nhận thanh toán...

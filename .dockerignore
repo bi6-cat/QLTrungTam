@@ -5,3 +5,6 @@ node_modules
 *.log
 coverage
 db_data
+backups
+*.dump
+.deploy

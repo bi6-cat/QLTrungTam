@@ -1,7 +1,28 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { LedgerError, recordCashPayment } from "@/lib/ledger";
 import { prisma } from "@/lib/prisma";
+
+function ledgerErrorStatus(error: LedgerError) {
+  switch (error.code) {
+    case "INVALID_ACTOR":
+      return 401;
+    case "INVOICE_NOT_FOUND":
+      return 404;
+    case "INVOICE_ALREADY_PAID":
+    case "INVOICE_NOT_PAYABLE":
+    case "CONCURRENT_MODIFICATION":
+    case "INCONSISTENT_LEDGER":
+      return 409;
+    case "REASON_REQUIRED":
+    case "FORCE_REASON_REQUIRED":
+    case "AMOUNT_MISMATCH":
+      return 400;
+    default:
+      return 422;
+  }
+}
 
 export async function POST(
   _request: Request,
@@ -13,75 +34,64 @@ export async function POST(
   }
 
   const { invoiceId } = await params;
-  const paidAt = new Date();
 
-  const result = await prisma.$transaction(async (tx) => {
-    const invoice = await tx.monthlyInvoice.findUnique({
-      where: { id: invoiceId },
-      include: {
-        enrollment: {
-          include: {
-            student: true,
-            classRoom: true
+  try {
+    const result = await recordCashPayment({
+      invoiceId,
+      actor: {
+        userId: session.userId,
+        username: session.username
+      }
+    });
+
+    revalidatePath("/admin/classes");
+    revalidatePath("/admin/transactions");
+    revalidatePath("/pay/[short_code]", "page");
+    revalidatePath("/teacher/classes/[short_code]", "page");
+
+    return NextResponse.json({
+      ok: true,
+      alreadyPaid: false,
+      transactionId: result.transactionId
+    });
+  } catch (error) {
+    if (error instanceof LedgerError) {
+      if (error.code === "INVOICE_ALREADY_PAID") {
+        const existing = await prisma.monthlyInvoice.findUnique({
+          where: { id: invoiceId },
+          select: {
+            status: true,
+            transaction: {
+              select: {
+                id: true,
+                paymentMethod: true,
+                matchedInvoiceId: true,
+                reversedAt: true
+              }
+            }
           }
+        });
+
+        if (
+          existing?.status === "paid" &&
+          existing.transaction?.paymentMethod === "cash" &&
+          existing.transaction.matchedInvoiceId === invoiceId &&
+          !existing.transaction.reversedAt
+        ) {
+          return NextResponse.json({
+            ok: true,
+            alreadyPaid: true,
+            transactionId: existing.transaction.id
+          });
         }
       }
-    });
 
-    if (!invoice) {
-      return { ok: false as const, status: 404, error: "Không tìm thấy hóa đơn." };
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: ledgerErrorStatus(error) }
+      );
     }
 
-    if (invoice.status === "paid") {
-      return { ok: true as const, alreadyPaid: true };
-    }
-
-    const claimed = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "unpaid" },
-      data: {
-        status: "paid",
-        paidAt
-      }
-    });
-
-    if (claimed.count === 0) {
-      return { ok: true as const, alreadyPaid: true };
-    }
-
-    const transaction = await tx.transaction.create({
-      data: {
-        gatewayRef: `CASH-${invoice.id}-${paidAt.getTime()}`,
-        amount: invoice.amount,
-        rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
-        transferredAt: paidAt,
-        matchedInvoiceId: invoice.id,
-        rawPayload: {
-          method: "cash",
-          source: "admin_manual",
-          invoiceId: invoice.id,
-          admin: session.username
-        }
-      }
-    });
-
-    await tx.monthlyInvoice.update({
-      where: { id: invoice.id },
-      data: {
-        transactionId: transaction.id
-      }
-    });
-
-    return { ok: true as const, alreadyPaid: false };
-  });
-
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    throw error;
   }
-
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/transactions");
-  revalidatePath("/pay/[short_code]", "page");
-  revalidatePath("/teacher/classes/[short_code]", "page");
-
-  return NextResponse.json(result);
 }

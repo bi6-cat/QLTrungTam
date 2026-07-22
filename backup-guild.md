@@ -223,18 +223,21 @@ aws s3 cp s3://ten-bucket-cua-ban/qltrungtam-backups/db_data-20260704-120000.tar
 
 ```bash
 docker compose down
+docker compose create db
 ```
 
 Restore volume:
 
 ```bash
-BACKUP_FILE=db_data-20260704-120000.tar.gz docker compose --profile restore run --rm volume-restore
+CONFIRM_VOLUME_RESTORE=YES \
+  bash scripts/restore-volume-ec2.sh db_data-20260704-120000.tar.gz
 ```
 
 Chạy lại:
 
 ```bash
 docker compose up -d --build
+curl -f http://127.0.0.1:3001/api/health
 ```
 
 ## 8. Chuyển EC2 nhưng giữ domain

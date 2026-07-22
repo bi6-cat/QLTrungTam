@@ -1,17 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Banknote, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
 import { updateClassDetailsAction } from "@/lib/actions";
+import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 
 type InvoiceRow = {
   enrollmentId: string;
+  studentId: string;
   studentName: string;
   phone: string;
-  enrollmentStatus: "active" | "on_leave";
+  studentArchived: boolean;
+  monthlyStatus: "active" | "on_leave";
+  periodInitialized: boolean;
   invoice: null | {
     id: string;
     month: number;
@@ -20,7 +25,8 @@ type InvoiceRow = {
     pricePerSession: number;
     amount: number;
     memoContent: string;
-    status: "paid" | "unpaid";
+    status: "paid" | "unpaid" | "void" | "waived";
+    statusReason: string | null;
   };
   defaultSessions: number;
   pricePerSession: number;
@@ -28,46 +34,70 @@ type InvoiceRow = {
 };
 
 const PAGE_SIZE = 10;
+const INVOICE_STATUS = {
+  unpaid: { label: "Chưa đóng", tone: "warning" },
+  paid: { label: "Đã đóng", tone: "success" },
+  void: { label: "Đã hủy", tone: "neutral" },
+  waived: { label: "Đã miễn", tone: "primary" }
+} as const;
 
 export function ClassInvoiceEditor({
   classId,
   month,
   year,
-  rows
+  rows,
+  billingLocked = false
 }: {
   classId: string;
   month: number;
   year: number;
   rows: InvoiceRow[];
+  billingLocked?: boolean;
 }) {
   const router = useRouter();
   const hasAnyInvoice = rows.some((row) => row.invoice);
-  const missingInvoiceCount = rows.filter((row) => !row.invoice && row.enrollmentStatus === "active").length;
+  const missingInvoiceCount = rows.filter(
+    (row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active"
+  ).length;
   const hasMissingInvoice = missingInvoiceCount > 0;
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
   const [cashSubmittingId, setCashSubmittingId] = useState<string | null>(null);
   const [cashError, setCashError] = useState("");
+  useEffect(() => {
+    if (!billingLocked) return;
+    setEditing(false);
+    setSessionDrafts({});
+  }, [billingLocked]);
   const summary = useMemo(
     () =>
       rows.reduce(
         (acc, row) => {
-          if (row.enrollmentStatus !== "active") return acc;
-        const draftKey = row.invoice?.id ?? row.enrollmentId;
-        const sessions = sessionDrafts[draftKey] ?? row.invoice?.sessions ?? row.defaultSessions;
-          const amount = sessions * row.pricePerSession;
-          acc.expected += amount;
-          if (row.invoice?.status === "paid") {
-            acc.paid += amount;
+          const invoice = row.invoice;
+          if (invoice?.status === "void" || invoice?.status === "waived") return acc;
+
+          const draftKey = invoice?.id ?? row.enrollmentId;
+          const planningLocked = billingLocked || row.studentArchived || Boolean(invoice && invoice.status !== "unpaid");
+          const sessions = planningLocked
+            ? invoice?.sessions ?? row.defaultSessions
+            : sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
+          if (invoice) {
+            const amount = planningLocked || sessionDrafts[draftKey] === undefined
+              ? invoice.amount
+              : sessions * invoice.pricePerSession;
+            if (invoice.status === "paid") acc.paid += invoice.amount;
+            if (invoice.status === "unpaid") acc.unpaid += amount;
+          } else if (!billingLocked && !row.studentArchived && row.monthlyStatus === "active") {
+            acc.planned += sessions * row.pricePerSession;
           }
           return acc;
         },
-        { expected: 0, paid: 0 }
+        { paid: 0, unpaid: 0, planned: 0 }
       ),
-    [rows, sessionDrafts]
+    [billingLocked, rows, sessionDrafts]
   );
-  const remainingAmount = Math.max(0, summary.expected - summary.paid);
+  const issuedAmount = summary.paid + summary.unpaid;
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const visibleRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -82,6 +112,7 @@ export function ClassInvoiceEditor({
       : "Tạo hóa đơn tháng này";
 
   async function markCashPaid(invoiceId: string) {
+    if (editing) return;
     setCashError("");
     setCashSubmittingId(invoiceId);
     try {
@@ -108,15 +139,24 @@ export function ClassInvoiceEditor({
           <h3 className="font-bold">Chi tiết {formatMonth(month, year)}</h3>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-500">
             <span>
-              Cần nộp: <strong className="text-lg text-primary">{formatCurrency(summary.expected)}</strong>
+              Đã phát hành: <strong className="text-lg text-primary">{formatCurrency(issuedAmount)}</strong>
             </span>
             <span>
               Đã nộp: <strong className="text-lg text-success">{formatCurrency(summary.paid)}</strong>
             </span>
             <span>
-              Còn lại: <strong className="text-lg text-warning">{formatCurrency(remainingAmount)}</strong>
+              Công nợ: <strong className="text-lg text-warning">{formatCurrency(summary.unpaid)}</strong>
             </span>
-            {hasMissingInvoice ? (
+            {summary.planned > 0 ? (
+              <span>
+                Kế hoạch chưa phát hành: <strong className="text-stone-700">{formatCurrency(summary.planned)}</strong>
+              </span>
+            ) : null}
+            {billingLocked ? (
+              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600 ring-1 ring-inset ring-stone-500/15">
+                Lớp đã lưu trữ · không phát hành mới
+              </span>
+            ) : hasMissingInvoice ? (
               <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Cần tạo {missingInvoiceCount} hóa đơn
               </span>
@@ -142,12 +182,12 @@ export function ClassInvoiceEditor({
               Hủy
             </Button>
             </>
-          ) : (
+          ) : !billingLocked ? (
             <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
               {hasMissingInvoice ? "Sửa trước khi tạo" : hasAnyInvoice ? "Sửa" : "Sửa dự thảo"}
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -164,17 +204,21 @@ export function ClassInvoiceEditor({
           .filter((row) => !visibleIds.has(row.enrollmentId))
           .map((row) => {
             const draftKey = row.invoice?.id ?? row.enrollmentId;
-            const sessions = sessionDrafts[draftKey] ?? row.invoice?.sessions ?? row.defaultSessions;
+            const planningLocked =
+              billingLocked || row.studentArchived || Boolean(row.invoice && row.invoice.status !== "unpaid");
+            const sessions = planningLocked
+              ? row.invoice?.sessions ?? row.defaultSessions
+              : sessionDrafts[draftKey] ?? row.invoice?.sessions ?? row.defaultSessions;
             return (
               <div key={row.enrollmentId} className="hidden">
                 <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
-                <input type="hidden" name={`status:${row.enrollmentId}`} value={row.enrollmentStatus} />
+                <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
                 <input type="hidden" name={`sessions:${row.enrollmentId}`} value={sessions} />
               </div>
             );
           })}
-        <div className="overflow-x-auto lg:overflow-visible">
-          <table className="w-full min-w-[780px] table-fixed text-left text-sm lg:min-w-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[780px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[13%]" />
@@ -182,8 +226,8 @@ export function ClassInvoiceEditor({
               <col className="w-[8%]" />
               <col className="w-[10%]" />
               <col className="w-[12%]" />
-              <col className="w-[20%]" />
-              <col className="w-[11%]" />
+              <col className="w-[13%]" />
+              <col className="w-[18%]" />
             </colgroup>
             <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
@@ -201,46 +245,77 @@ export function ClassInvoiceEditor({
               {visibleRows.map((row) => {
                 const invoice = row.invoice;
                 const isPaid = invoice?.status === "paid";
+                const isLocked = Boolean(invoice && invoice.status !== "unpaid");
+                const planningLocked = billingLocked || row.studentArchived || isLocked;
                 const draftKey = invoice?.id ?? row.enrollmentId;
-                const sessions = sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
-                const displayAmount = sessions * row.pricePerSession;
+                const sessions = planningLocked
+                  ? invoice?.sessions ?? row.defaultSessions
+                  : sessionDrafts[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
+                const displayUnitPrice = invoice?.pricePerSession ?? row.pricePerSession;
+                const displayAmount = invoice && (planningLocked || sessionDrafts[draftKey] === undefined)
+                  ? invoice.amount
+                  : sessions * displayUnitPrice;
                 return (
                   <tr
                     key={row.enrollmentId}
-                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
+                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing && !row.studentArchived ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
                   >
                     <td className="whitespace-nowrap px-2 py-3">
                       <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
-                      <div className="font-semibold">{row.studentName}</div>
+                      <Link
+                        href={`/admin/students/${row.studentId}`}
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        {row.studentName}
+                      </Link>
                       <div className="text-xs text-stone-500">{row.phone}</div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
-                      {editing && !isPaid ? (
-                        <Select name={`status:${row.enrollmentId}`} defaultValue={row.enrollmentStatus} className="w-full min-w-0">
-                          <option value="active">Đang học</option>
-                          <option value="on_leave">Bảo lưu</option>
-                        </Select>
-                      ) : (
-                        <span className="inline-flex items-center gap-1">
-                          <input type="hidden" name={`status:${row.enrollmentId}`} value={row.enrollmentStatus} />
-                          {isPaid ? <Lock className="h-3.5 w-3.5 text-success" /> : null}
-                          <span className={row.enrollmentStatus === "active" ? "font-semibold text-primary" : "font-semibold text-amber-700"}>
-                            {row.enrollmentStatus === "active" ? "Đang học" : "Bảo lưu"}
+                      <div className="grid gap-1">
+                        {editing && !planningLocked ? (
+                          <Select name={`status:${row.enrollmentId}`} defaultValue={row.monthlyStatus} className="w-full min-w-0">
+                            <option value="active">Đang học</option>
+                            <option value="on_leave">Bảo lưu</option>
+                          </Select>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
+                            {planningLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
+                            <span className={row.monthlyStatus === "active" ? "font-semibold text-primary" : "font-semibold text-amber-700"}>
+                              {row.monthlyStatus === "active" ? "Đang học" : "Bảo lưu"}
+                            </span>
                           </span>
-                        </span>
-                      )}
+                        )}
+                        {!row.periodInitialized ? (
+                          <span className="whitespace-normal text-[11px] font-medium text-amber-700">
+                            Chưa khởi tạo tháng
+                          </span>
+                        ) : null}
+                        {row.studentArchived ? (
+                          <span className="whitespace-normal text-[11px] font-medium text-stone-500">
+                            Học sinh đã lưu trữ · kế hoạch được khóa
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       {invoice ? (
-                        <Badge tone={invoice.status === "paid" ? "success" : "warning"}>
-                          {invoice.status === "paid" ? "Đã đóng" : "Chưa đóng"}
-                        </Badge>
+                        <div>
+                          <Badge tone={INVOICE_STATUS[invoice.status].tone}>
+                            {INVOICE_STATUS[invoice.status].label}
+                          </Badge>
+                          {invoice.statusReason ? (
+                            <p className="mt-1 max-w-40 whitespace-normal text-xs text-stone-500" title={invoice.statusReason}>
+                              {invoice.statusReason}
+                            </p>
+                          ) : null}
+                        </div>
                       ) : (
                         <Badge>Chưa tạo</Badge>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
-                      {editing && !isPaid ? (
+                      {editing && !planningLocked ? (
                         <Input
                           name={`sessions:${row.enrollmentId}`}
                           type="number"
@@ -257,16 +332,16 @@ export function ClassInvoiceEditor({
                       ) : (
                         <span className="inline-flex items-center gap-1 font-semibold">
                           <input type="hidden" name={`sessions:${row.enrollmentId}`} value={sessions} />
-                          {isPaid ? <Lock className="h-3.5 w-3.5 text-success" /> : null}
+                          {planningLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
                           {sessions}
                         </span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3 text-stone-600">
-                      {formatCurrency(row.pricePerSession)}
+                      {formatCurrency(displayUnitPrice)}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
-                      <strong className={invoice?.status === "paid" ? "text-success" : "text-warning"}>
+                      <strong className={invoice?.status === "paid" ? "text-success" : invoice?.status === "unpaid" ? "text-warning" : "text-stone-500"}>
                         {formatCurrency(displayAmount)}
                       </strong>
                     </td>
@@ -280,22 +355,31 @@ export function ClassInvoiceEditor({
                     </td>
                     <td className="whitespace-nowrap px-2 py-3 text-right">
                       {invoice?.status === "unpaid" ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="ml-auto h-8 w-full px-1 text-xs"
-                          disabled={cashSubmittingId === invoice.id}
-                          onClick={() => markCashPaid(invoice.id)}
-                          title="Ghi nhận học sinh đã nộp tiền mặt"
-                        >
-                          <Banknote className="h-3.5 w-3.5" />
-                          {cashSubmittingId === invoice.id ? "Đang ghi..." : "Tiền mặt"}
-                        </Button>
+                        <div className="flex flex-nowrap items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-8 shrink-0 whitespace-nowrap px-2 text-xs"
+                            disabled={editing || cashSubmittingId === invoice.id}
+                            onClick={() => markCashPaid(invoice.id)}
+                            title={
+                              editing
+                                ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền mặt"
+                                : "Ghi nhận học sinh đã nộp tiền mặt"
+                            }
+                          >
+                            <Banknote className="h-3.5 w-3.5" />
+                            {cashSubmittingId === invoice.id ? "Đang ghi..." : "Tiền mặt"}
+                          </Button>
+                          <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" disabled={editing} />
+                        </div>
                       ) : invoice?.status === "paid" ? (
                         <span className="inline-flex items-center justify-end gap-1 text-xs font-semibold text-success">
                           <Lock className="h-3.5 w-3.5" />
                           Đã khóa
                         </span>
+                      ) : invoice ? (
+                        <InvoiceLifecycleActions invoiceId={invoice.id} status={invoice.status} disabled={editing} />
                       ) : (
                         <span className="text-xs text-stone-400">-</span>
                       )}
@@ -339,14 +423,14 @@ export function ClassInvoiceEditor({
           </div>
         ) : null}
 
-        {editing || hasMissingInvoice ? (
+        {!billingLocked && (editing || hasMissingInvoice) ? (
           <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50/95 px-5 py-4 shadow-[0_-8px_20px_rgba(0,0,0,0.04)] backdrop-blur">
             <p className="text-sm text-stone-600">
               {editing
-                ? "Lưu thay đổi số buổi và trạng thái học. Thao tác này không tạo hóa đơn mới."
+                ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền hay đổi trạng thái hóa đơn."
                 : hasMissingInvoice
                 ? "Tạo hóa đơn cho các học sinh đang học chưa có hóa đơn trong tháng này. Có thể sửa số buổi trước khi tạo."
-                : "Chỉ sửa số buổi và trạng thái học cho hóa đơn chưa đóng. Hóa đơn đã đóng được khóa để giữ đúng đối soát."}
+                : "Chỉ sửa số buổi và trạng thái học cho hóa đơn chưa đóng. Hóa đơn đã đóng, hủy hoặc miễn được khóa để giữ đúng lịch sử."}
             </p>
             <Button type="submit" name="intent" value={editing ? "save" : "create"}>
               {editing ? <Check className="h-4 w-4" /> : hasMissingInvoice || !hasAnyInvoice ? <FilePlus2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}

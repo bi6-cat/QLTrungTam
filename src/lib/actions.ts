@@ -5,6 +5,14 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout, requireAdmin } from "@/lib/auth";
+import {
+  assignTransactionToInvoice,
+  LedgerError,
+  recordCashPayment,
+  resolveUnmatchedTransaction,
+  reverseTransaction,
+  unassignTransaction
+} from "@/lib/ledger";
 import { buildMemo } from "@/lib/payment";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +39,9 @@ import {
   markCashSchema,
   parseForm,
   resolveTransactionSchema,
+  reverseTransactionSchema,
   safeParseForm,
+  unassignTransactionSchema,
   updateClassDetailsSchema,
   updateClassSchema,
   updateEnrollmentStatusSchema,
@@ -44,6 +54,124 @@ function clampSessions(value: FormDataEntryValue | null) {
   const parsed = Math.floor(Number(String(value ?? "").replace(/[^\d.-]/g, "")));
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return Math.min(60, parsed);
+}
+
+const MAX_SERIALIZABLE_ACTION_ATTEMPTS = 3;
+
+async function runSerializableAction<T>(
+  work: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ACTION_ATTEMPTS; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      });
+    } catch (error) {
+      const isWriteConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+      if (isWriteConflict && attempt < MAX_SERIALIZABLE_ACTION_ATTEMPTS) continue;
+      if (isWriteConflict) {
+        throw new Error("Dữ liệu vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại.");
+      }
+      throw error;
+    }
+  }
+
+  throw new Error("Không thể hoàn tất thao tác do xung đột dữ liệu.");
+}
+
+type ArchiveEntity = "class" | "student";
+type ArchiveMode = "archive" | "restore";
+
+function parseArchiveInput(formData: FormData) {
+  const { id } = parseForm(idSchema, formData);
+  const rawReason = formData.get("reason");
+  const reason = typeof rawReason === "string" ? rawReason.trim() : "";
+  if (!reason || reason.length > 500) {
+    throw new Error("Lý do phải có từ 1 đến 500 ký tự.");
+  }
+  return { id, reason };
+}
+
+async function changeArchiveState(input: {
+  entity: ArchiveEntity;
+  mode: ArchiveMode;
+  id: string;
+  reason: string;
+  actor: { userId: string; username: string };
+}) {
+  return runSerializableAction(async (tx) => {
+    const current =
+      input.entity === "class"
+        ? await tx.classRoom.findUnique({
+            where: { id: input.id },
+            select: { id: true, archivedAt: true }
+          })
+        : await tx.student.findUnique({
+            where: { id: input.id },
+            select: { id: true, archivedAt: true }
+          });
+
+    const entityLabel = input.entity === "class" ? "lớp học" : "học sinh";
+    if (!current) throw new Error(`Không tìm thấy ${entityLabel}.`);
+    if (input.mode === "archive" && current.archivedAt) {
+      throw new Error(`${input.entity === "class" ? "Lớp học" : "Học sinh"} đã được lưu trữ.`);
+    }
+    if (input.mode === "restore" && !current.archivedAt) {
+      throw new Error(`${input.entity === "class" ? "Lớp học" : "Học sinh"} đang hoạt động.`);
+    }
+
+    const nextArchivedAt = input.mode === "archive" ? new Date() : null;
+    const changed =
+      input.entity === "class"
+        ? await tx.classRoom.updateMany({
+            where: { id: current.id, archivedAt: current.archivedAt },
+            data: { archivedAt: nextArchivedAt }
+          })
+        : await tx.student.updateMany({
+            where: { id: current.id, archivedAt: current.archivedAt },
+            data: { archivedAt: nextArchivedAt }
+          });
+
+    if (changed.count !== 1) {
+      throw new Error(`${input.entity === "class" ? "Lớp học" : "Học sinh"} vừa được thay đổi. Vui lòng tải lại.`);
+    }
+
+    const entityType = input.entity === "class" ? "ClassRoom" : "Student";
+    await tx.auditLog.create({
+      data: {
+        actorUserId: input.actor.userId,
+        actorUsername: input.actor.username.trim(),
+        action: `${input.entity}.${input.mode === "archive" ? "archived" : "restored"}`,
+        entityType,
+        entityId: current.id,
+        reason: input.reason,
+        metadata: {
+          previousArchivedAt: current.archivedAt?.toISOString() ?? null,
+          archivedAt: nextArchivedAt?.toISOString() ?? null
+        }
+      }
+    });
+
+    return { archivedAt: nextArchivedAt };
+  });
+}
+
+function revalidateClassArchivePaths() {
+  revalidatePath("/admin");
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/transactions");
+  revalidatePath("/pay/[short_code]", "page");
+  revalidatePath("/teacher/classes/[short_code]", "page");
+}
+
+function revalidateStudentArchivePaths() {
+  revalidatePath("/admin");
+  revalidatePath("/admin/students");
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/transactions");
+  revalidatePath("/pay/[short_code]", "page");
+  revalidatePath("/teacher/classes/[short_code]", "page");
 }
 
 export async function loginAction(_prevState: { error: string }, formData: FormData) {
@@ -130,12 +258,28 @@ export async function createClassAction(formData: FormData) {
   revalidatePath("/admin/classes");
 }
 
-export async function deleteClassAction(formData: FormData) {
-  await requireAdmin();
-  const { id } = parseForm(idSchema, formData);
-  await prisma.classRoom.delete({ where: { id } });
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin");
+export async function archiveClassAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "class", mode: "archive", id, reason, actor });
+    revalidateClassArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể lưu trữ lớp học." };
+  }
+}
+
+export async function restoreClassAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "class", mode: "restore", id, reason, actor });
+    revalidateClassArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể khôi phục lớp học." };
+  }
 }
 
 export type EditState = { error: string; ok: boolean };
@@ -150,8 +294,8 @@ export async function updateClassAction(
     return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
   }
   try {
-    await prisma.classRoom.update({
-      where: { id: data.id },
+    const updated = await prisma.classRoom.updateMany({
+      where: { id: data.id, archivedAt: null },
       data: {
         name: data.name,
         teacherName: data.teacherName,
@@ -159,6 +303,9 @@ export async function updateClassAction(
         sessionsPerMonthDefault: data.sessionsPerMonthDefault
       }
     });
+    if (updated.count !== 1) {
+      return { error: "Lớp đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục lớp trước khi sửa.", ok: false };
+    }
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { error: "Mã lớp đã tồn tại, hãy chọn mã khác.", ok: false };
@@ -185,11 +332,28 @@ export async function createStudentAction(formData: FormData) {
   revalidatePath("/admin/students");
 }
 
-export async function deleteStudentAction(formData: FormData) {
-  await requireAdmin();
-  const { id } = parseForm(idSchema, formData);
-  await prisma.student.delete({ where: { id } });
-  revalidatePath("/admin/students");
+export async function archiveStudentAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "student", mode: "archive", id, reason, actor });
+    revalidateStudentArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể lưu trữ học sinh." };
+  }
+}
+
+export async function restoreStudentAction(formData: FormData) {
+  const actor = await requireAdmin();
+  try {
+    const { id, reason } = parseArchiveInput(formData);
+    await changeArchiveState({ entity: "student", mode: "restore", id, reason, actor });
+    revalidateStudentArchivePaths();
+    return { ok: true, error: "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Không thể khôi phục học sinh." };
+  }
 }
 
 export async function updateStudentAction(
@@ -201,8 +365,8 @@ export async function updateStudentAction(
   if (error || !data) {
     return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
   }
-  await prisma.student.update({
-    where: { id: data.id },
+  const updated = await prisma.student.updateMany({
+    where: { id: data.id, archivedAt: null },
     data: {
       fullName: data.fullName,
       phone: data.phone,
@@ -211,6 +375,9 @@ export async function updateStudentAction(
       note: data.note
     }
   });
+  if (updated.count !== 1) {
+    return { error: "Học sinh đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục hồ sơ trước khi sửa.", ok: false };
+  }
   revalidatePath("/admin/students");
   revalidatePath("/admin/classes");
   return { error: "", ok: true };
@@ -219,17 +386,35 @@ export async function updateStudentAction(
 export async function createEnrollmentAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(enrollmentSchema, formData);
-  await prisma.enrollment.upsert({
-    where: {
-      studentId_classId: { studentId: data.studentId, classId: data.classId }
-    },
-    update: { sessionsOverride: data.sessionsOverride, status: data.status },
-    create: {
-      studentId: data.studentId,
-      classId: data.classId,
-      sessionsOverride: data.sessionsOverride,
-      status: data.status
-    }
+  await runSerializableAction(async (tx) => {
+    const [student, classRoom] = await Promise.all([
+      tx.student.findUnique({
+        where: { id: data.studentId },
+        select: { id: true, archivedAt: true }
+      }),
+      tx.classRoom.findUnique({
+        where: { id: data.classId },
+        select: { id: true, archivedAt: true }
+      })
+    ]);
+
+    if (!student) throw new Error("Không tìm thấy học sinh.");
+    if (!classRoom) throw new Error("Không tìm thấy lớp học.");
+    if (student.archivedAt) throw new Error("Không thể ghi danh học sinh đã lưu trữ.");
+    if (classRoom.archivedAt) throw new Error("Không thể ghi danh vào lớp đã lưu trữ.");
+
+    await tx.enrollment.upsert({
+      where: {
+        studentId_classId: { studentId: data.studentId, classId: data.classId }
+      },
+      update: { sessionsOverride: data.sessionsOverride, status: data.status },
+      create: {
+        studentId: data.studentId,
+        classId: data.classId,
+        sessionsOverride: data.sessionsOverride,
+        status: data.status
+      }
+    });
   });
   revalidatePath("/admin/classes");
   revalidatePath("/admin/students");
@@ -250,29 +435,79 @@ export async function generateInvoicesAction(formData: FormData) {
   const data = parseForm(generateInvoicesSchema, formData);
   const month = data.month || new Date().getMonth() + 1;
   const year = data.year || new Date().getFullYear();
+  const periodEnd = new Date(year, month, 1);
 
-  const enrollments = await prisma.enrollment.findMany({
-    where: { classId: data.classId, status: "active" },
-    include: { student: true, classRoom: true }
-  });
+  await runSerializableAction(async (tx) => {
+    const classState = await tx.classRoom.findUnique({
+      where: { id: data.classId },
+      select: { archivedAt: true }
+    });
+    if (!classState) throw new Error("Không tìm thấy lớp học.");
+    if (classState.archivedAt) throw new Error("Không thể tạo hóa đơn cho lớp đã lưu trữ.");
 
-  for (const enrollment of enrollments) {
-    const sessions = enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault;
-    const memoContent = buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year);
-    await prisma.monthlyInvoice.upsert({
-      where: { enrollmentId_month_year: { enrollmentId: enrollment.id, month, year } },
-      update: { memoContent },
-      create: {
-        enrollmentId: enrollment.id,
-        month,
-        year,
-        sessions,
-        pricePerSession: enrollment.classRoom.pricePerSession,
-        amount: sessions * enrollment.classRoom.pricePerSession,
-        memoContent
+    const enrollments = await tx.enrollment.findMany({
+      where: {
+        classId: data.classId,
+        student: { archivedAt: null },
+        OR: [
+          { createdAt: { lt: periodEnd } },
+          { months: { some: { month, year } } },
+          { invoices: { some: { month, year } } }
+        ]
+      },
+      include: {
+        student: true,
+        classRoom: true,
+        months: { where: { month, year }, take: 1 },
+        invoices: { where: { month, year }, take: 1 }
       }
     });
-  }
+
+    for (const enrollment of enrollments) {
+      const existingMonth = enrollment.months[0];
+      const monthlyStatus = existingMonth?.status ?? enrollment.status;
+      const sessions =
+        monthlyStatus === "active"
+          ? existingMonth?.sessions ?? enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault
+          : 0;
+      const pricePerSession = existingMonth?.pricePerSession ?? enrollment.classRoom.pricePerSession;
+
+      if (!existingMonth) {
+        await tx.enrollmentMonth.create({
+          data: {
+            enrollmentId: enrollment.id,
+            month,
+            year,
+            status: monthlyStatus,
+            sessions,
+            pricePerSession
+          }
+        });
+      }
+
+      if (monthlyStatus !== "active" || enrollment.invoices[0]) continue;
+      if (sessions <= 0) {
+        throw new Error(`Số buổi của ${enrollment.student.fullName} phải lớn hơn 0 trước khi tạo hóa đơn.`);
+      }
+
+      await tx.monthlyInvoice.create({
+        data: {
+          enrollmentId: enrollment.id,
+          month,
+          year,
+          sessions,
+          pricePerSession,
+          amount: sessions * pricePerSession,
+          memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year),
+          studentNameSnapshot: enrollment.student.fullName,
+          studentPhoneSnapshot: enrollment.student.phone,
+          classNameSnapshot: enrollment.classRoom.name,
+          classShortCodeSnapshot: enrollment.classRoom.shortCode,
+          teacherNameSnapshot: enrollment.classRoom.teacherName
+        }
+      });
+    }
+  });
 
   revalidatePath("/admin/classes");
   revalidatePath("/admin/invoices");
@@ -282,14 +517,62 @@ export async function generateInvoicesAction(formData: FormData) {
 export async function updateInvoiceAction(formData: FormData) {
   await requireAdmin();
   const data = parseForm(updateInvoiceSchema, formData);
-  await prisma.monthlyInvoice.update({
-    where: { id: data.invoiceId },
-    data: {
-      sessions: data.sessions,
-      pricePerSession: data.pricePerSession,
-      amount: data.amount ?? data.sessions * data.pricePerSession
-    }
+  if (data.sessions <= 0) {
+    throw new Error("Số buổi phải lớn hơn 0 đối với hóa đơn đang thu.");
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const invoice = await tx.monthlyInvoice.findUnique({
+      where: { id: data.invoiceId },
+      select: {
+        id: true,
+        enrollmentId: true,
+        month: true,
+        year: true,
+        status: true,
+        transactionId: true,
+        updatedAt: true
+      }
+    });
+    if (!invoice || invoice.status !== "unpaid" || invoice.transactionId) return 0;
+
+    const result = await tx.monthlyInvoice.updateMany({
+      where: {
+        id: invoice.id,
+        status: "unpaid",
+        transactionId: null,
+        updatedAt: invoice.updatedAt
+      },
+      data: {
+        sessions: data.sessions,
+        pricePerSession: data.pricePerSession,
+        amount: data.sessions * data.pricePerSession
+      }
+    });
+    if (result.count !== 1) return 0;
+
+    await tx.enrollmentMonth.upsert({
+      where: {
+        enrollmentId_month_year: {
+          enrollmentId: invoice.enrollmentId,
+          month: invoice.month,
+          year: invoice.year
+        }
+      },
+      update: { status: "active", sessions: data.sessions, pricePerSession: data.pricePerSession },
+      create: {
+        enrollmentId: invoice.enrollmentId,
+        month: invoice.month,
+        year: invoice.year,
+        status: "active",
+        sessions: data.sessions,
+        pricePerSession: data.pricePerSession
+      }
+    });
+    return result.count;
   });
+  if (updated !== 1) {
+    throw new Error("Hóa đơn đã được thanh toán hoặc vừa thay đổi; không thể sửa số tiền.");
+  }
   revalidatePath("/admin/classes");
   revalidatePath("/admin/invoices");
 }
@@ -299,48 +582,104 @@ export async function updateClassDetailsAction(formData: FormData) {
   const parsed = parseForm(updateClassDetailsSchema, formData);
   const month = parsed.month || new Date().getMonth() + 1;
   const year = parsed.year || new Date().getFullYear();
+  const periodEnd = new Date(year, month, 1);
   const enrollmentIds = Array.from(
     new Set(formData.getAll("enrollmentId").map((value) => String(value)).filter(Boolean))
   );
 
-  await prisma.$transaction(async (tx) => {
-    for (const enrollmentId of enrollmentIds) {
-      const existingInvoice = await tx.monthlyInvoice.findUnique({
-        where: { enrollmentId_month_year: { enrollmentId, month, year } }
-      });
+  await runSerializableAction(async (tx) => {
+    const classState = await tx.classRoom.findUnique({
+      where: { id: parsed.classId },
+      select: { archivedAt: true }
+    });
+    if (!classState) throw new Error("Không tìm thấy lớp học.");
+    if (classState.archivedAt) {
+      throw new Error("Không thể tạo hoặc sửa kế hoạch tháng của lớp đã lưu trữ.");
+    }
 
-      if (existingInvoice?.status === "paid") {
+    for (const enrollmentId of enrollmentIds) {
+      const enrollment = await tx.enrollment.findUnique({
+        where: { id: enrollmentId },
+        include: {
+          classRoom: true,
+          student: true,
+          months: { where: { month, year }, take: 1 },
+          invoices: { where: { month, year }, take: 1 }
+        }
+      });
+      if (
+        !enrollment ||
+        enrollment.classId !== parsed.classId ||
+        enrollment.student.archivedAt
+      ) {
+        continue;
+      }
+
+      const existingInvoice = enrollment.invoices[0];
+      const existingMonth = enrollment.months[0];
+      if (enrollment.createdAt >= periodEnd && !existingMonth && !existingInvoice) {
+        throw new Error(`${enrollment.student.fullName} chưa tham gia lớp trong tháng ${month}/${year}.`);
+      }
+      if (existingInvoice && existingInvoice.status !== "unpaid") {
         continue;
       }
 
       const status =
         String(formData.get(`status:${enrollmentId}`)) === "on_leave" ? "on_leave" : "active";
-      const sessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
-      const enrollment = await tx.enrollment.update({
-        where: { id: enrollmentId },
-        data: { status, sessionsOverride: sessions > 0 ? sessions : null },
-        include: { classRoom: true, student: true }
+      const requestedSessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
+      const sessions = status === "active" ? requestedSessions : 0;
+      const periodPricePerSession =
+        existingMonth?.pricePerSession ??
+        existingInvoice?.pricePerSession ??
+        enrollment.classRoom.pricePerSession;
+      if (status === "active" && sessions <= 0) {
+        throw new Error(`Số buổi của ${enrollment.student.fullName} phải lớn hơn 0.`);
+      }
+
+      await tx.enrollmentMonth.upsert({
+        where: { enrollmentId_month_year: { enrollmentId, month, year } },
+        update: { status, sessions },
+        create: {
+          enrollmentId,
+          month,
+          year,
+          status,
+          sessions,
+          pricePerSession: periodPricePerSession
+        }
       });
 
-      if (existingInvoice) {
-        await tx.monthlyInvoice.update({
-          where: { id: existingInvoice.id },
+      if (existingInvoice?.status === "unpaid" && status === "active") {
+        const updatedInvoice = await tx.monthlyInvoice.updateMany({
+          where: {
+            id: existingInvoice.id,
+            status: "unpaid",
+            transactionId: null,
+            updatedAt: existingInvoice.updatedAt
+          },
           data: {
             sessions,
-            amount: sessions * existingInvoice.pricePerSession,
-            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year)
+            amount: sessions * existingInvoice.pricePerSession
           }
         });
-      } else if (parsed.intent === "create" && status === "active") {
+        if (updatedInvoice.count !== 1) {
+          throw new Error(`Hóa đơn của ${enrollment.student.fullName} vừa được thanh toán hoặc thay đổi. Vui lòng tải lại.`);
+        }
+      } else if (!existingInvoice && parsed.intent === "create" && status === "active") {
         await tx.monthlyInvoice.create({
           data: {
             enrollmentId,
             month,
             year,
             sessions,
-            pricePerSession: enrollment.classRoom.pricePerSession,
-            amount: sessions * enrollment.classRoom.pricePerSession,
-            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year)
+            pricePerSession: periodPricePerSession,
+            amount: sessions * periodPricePerSession,
+            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year),
+            studentNameSnapshot: enrollment.student.fullName,
+            studentPhoneSnapshot: enrollment.student.phone,
+            classNameSnapshot: enrollment.classRoom.name,
+            classShortCodeSnapshot: enrollment.classRoom.shortCode,
+            teacherNameSnapshot: enrollment.classRoom.teacherName
           }
         });
       }
@@ -361,77 +700,124 @@ export async function updateSettingsAction(formData: FormData) {
 }
 
 export async function markInvoiceCashPaidAction(formData: FormData) {
-  await requireAdmin();
+  const session = await requireAdmin();
   const { invoiceId, returnTo } = parseForm(markCashSchema, formData);
-  const invoice = await prisma.monthlyInvoice.findUnique({
-    where: { id: invoiceId },
-    include: { enrollment: { include: { student: true, classRoom: true } } }
-  });
-
-  if (!invoice || invoice.status === "paid") {
-    revalidatePath("/admin/classes");
-    revalidatePath("/admin/transactions");
-    if (returnTo.startsWith("/admin/classes")) {
-      redirect(returnTo);
+  try {
+    await recordCashPayment({ invoiceId, actor: session });
+  } catch (error) {
+    // Giữ tính idempotent cho form cũ: bấm lặp hóa đơn đã đóng không tạo thêm giao dịch.
+    if (!(error instanceof LedgerError && error.code === "INVOICE_ALREADY_PAID")) {
+      throw error;
     }
-    return;
   }
 
-  const paidAt = new Date();
-  await prisma.$transaction(async (tx) => {
-    const claimed = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "unpaid" },
-      data: { status: "paid", paidAt }
-    });
-    if (claimed.count === 0) return;
-
-    const transaction = await tx.transaction.create({
-      data: {
-        gatewayRef: `CASH-${invoice.id}-${paidAt.getTime()}`,
-        amount: invoice.amount,
-        rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
-        transferredAt: paidAt,
-        matchedInvoiceId: invoice.id,
-        rawPayload: { method: "cash", source: "admin_manual", invoiceId: invoice.id }
-      }
-    });
-    await tx.monthlyInvoice.update({
-      where: { id: invoice.id },
-      data: { transactionId: transaction.id }
-    });
-  });
-
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/transactions");
-  revalidatePath("/pay/[short_code]", "page");
+  revalidateFinancialPaths();
   if (returnTo.startsWith("/admin/classes")) {
     redirect(returnTo);
   }
 }
 
-export async function assignTransactionAction(formData: FormData) {
-  await requireAdmin();
-  const { transactionId, invoiceId } = parseForm(assignTransactionSchema, formData);
-  await prisma.$transaction([
-    prisma.transaction.update({
-      where: { id: transactionId },
-      data: { matchedInvoiceId: invoiceId }
-    }),
-    prisma.monthlyInvoice.update({
-      where: { id: invoiceId },
-      data: { status: "paid", paidAt: new Date(), transactionId }
-    })
-  ]);
-  revalidatePath("/admin/transactions");
+export type TransactionActionState = { error: string; success: string };
+
+function revalidateFinancialPaths() {
+  revalidatePath("/admin");
   revalidatePath("/admin/classes");
+  revalidatePath("/admin/invoices");
+  revalidatePath("/admin/transactions");
+  revalidatePath("/pay/[short_code]", "page");
+  revalidatePath("/teacher/classes/[short_code]", "page");
 }
 
-export async function resolveTransactionAction(formData: FormData) {
-  await requireAdmin();
-  const { transactionId } = parseForm(resolveTransactionSchema, formData);
-  await prisma.transaction.update({
-    where: { id: transactionId },
-    data: { resolvedAt: new Date() }
-  });
-  revalidatePath("/admin/transactions");
+function transactionActionFailure(error: unknown): TransactionActionState {
+  if (error instanceof LedgerError) {
+    return { error: error.message, success: "" };
+  }
+  console.error("Financial ledger action failed", error);
+  return { error: "Không thể cập nhật giao dịch. Vui lòng tải lại trang và thử lại.", success: "" };
+}
+
+export async function assignTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(assignTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await assignTransactionToInvoice({
+      transactionId: data.transactionId,
+      invoiceId: data.invoiceId,
+      actor: session,
+      force: data.allowAmountMismatch,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã gán giao dịch và ghi nhận thanh toán." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
+}
+
+export async function resolveTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(resolveTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await resolveUnmatchedTransaction({
+      transactionId: data.transactionId,
+      actor: session,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã đánh dấu giao dịch là đã xử lý." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
+}
+
+export async function unassignTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(unassignTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await unassignTransaction({
+      transactionId: data.transactionId,
+      actor: session,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã bỏ gán; hóa đơn trở lại trạng thái chưa đóng." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
+}
+
+export async function reverseTransactionAction(
+  _prevState: TransactionActionState,
+  formData: FormData
+): Promise<TransactionActionState> {
+  const session = await requireAdmin();
+  const { data, error } = safeParseForm(reverseTransactionSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    await reverseTransaction({
+      transactionId: data.transactionId,
+      actor: session,
+      reason: data.reason
+    });
+    revalidateFinancialPaths();
+    return { error: "", success: "Đã hoàn tác giao dịch và giữ lại lịch sử đối soát." };
+  } catch (ledgerError) {
+    return transactionActionFailure(ledgerError);
+  }
 }

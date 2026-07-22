@@ -62,12 +62,16 @@ Sao chép `.env.example` thành `.env` nếu cần đổi cấu hình.
 
 - Next.js App Router + Tailwind + Prisma/Postgres
 - Session cookie admin đơn giản
-- CRUD lớp học, học sinh, học sinh trong lớp
+- Quản lý lớp/học sinh bằng lưu trữ mềm, không xóa cascade lịch sử
 - Lớp học có trường tên giáo viên
-- Tạo hóa đơn theo lớp/tháng, sửa số buổi/đơn giá/số tiền
+- Kế hoạch ghi danh và số buổi tách theo từng tháng; hóa đơn giữ snapshot lịch sử
+- Vòng đời hóa đơn: chưa đóng, đã đóng, miễn, hủy; có lý do và audit log
 - Trang phụ huynh `/pay/[short_code]` chọn học sinh, xem QR, poll trạng thái
 - Webhook SePay với parse memo và matching invoice
-- Trang giao dịch có tổng hợp theo tháng, lịch sử đóng tiền, lịch sử ngân hàng, giao dịch chưa khớp và gán thủ công
+- Sổ giao dịch tách tiền mặt/chuyển khoản, gán có kiểm tra, bỏ gán/hoàn tác có lý do
+- Bàn xử lý giao dịch tìm hóa đơn theo tên, SĐT, memo, lớp và ưu tiên đúng số tiền
+- Import Excel học sinh/ghi danh có preview, sửa lỗi, cảnh báo trùng SĐT và file mẫu
+- Hồ sơ học sinh 360° gồm lớp, kỳ học, hóa đơn, thanh toán và dòng thời gian
 - Dashboard tổng quan và export Excel
 
 ## Việc nên làm tiếp
@@ -75,4 +79,5 @@ Sao chép `.env.example` thành `.env` nếu cần đổi cấu hình.
 - Đổi tài khoản admin và `SESSION_SECRET` trước khi deploy thật
 - Xác nhận chính xác format header/payload SePay trong tài khoản live
 - Đổi thông tin ngân hàng thật trong `.env`
-- Bỏ nút "Đánh dấu đã đóng (test)" trên trang phụ huynh khi lên production
+- Chạy smoke test SePay Test Mode và đối soát `npm run audit:data` trước/sau deploy
+- Xem `docs/EC2-UPDATE-ROLLBACK.md` và `docs/DEPENDENCY-AUDIT-2026-07-22.md` trước khi cập nhật production

@@ -23,18 +23,39 @@ export default async function TeacherClassPage({
   const month = Math.min(12, Math.max(1, Number(query.month) || now.getMonth() + 1));
   const year = Number(query.year) || now.getFullYear();
   const requestedPage = Math.max(1, Number(query.page) || 1);
+  const periodEnd = new Date(year, month, 1);
+  const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
 
   const classRoom = await prisma.classRoom.findUnique({
     where: { publicToken: short_code },
     include: {
       enrollments: {
+        where: {
+          AND: [
+            {
+              OR: [
+                { createdAt: { lt: periodEnd } },
+                { months: { some: { month, year } } },
+                { invoices: { some: { month, year } } }
+              ]
+            },
+            {
+              OR: [
+                { student: { archivedAt: null } },
+                { months: { some: { month, year } } },
+                { invoices: { some: { month, year } } }
+              ]
+            }
+          ]
+        },
         orderBy: { student: { fullName: "asc" } },
         include: {
           student: true,
           invoices: {
             where: { month, year },
             orderBy: { createdAt: "desc" }
-          }
+          },
+          months: { where: { month, year }, take: 1 }
         }
       }
     }
@@ -44,23 +65,46 @@ export default async function TeacherClassPage({
     notFound();
   }
 
-  const rows = classRoom.enrollments.map((enrollment) => {
+  const visibleEnrollments = classRoom.archivedAt
+    ? classRoom.enrollments.filter(
+        (enrollment) => enrollment.months.length > 0 || enrollment.invoices.length > 0
+      )
+    : classRoom.enrollments;
+  const rows = visibleEnrollments.map((enrollment) => {
     const invoice = enrollment.invoices[0] ?? null;
-    const sessions = invoice?.sessions ?? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
-    const amount = invoice?.amount ?? sessions * classRoom.pricePerSession;
+    const period = enrollment.months[0] ?? null;
+    const periodInitialized = Boolean(period || invoice);
+    const monthlyStatus =
+      period?.status ??
+      (invoice
+        ? "active"
+        : isPastPeriod || classRoom.archivedAt || enrollment.student.archivedAt
+          ? null
+          : enrollment.status);
+    const sessions = invoice?.sessions ?? period?.sessions ?? (monthlyStatus ? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault : 0);
+    const pricePerSession = invoice?.pricePerSession ?? period?.pricePerSession ?? classRoom.pricePerSession;
+    const amount = invoice?.amount ?? (monthlyStatus === "active" ? sessions * pricePerSession : 0);
     return {
       enrollment,
       invoice,
+      monthlyStatus,
+      periodInitialized,
       sessions,
       amount,
+      studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
+      studentPhone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
       memo: invoice?.memoContent ?? buildMemo(classRoom.shortCode, enrollment.student.phone, month, year)
     };
   });
 
   const paidRows = rows.filter((row) => row.invoice?.status === "paid");
-  const unpaidRows = rows.filter((row) => row.invoice?.status !== "paid");
-  const expectedAmount = rows.reduce((sum, row) => sum + row.amount, 0);
+  const unpaidRows = rows.filter((row) => row.invoice?.status === "unpaid");
+  const unissuedRows = rows.filter((row) => !row.invoice && row.monthlyStatus === "active");
+  const uninitializedRows = rows.filter((row) => !row.periodInitialized && row.monthlyStatus === null);
+  const activeRows = rows.filter((row) => row.monthlyStatus === "active");
+  const expectedAmount = activeRows.reduce((sum, row) => sum + row.amount, 0);
   const paidAmount = paidRows.reduce((sum, row) => sum + row.amount, 0);
+  const collectibleAmount = [...paidRows, ...unpaidRows].reduce((sum, row) => sum + row.amount, 0);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
   const visibleRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -75,6 +119,9 @@ export default async function TeacherClassPage({
               <div>
                 <p className="text-xs font-bold uppercase text-primary">APLUS ACADEMY</p>
                 <h1 className="mt-1 text-2xl font-bold text-neutralText">{classRoom.name}</h1>
+                {classRoom.archivedAt ? (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Lớp đã lưu trữ · chỉ xem lịch sử</p>
+                ) : null}
                 <p className="mt-2 text-sm text-stone-600">
                   {classRoom.shortCode}
                   {classRoom.teacherName ? ` · GV: ${classRoom.teacherName}` : ""} ·{" "}
@@ -103,7 +150,10 @@ export default async function TeacherClassPage({
               <p className="text-sm font-semibold text-stone-500">Học sinh</p>
               <Users className="h-5 w-5 text-primary" />
             </div>
-            <p className="mt-2 text-2xl font-bold">{rows.length}</p>
+            <p className="mt-2 text-2xl font-bold">{activeRows.length}</p>
+            <p className="mt-1 text-xs text-stone-500">
+              Đang học trong tháng{uninitializedRows.length > 0 ? ` · ${uninitializedRows.length} chưa khởi tạo` : ""}
+            </p>
           </div>
           <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
             <div className="flex items-center justify-between">
@@ -118,6 +168,9 @@ export default async function TeacherClassPage({
               <Clock className="h-5 w-5 text-warning" />
             </div>
             <p className="mt-2 text-2xl font-bold text-warning">{unpaidRows.length}</p>
+            {unissuedRows.length > 0 ? (
+              <p className="mt-1 text-xs text-stone-500">{unissuedRows.length} chưa phát hành hóa đơn</p>
+            ) : null}
           </div>
           <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
             <div className="flex items-center justify-between">
@@ -125,7 +178,9 @@ export default async function TeacherClassPage({
               <CalendarDays className="h-5 w-5 text-primary" />
             </div>
             <p className="mt-2 text-2xl font-bold text-primary">{formatCurrency(paidAmount)}</p>
-            <p className="mt-1 text-xs text-stone-500">Dự kiến {formatCurrency(expectedAmount)}</p>
+            <p className="mt-1 text-xs text-stone-500">
+              Đã phát hành {formatCurrency(collectibleAmount)} · Kế hoạch {formatCurrency(expectedAmount)}
+            </p>
           </div>
         </section>
 
@@ -135,14 +190,24 @@ export default async function TeacherClassPage({
               <GraduationCap className="h-5 w-5 text-primary" />
               <h2 className="font-bold">Theo dõi lớp {formatMonth(month, year)}</h2>
             </div>
-            <Badge tone={unpaidRows.length > 0 ? "warning" : "success"}>
-              {unpaidRows.length > 0 ? `${unpaidRows.length} chưa đóng` : "Hoàn tất"}
+            <Badge tone={unpaidRows.length > 0 || unissuedRows.length > 0 || uninitializedRows.length > 0 ? "warning" : "success"}>
+              {unpaidRows.length > 0
+                ? `${unpaidRows.length} chưa đóng${unissuedRows.length > 0 ? ` · ${unissuedRows.length} chưa tạo` : ""}`
+                : unissuedRows.length > 0
+                  ? `${unissuedRows.length} chưa tạo hóa đơn`
+                  : uninitializedRows.length > 0
+                    ? `${uninitializedRows.length} chưa khởi tạo tháng`
+                  : "Không còn khoản cần xử lý"}
             </Badge>
           </div>
 
           {rows.length === 0 ? (
             <div className="p-5">
-              <EmptyState title="Lớp chưa có học sinh">Khi trung tâm thêm học sinh vào lớp, danh sách sẽ hiển thị tại đây.</EmptyState>
+              <EmptyState title={classRoom.archivedAt ? "Không có lịch sử trong tháng này" : "Lớp chưa có học sinh"}>
+                {classRoom.archivedAt
+                  ? "Chọn tháng khác để xem dữ liệu đã chốt trước khi lớp được lưu trữ."
+                  : "Khi trung tâm thêm học sinh vào lớp, danh sách sẽ hiển thị tại đây."}
+              </EmptyState>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -178,25 +243,55 @@ export default async function TeacherClassPage({
                       }
                     >
                       <td className="px-4 py-3">
-                        <div className="truncate font-semibold">{row.enrollment.student.fullName}</div>
+                        <div className="truncate font-semibold">{row.studentName}</div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-stone-600">{row.enrollment.student.phone}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-stone-600">{row.studentPhone}</td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <Badge tone={row.enrollment.status === "active" ? "primary" : "neutral"}>
-                          {row.enrollment.status === "active" ? "Đang học" : "Bảo lưu"}
+                        <Badge tone={row.monthlyStatus === "active" ? "primary" : "neutral"}>
+                          {row.monthlyStatus === "active"
+                            ? "Đang học"
+                            : row.monthlyStatus === "on_leave"
+                              ? "Bảo lưu"
+                              : "Chưa khởi tạo"}
                         </Badge>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-semibold">{row.sessions}</td>
-                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-primary">{formatCurrency(row.amount)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-semibold">{row.monthlyStatus ? row.sessions : "-"}</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-primary">
+                        {row.invoice || row.monthlyStatus ? formatCurrency(row.amount) : "-"}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <Badge tone={row.invoice?.status === "paid" ? "success" : "warning"}>
-                          {row.invoice?.status === "paid" ? "Đã đóng" : row.invoice ? "Chưa đóng" : "Chưa tạo"}
+                        <Badge
+                          tone={
+                            row.invoice?.status === "paid"
+                              ? "success"
+                              : row.invoice?.status === "unpaid"
+                                ? "warning"
+                                : row.invoice?.status === "waived"
+                                  ? "primary"
+                                  : "neutral"
+                          }
+                        >
+                          {row.invoice?.status === "paid"
+                            ? "Đã đóng"
+                            : row.invoice?.status === "unpaid"
+                              ? "Chưa đóng"
+                              : row.invoice?.status === "waived"
+                                ? "Đã miễn"
+                                : row.invoice?.status === "void"
+                                  ? "Đã hủy"
+                                  : row.monthlyStatus === "active"
+                                    ? "Chưa tạo"
+                                    : row.monthlyStatus === "on_leave"
+                                      ? "Không thu"
+                                      : "Chưa khởi tạo"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <code className="inline-block max-w-full truncate rounded bg-stone-100 px-2 py-1 align-bottom text-xs" title={row.memo}>
-                          {row.memo}
-                        </code>
+                        {row.invoice || row.monthlyStatus ? (
+                          <code className="inline-block max-w-full truncate rounded bg-stone-100 px-2 py-1 align-bottom text-xs" title={row.memo}>
+                            {row.memo}
+                          </code>
+                        ) : "-"}
                       </td>
                     </tr>
                   ))}

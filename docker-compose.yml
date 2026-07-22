@@ -8,7 +8,7 @@ services:
     env_file: .env
     environment:
       TZ: Asia/Ho_Chi_Minh
-      DATABASE_URL: postgresql://${POSTGRES_USER:-hoctro}:${DB_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-hoctro}?schema=public
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
     depends_on:
       db:
         condition: service_healthy
@@ -24,7 +24,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hoctro}
       POSTGRES_USER: ${POSTGRES_USER:-hoctro}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
     command: sh -c "npm ci && npx prisma migrate deploy"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-hoctro}:${DB_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-hoctro}?schema=public
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
     volumes:
       - .:/app
       - node_modules_tools:/app/node_modules
@@ -57,7 +57,7 @@ services:
     image: postgres:16
     profiles: ["backup"]
     environment:
-      PGPASSWORD: ${DB_PASSWORD:-change-me}
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-hoctro}
       POSTGRES_USER: ${POSTGRES_USER:-hoctro}
     volumes:
@@ -79,20 +79,6 @@ services:
     command: >
       sh -c 'mkdir -p /backups &&
       tar czf "/backups/db_data-$$(date +%Y%m%d-%H%M%S).tar.gz" -C /volume .'
-
-  volume-restore:
-    image: alpine:3.20
-    profiles: ["restore"]
-    environment:
-      BACKUP_FILE: ${BACKUP_FILE:-}
-    volumes:
-      - db_data:/volume
-      - ./backups:/backups
-    command: >
-      sh -c 'test -n "$$BACKUP_FILE" ||
-      (echo "Missing BACKUP_FILE. Example: BACKUP_FILE=db_data-20260704-120000.tar.gz docker compose --profile restore run --rm volume-restore" && exit 1);
-      rm -rf /volume/* /volume/.[!.]* /volume/..?* 2>/dev/null || true;
-      tar xzf "/backups/$$BACKUP_FILE" -C /volume'
 
 volumes:
   db_data:

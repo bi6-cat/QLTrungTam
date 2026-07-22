@@ -28,7 +28,7 @@ export default async function ReportsPage() {
               <option value="">Tất cả lớp</option>
               {classes.map((classRoom) => (
                 <option key={classRoom.id} value={classRoom.id}>
-                  {classRoom.name}
+                  {classRoom.name}{classRoom.archivedAt ? " (đã lưu trữ)" : ""}
                 </option>
               ))}
             </Select>
