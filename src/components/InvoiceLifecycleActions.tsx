@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Gift, RotateCcw } from "lucide-react";
+import { Ban, Gift, MoreHorizontal, RotateCcw } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -36,6 +36,7 @@ export function InvoiceLifecycleActions({
   disabled?: boolean;
 }) {
   const router = useRouter();
+  const [chooserOpen, setChooserOpen] = useState(false);
   const [target, setTarget] = useState<InvoiceStatus | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -43,6 +44,7 @@ export function InvoiceLifecycleActions({
 
   function open(nextTarget: InvoiceStatus) {
     if (disabled) return;
+    setChooserOpen(false);
     setReason("");
     setError("");
     setTarget(nextTarget);
@@ -73,49 +75,81 @@ export function InvoiceLifecycleActions({
 
   return (
     <>
-      <div className="flex flex-wrap justify-end gap-1">
+      <div className="flex shrink-0 flex-nowrap justify-end gap-1">
         {status === "unpaid" ? (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-8 px-2 text-xs"
-              disabled={disabled}
-              title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : undefined}
-              onClick={() => open("void")}
-            >
-              <Ban className="h-3.5 w-3.5" />
-              Hủy
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-8 px-2 text-xs"
-              disabled={disabled}
-              title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : undefined}
-              onClick={() => open("waived")}
-            >
-              <Gift className="h-3.5 w-3.5" />
-              Miễn
-            </Button>
-          </>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 px-0"
+            disabled={disabled}
+            title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : "Mở các thao tác khác"}
+            aria-label="Mở thao tác khác cho hóa đơn"
+            aria-haspopup="dialog"
+            aria-expanded={chooserOpen}
+            onClick={() => !disabled && setChooserOpen(true)}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+          </Button>
         ) : (
           <Button
             type="button"
             variant="secondary"
-            className="h-8 px-2 text-xs"
+            className="h-8 shrink-0 whitespace-nowrap px-2 text-xs"
             disabled={disabled}
             title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : undefined}
             onClick={() => open("unpaid")}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
             Khôi phục
           </Button>
         )}
       </div>
 
+      {chooserOpen && status === "unpaid" ? (
+        <Modal title="Thao tác hóa đơn" onClose={() => setChooserOpen(false)}>
+          <div className="grid gap-3">
+            <p className="text-sm text-stone-600">
+              Chọn cách xử lý hóa đơn. Mỗi thao tác đều yêu cầu nhập lý do để lưu vào lịch sử đối soát.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-auto w-full justify-start px-4 py-3 text-left"
+              onClick={() => open("void")}
+            >
+              <Ban className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+              <span>
+                <span className="block">Hủy hóa đơn</span>
+                <span className="block text-xs font-normal text-stone-500">Dùng khi hóa đơn phát hành sai hoặc không còn hiệu lực.</span>
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-auto w-full justify-start px-4 py-3 text-left"
+              onClick={() => open("waived")}
+            >
+              <Gift className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <span>
+                <span className="block">Miễn học phí</span>
+                <span className="block text-xs font-normal text-stone-500">Dùng khi trung tâm chủ động miễn khoản học phí này.</span>
+              </span>
+            </Button>
+            <div className="flex justify-end">
+              <Button type="button" variant="ghost" onClick={() => setChooserOpen(false)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
       {target ? (
-        <Modal title={COPY[target].title} onClose={() => !pending && setTarget(null)}>
+        <Modal
+          title={COPY[target].title}
+          onClose={() => !pending && setTarget(null)}
+          closeDisabled={pending}
+        >
           <form onSubmit={submit} className="grid gap-4">
             <p className="text-sm text-stone-600">{COPY[target].description}</p>
             <Field label="Lý do">

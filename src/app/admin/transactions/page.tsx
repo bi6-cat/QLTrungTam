@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History, Landmark } from "lucide-react";
 import { TransactionMatchForm } from "@/components/TransactionMatchForm";
+import { TransactionDetailsButton } from "@/components/TransactionDetailsButton";
+import { TransactionReference } from "@/components/TransactionReference";
 import { TransactionReviewActions } from "@/components/TransactionReviewActions";
 import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -353,50 +355,78 @@ export default async function TransactionsPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-left text-sm">
+            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[13%]" />
+                <col className="w-[18%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[17%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
-                  <th className="px-4 py-3">Ngày đóng</th>
-                  <th className="px-4 py-3">Học sinh</th>
-                  <th className="px-4 py-3">Lớp</th>
-                  <th className="px-4 py-3">Giáo viên</th>
-                  <th className="px-4 py-3">Tháng học phí</th>
-                  <th className="px-4 py-3">Số tiền</th>
-                  <th className="px-4 py-3">Mã giao dịch</th>
-                  <th className="px-4 py-3">Memo</th>
+                  <th className="whitespace-nowrap px-3 py-3">Ngày đóng</th>
+                  <th className="whitespace-nowrap px-3 py-3">Học sinh</th>
+                  <th className="whitespace-nowrap px-3 py-3">Lớp</th>
+                  <th className="whitespace-nowrap px-3 py-3">Giáo viên</th>
+                  <th className="whitespace-nowrap px-3 py-3">Tháng học phí</th>
+                  <th className="whitespace-nowrap px-3 py-3">Số tiền</th>
+                  <th className="whitespace-nowrap px-3 py-3">Mã giao dịch</th>
+                  <th className="whitespace-nowrap px-3 py-3">Memo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
-                {paid.rows.map((invoice) => (
-                  <tr key={invoice.id}>
-                    <td className="whitespace-nowrap px-4 py-3">
+                {paid.rows.map((invoice) => {
+                  const studentName = invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName;
+                  const studentPhone = invoice.studentPhoneSnapshot ?? invoice.enrollment.student.phone;
+                  const className = invoice.classNameSnapshot ?? invoice.enrollment.classRoom.name;
+                  const teacherName =
+                    (invoice.teacherNameSnapshot ?? invoice.enrollment.classRoom.teacherName) || "-";
+
+                  return (
+                    <tr key={invoice.id} className="h-14">
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3">
                       {invoice.paidAt ? invoice.paidAt.toLocaleString("vi-VN") : "-"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <Link
-                        href={`/admin/students/${invoice.enrollment.student.id}`}
-                        className="font-semibold text-primary hover:underline"
-                      >
-                        {invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName}
-                      </Link>
-                      <div className="text-xs text-stone-500">
-                        {invoice.studentPhoneSnapshot ?? invoice.enrollment.student.phone}
+                    <td className="overflow-hidden px-3 py-3">
+                      <div className="truncate whitespace-nowrap" title={`${studentName} · ${studentPhone}`}>
+                        <Link
+                          href={`/admin/students/${invoice.enrollment.student.id}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {studentName}
+                        </Link>
+                        <span className="text-xs text-stone-500"> · {studentPhone}</span>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {invoice.classNameSnapshot ?? invoice.enrollment.classRoom.name}
+                    <td className="overflow-hidden px-3 py-3">
+                      <p className="truncate whitespace-nowrap" title={className}>{className}</p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {(invoice.teacherNameSnapshot ?? invoice.enrollment.classRoom.teacherName) || "-"}
+                    <td className="overflow-hidden px-3 py-3">
+                      <p className="truncate whitespace-nowrap" title={teacherName}>{teacherName}</p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatMonth(invoice.month, invoice.year)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(invoice.amount)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-                      {invoice.transaction?.gatewayRef ?? "Thanh toán test/thủ công"}
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3">{formatMonth(invoice.month, invoice.year)}</td>
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">{formatCurrency(invoice.amount)}</td>
+                    <td className="overflow-hidden px-3 py-3">
+                      {invoice.transaction?.gatewayRef ? (
+                        <TransactionReference value={invoice.transaction.gatewayRef} />
+                      ) : (
+                        <span className="block truncate whitespace-nowrap text-xs" title="Thanh toán test/thủ công">
+                          Thanh toán test/thủ công
+                        </span>
+                      )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{invoice.memoContent}</td>
-                  </tr>
-                ))}
+                    <td className="overflow-hidden px-3 py-3">
+                      <p className="truncate whitespace-nowrap font-mono text-xs" title={invoice.memoContent}>
+                        {invoice.memoContent}
+                      </p>
+                    </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -422,96 +452,133 @@ export default async function TransactionsPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1320px] text-left text-sm">
+            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[13%]" />
+                <col className="w-[14%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[13%]" />
+                <col className="w-[9%]" />
+              </colgroup>
               <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
-                  <th className="px-4 py-3">Thời gian</th>
-                  <th className="px-4 py-3">Mã GD</th>
-                  <th className="px-4 py-3">Phương thức</th>
-                  <th className="px-4 py-3">Số tiền</th>
-                  <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3">Hóa đơn khớp</th>
-                  <th className="px-4 py-3">Nội dung</th>
-                  <th className="px-4 py-3">Thao tác</th>
+                  <th className="whitespace-nowrap px-3 py-3">Thời gian</th>
+                  <th className="whitespace-nowrap px-3 py-3">Mã GD</th>
+                  <th className="whitespace-nowrap px-3 py-3">Phương thức</th>
+                  <th className="whitespace-nowrap px-3 py-3">Số tiền</th>
+                  <th className="whitespace-nowrap px-3 py-3">Trạng thái</th>
+                  <th className="whitespace-nowrap px-3 py-3">Hóa đơn khớp</th>
+                  <th className="whitespace-nowrap px-3 py-3">Nội dung</th>
+                  <th className="whitespace-nowrap px-2 py-3 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
-                {tx.rows.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td className="whitespace-nowrap px-4 py-3">{transaction.transferredAt.toLocaleString("vi-VN")}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{transaction.gatewayRef}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <Badge tone="neutral">
-                        {transaction.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản"}
-                      </Badge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(transaction.amount)}</td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        tone={
-                          transaction.reversedAt
-                            ? "warning"
-                            : transaction.matchedInvoice
-                              ? "success"
-                              : transaction.resolvedAt
-                                ? "neutral"
-                                : "warning"
-                        }
+                {tx.rows.map((transaction) => {
+                  const matchedInvoiceLabel = transaction.matchedInvoice
+                    ? `${transaction.matchedInvoice.classShortCodeSnapshot ?? transaction.matchedInvoice.enrollment.classRoom.shortCode} · ${transaction.matchedInvoice.studentNameSnapshot ?? transaction.matchedInvoice.enrollment.student.fullName} · ${formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}`
+                    : transaction.reversedAt
+                      ? "Liên kết đã được hoàn tác"
+                      : transaction.resolvedAt
+                        ? "Đã xử lý thủ công (không gán học sinh)"
+                        : "-";
+                  const statusDetails = [
+                    transaction.reversalReason ? `Lý do hoàn tác: ${transaction.reversalReason}` : "",
+                    transaction.matchedInvoice && transaction.matchOverrideReason
+                      ? `Gán lệch ${formatCurrency(Math.abs(transaction.amount - transaction.matchedInvoice.amount))}: ${transaction.matchOverrideReason}`
+                      : "",
+                    !transaction.reversedAt && transaction.resolvedNote
+                      ? `Ghi chú xử lý: ${transaction.resolvedNote}`
+                      : ""
+                  ].filter(Boolean);
+
+                  return (
+                    <tr key={transaction.id} className="h-14">
+                      <td
+                        className="overflow-hidden whitespace-nowrap px-3 py-3"
+                        title={transaction.transferredAt.toLocaleString("vi-VN")}
                       >
-                        {transaction.reversedAt
-                          ? "Đã hoàn tác"
-                          : transaction.matchedInvoice
-                            ? "Đã khớp"
-                            : transaction.resolvedAt
-                              ? "Đã xử lý"
-                              : "Chưa khớp"}
-                      </Badge>
-                      {transaction.reversalReason ? (
-                        <p className="mt-1 max-w-xs text-xs text-stone-500">{transaction.reversalReason}</p>
-                      ) : null}
-                      {transaction.matchedInvoice && transaction.matchOverrideReason ? (
-                        <p className="mt-1 max-w-xs text-xs font-medium text-amber-700">
-                          Gán lệch {formatCurrency(Math.abs(transaction.amount - transaction.matchedInvoice.amount))}: {transaction.matchOverrideReason}
-                        </p>
-                      ) : null}
-                      {!transaction.reversedAt && transaction.resolvedNote ? (
-                        <p className="mt-1 max-w-xs text-xs text-stone-500">{transaction.resolvedNote}</p>
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {transaction.matchedInvoice ? (
-                        <>
-                          {transaction.matchedInvoice.classShortCodeSnapshot ??
-                            transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
-                          <Link
-                            href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
-                            className="font-semibold text-primary hover:underline"
+                        {transaction.transferredAt.toLocaleString("vi-VN")}
+                      </td>
+                      <td className="overflow-hidden px-3 py-3">
+                        <TransactionReference value={transaction.gatewayRef} />
+                      </td>
+                      <td className="overflow-hidden whitespace-nowrap px-3 py-3">
+                        <Badge tone="neutral">
+                          {transaction.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản"}
+                        </Badge>
+                      </td>
+                      <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">
+                        {formatCurrency(transaction.amount)}
+                      </td>
+                      <td className="overflow-hidden px-3 py-3">
+                        <span className="inline-flex max-w-full items-center gap-1 whitespace-nowrap">
+                          <Badge
+                            tone={
+                              transaction.reversedAt
+                                ? "warning"
+                                : transaction.matchedInvoice
+                                  ? "success"
+                                  : transaction.resolvedAt
+                                    ? "neutral"
+                                    : "warning"
+                            }
                           >
-                            {transaction.matchedInvoice.studentNameSnapshot ??
-                              transaction.matchedInvoice.enrollment.student.fullName}
-                          </Link>{" "}·{" "}
-                          {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
-                        </>
-                      ) : transaction.reversedAt ? (
-                        "Liên kết đã được hoàn tác"
-                      ) : transaction.resolvedAt ? (
-                        "Đã xử lý thủ công (không gán học sinh)"
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="max-w-lg break-words font-mono text-xs">{transaction.rawContent}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      {transaction.matchedInvoice && !transaction.reversedAt ? (
-                        <TransactionReviewActions transactionId={transaction.id} />
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                            {transaction.reversedAt
+                              ? "Đã hoàn tác"
+                              : transaction.matchedInvoice
+                                ? "Đã khớp"
+                                : transaction.resolvedAt
+                                  ? "Đã xử lý"
+                                  : "Chưa khớp"}
+                          </Badge>
+                          {statusDetails.length > 0 ? (
+                            <TransactionDetailsButton
+                              title="Chi tiết trạng thái giao dịch"
+                              details={statusDetails}
+                            />
+                          ) : null}
+                        </span>
+                      </td>
+                      <td className="overflow-hidden px-3 py-3">
+                        <div className="truncate whitespace-nowrap" title={matchedInvoiceLabel}>
+                          {transaction.matchedInvoice ? (
+                            <>
+                              {transaction.matchedInvoice.classShortCodeSnapshot ??
+                                transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
+                              <Link
+                                href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
+                                className="font-semibold text-primary hover:underline"
+                              >
+                                {transaction.matchedInvoice.studentNameSnapshot ??
+                                  transaction.matchedInvoice.enrollment.student.fullName}
+                              </Link>{" "}·{" "}
+                              {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
+                            </>
+                          ) : (
+                            matchedInvoiceLabel
+                          )}
+                        </div>
+                      </td>
+                      <td className="overflow-hidden px-3 py-3">
+                        <p className="truncate whitespace-nowrap font-mono text-xs" title={transaction.rawContent}>
+                          {transaction.rawContent}
+                        </p>
+                      </td>
+                      <td className="overflow-hidden px-2 py-3">
+                        <div className="flex justify-center">
+                          {transaction.matchedInvoice && !transaction.reversedAt ? (
+                            <TransactionReviewActions transactionId={transaction.id} />
+                          ) : (
+                            "-"
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -539,30 +606,53 @@ export default async function TransactionsPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[800px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[14%]" />
+                <col className="w-[20%]" />
+                <col className="w-[12%]" />
+                <col className="w-[30%]" />
+                <col className="w-[24%]" />
+              </colgroup>
               <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
-                  <th className="px-4 py-3">Thời gian</th>
-                  <th className="px-4 py-3">Mã GD</th>
-                  <th className="px-4 py-3">Số tiền</th>
-                  <th className="px-4 py-3">Nội dung</th>
-                  <th className="px-4 py-3">Gán thủ công</th>
+                  <th className="whitespace-nowrap px-3 py-3">Thời gian</th>
+                  <th className="whitespace-nowrap px-3 py-3">Mã GD</th>
+                  <th className="whitespace-nowrap px-3 py-3">Số tiền</th>
+                  <th className="whitespace-nowrap px-3 py-3">Nội dung</th>
+                  <th className="whitespace-nowrap px-3 py-3">Gán thủ công</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
                 {unmatched.rows.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td className="whitespace-nowrap px-4 py-3">{transaction.transferredAt.toLocaleString("vi-VN")}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{transaction.gatewayRef}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(transaction.amount)}</td>
-                    <td className="px-4 py-3">
-                      <Badge tone="warning">Chưa khớp</Badge>
-                      {transaction.matchReason ? (
-                        <p className="mt-2 max-w-sm text-xs font-medium text-amber-700">{transaction.matchReason}</p>
-                      ) : null}
-                      <p className="mt-2 max-w-sm break-words font-mono text-xs">{transaction.rawContent}</p>
+                  <tr key={transaction.id} className="h-14">
+                    <td
+                      className="overflow-hidden whitespace-nowrap px-3 py-3"
+                      title={transaction.transferredAt.toLocaleString("vi-VN")}
+                    >
+                      {transaction.transferredAt.toLocaleString("vi-VN")}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="overflow-hidden px-3 py-3">
+                      <TransactionReference value={transaction.gatewayRef} />
+                    </td>
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">
+                      {formatCurrency(transaction.amount)}
+                    </td>
+                    <td className="overflow-hidden px-3 py-3">
+                      <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                        <Badge tone="warning">Chưa khớp</Badge>
+                        {transaction.matchReason ? (
+                          <TransactionDetailsButton
+                            title="Lý do giao dịch chưa khớp"
+                            details={[transaction.matchReason]}
+                          />
+                        ) : null}
+                        <p className="min-w-0 flex-1 truncate font-mono text-xs" title={transaction.rawContent}>
+                          {transaction.rawContent}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="overflow-hidden px-3 py-3">
                       <TransactionMatchForm
                         transactionId={transaction.id}
                         transactionAmount={transaction.amount}

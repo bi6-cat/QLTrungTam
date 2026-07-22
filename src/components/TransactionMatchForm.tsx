@@ -7,11 +7,11 @@ import {
   ChevronRight,
   Link as LinkIcon,
   LoaderCircle,
-  Search,
-  X
+  Search
 } from "lucide-react";
 import { assignTransactionAction, resolveTransactionAction } from "@/lib/actions";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import { Modal } from "@/components/Modal";
 import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
 
 type InvoiceOption = {
@@ -151,29 +151,25 @@ export function TransactionMatchForm({
     setOpen(true);
   }
 
-  if (!open) {
-    return (
-      <Button type="button" variant="secondary" onClick={openWorkbench}>
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        className="h-9 whitespace-nowrap"
+        onClick={openWorkbench}
+      >
         <Search className="h-4 w-4" />
         Mở bàn xử lý
       </Button>
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-stone-800">Bàn xử lý giao dịch</p>
-        <button
-          type="button"
-          onClick={closeWorkbench}
-          disabled={assigning || resolving}
-          className="focus-ring rounded-lg border border-stone-300 p-1.5 text-stone-500 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Đóng bàn xử lý"
+      {open ? (
+        <Modal
+          title="Bàn xử lý giao dịch"
+          onClose={closeWorkbench}
+          maxWidthClassName="max-w-3xl"
+          closeDisabled={assigning || resolving}
         >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+          <div className="grid gap-4">
       <form action={assignAction} className="grid gap-3">
         <input type="hidden" name="transactionId" value={transactionId} />
         <input type="hidden" name="invoiceId" value={selectedInvoiceId} />
@@ -190,6 +186,7 @@ export function TransactionMatchForm({
               maxLength={100}
               onChange={(event) => changeSearch(event.target.value)}
               disabled={assigning}
+              autoFocus
               className="pl-10"
               placeholder="Nhập thông tin cần tìm..."
               aria-label="Tìm hóa đơn chưa đóng"
@@ -369,6 +366,9 @@ export function TransactionMatchForm({
           </Button>
         </form>
       </div>
-    </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }

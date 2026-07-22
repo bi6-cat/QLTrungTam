@@ -15,14 +15,26 @@ export function TransactionReviewActions({ transactionId }: { transactionId: str
 
   return (
     <>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" className="h-9" onClick={() => setOpenDialog("unassign")}>
+      <div className="flex items-center gap-1 whitespace-nowrap">
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-8 w-8 shrink-0 px-0"
+          onClick={() => setOpenDialog("unassign")}
+          aria-label="Bỏ gán giao dịch"
+          title="Bỏ gán"
+        >
           <Unlink className="h-4 w-4" />
-          Bỏ gán
         </Button>
-        <Button type="button" variant="danger" className="h-9" onClick={() => setOpenDialog("reverse")}>
+        <Button
+          type="button"
+          variant="danger"
+          className="h-8 w-8 shrink-0 px-0"
+          onClick={() => setOpenDialog("reverse")}
+          aria-label="Hoàn tác giao dịch"
+          title="Hoàn tác"
+        >
           <RotateCcw className="h-4 w-4" />
-          Hoàn tác
         </Button>
       </div>
 
@@ -40,7 +52,7 @@ function UnassignDialog({ transactionId, onClose }: { transactionId: string; onC
   const [state, action, pending] = useActionState(unassignTransactionAction, initialActionState);
 
   return (
-    <Modal title="Bỏ gán giao dịch?" onClose={onClose}>
+    <Modal title="Bỏ gán giao dịch?" onClose={onClose} closeDisabled={pending}>
       <form action={action} className="grid gap-4">
         <input type="hidden" name="transactionId" value={transactionId} />
         <p className="text-sm text-stone-600">
@@ -85,7 +97,7 @@ function ReverseDialog({ transactionId, onClose }: { transactionId: string; onCl
   const [state, action, pending] = useActionState(reverseTransactionAction, initialActionState);
 
   return (
-    <Modal title="Hoàn tác giao dịch?" onClose={onClose}>
+    <Modal title="Hoàn tác giao dịch?" onClose={onClose} closeDisabled={pending}>
       <form action={action} className="grid gap-4">
         <input type="hidden" name="transactionId" value={transactionId} />
         <p className="text-sm text-stone-600">

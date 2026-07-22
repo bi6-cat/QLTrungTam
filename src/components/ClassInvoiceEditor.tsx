@@ -217,8 +217,8 @@ export function ClassInvoiceEditor({
               </div>
             );
           })}
-        <div className="overflow-x-auto lg:overflow-visible">
-          <table className="w-full min-w-[780px] table-fixed text-left text-sm lg:min-w-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[780px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[13%]" />
@@ -226,8 +226,8 @@ export function ClassInvoiceEditor({
               <col className="w-[8%]" />
               <col className="w-[10%]" />
               <col className="w-[12%]" />
-              <col className="w-[20%]" />
-              <col className="w-[11%]" />
+              <col className="w-[13%]" />
+              <col className="w-[18%]" />
             </colgroup>
             <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
@@ -355,11 +355,11 @@ export function ClassInvoiceEditor({
                     </td>
                     <td className="whitespace-nowrap px-2 py-3 text-right">
                       {invoice?.status === "unpaid" ? (
-                        <div className="grid justify-items-end gap-1">
+                        <div className="flex flex-nowrap items-center justify-end gap-1">
                           <Button
                             type="button"
                             variant="secondary"
-                            className="ml-auto h-8 w-full px-1 text-xs"
+                            className="h-8 shrink-0 whitespace-nowrap px-2 text-xs"
                             disabled={editing || cashSubmittingId === invoice.id}
                             onClick={() => markCashPaid(invoice.id)}
                             title={
