@@ -76,7 +76,7 @@ export const createClassSchema = z.object({
   shortCode,
   teacherName: looseText(120),
   pricePerSession: money,
-  sessionsPerMonthDefault: z.coerce.number().int().min(0).max(60).catch(8)
+  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60)
 });
 
 export const updateClassSchema = z.object({
@@ -84,7 +84,7 @@ export const updateClassSchema = z.object({
   name: requiredText("Thiếu tên lớp", 120),
   teacherName: looseText(120),
   pricePerSession: money,
-  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60).catch(8)
+  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60)
 });
 
 export const idSchema = z.object({ id });
@@ -106,19 +106,33 @@ export const updateStudentSchema = z.object({
   note: optionalText(1000)
 });
 
-export const enrollmentSchema = z.object({
-  studentId: id,
-  classId: id,
-  sessionsOverride: z
-    .string()
-    .optional()
-    .transform((v) => (v && v.trim() !== "" ? Number(v.replace(/\D/g, "")) : null))
-    .refine(
-      (v) => v === null || (Number.isInteger(v) && v >= 0 && v <= 60),
-      "Số buổi ghi đè không hợp lệ"
-    ),
-  status: enrollmentStatus
-});
+export const enrollmentSchema = z
+  .object({
+    studentId: id,
+    classId: id,
+    sessionsOverride: z
+      .string()
+      .optional()
+      .transform((v) => {
+        const value = v?.trim() ?? "";
+        if (!value) return null;
+        return /^\d+$/.test(value) ? Number(value) : Number.NaN;
+      })
+      .refine(
+        (v) => v === null || (Number.isInteger(v) && v >= 0 && v <= 60),
+        "Số buổi ghi đè không hợp lệ"
+      ),
+    status: enrollmentStatus
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === "active" && data.sessionsOverride === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sessionsOverride"],
+        message: "Học sinh đang học phải có số buổi lớn hơn 0 hoặc để trống để dùng mặc định"
+      });
+    }
+  });
 
 export const updateEnrollmentStatusSchema = z.object({ id, status: enrollmentStatus });
 

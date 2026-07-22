@@ -10,7 +10,7 @@ Unit test chỉ gọi helper thuần, không kết nối database và không tha
 npm test
 ```
 
-Phạm vi hiện có: cú pháp memo học phí, URL VietQR, định dạng, chuyển đổi form, mật khẩu và public token.
+Phạm vi hiện có: cú pháp memo học phí, URL VietQR, định dạng, chuyển đổi form, mật khẩu, public token và parser/validator import Excel.
 
 ## Integration test sổ tài chính
 
@@ -30,5 +30,7 @@ Phạm vi hiện có:
 - Unassign, reversal, resolve và audit log.
 - Thu tiền mặt, phân loại bản ghi do app cũ tạo và DB state guard.
 - Hai request tranh cùng giao dịch chỉ có một request thắng.
+- Trạng thái/số buổi/đơn giá được cô lập giữa các tháng.
+- Chặn xóa cứng lớp hoặc học sinh đã có ghi danh bằng khóa ngoại `RESTRICT`.
 
 Các test cho webhook HTTP (xác thực, duplicate, chiều tiền, tài khoản nhận và CAS khi hóa đơn đổi tiền) sẽ được bổ sung cùng HTTP test harness. Trước khi triển khai production vẫn phải smoke test bằng SePay Test Mode.

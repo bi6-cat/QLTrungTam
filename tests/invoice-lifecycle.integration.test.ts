@@ -47,6 +47,21 @@ describe("invoice lifecycle and monthly enrollment integration", { concurrency: 
     await harness.stop();
   });
 
+  test("prevents hard-deleting a student or class that has an enrollment", async () => {
+    const fixture = await harness.createFixture();
+
+    for (const removeOwner of [
+      () => prisma.student.delete({ where: { id: fixture.studentId } }),
+      () => prisma.classRoom.delete({ where: { id: fixture.classId } })
+    ]) {
+      await assert.rejects(removeOwner, (error: unknown) => {
+        assert.ok(error instanceof Prisma.PrismaClientKnownRequestError);
+        assert.equal(error.code, "P2003");
+        return true;
+      });
+    }
+  });
+
   test("voids and restores an unpaid invoice with reasoned audits", async () => {
     const fixture = await harness.createFixture();
     const invoice = await harness.createInvoice(fixture);

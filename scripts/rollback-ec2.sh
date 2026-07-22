@@ -3,8 +3,10 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3001/login}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${APP_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3001/api/health}"
+LEGACY_HEALTH_URL="${LEGACY_HEALTH_URL:-http://127.0.0.1:3001/login}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 STATE_DIR="$APP_DIR/.deploy"
 BACKUP_DIR="$APP_DIR/backups"
@@ -26,6 +28,11 @@ wait_for_app() {
     if curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
       return 0
     fi
+    if [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$HEALTH_URL" || true)" == "404" ]] \
+      && curl --fail --silent --show-error --max-time 5 "$LEGACY_HEALTH_URL" >/dev/null 2>&1; then
+      log "Commit cũ chưa có API health; dùng endpoint đăng nhập rồi kiểm tra Prisma riêng."
+      return 0
+    fi
     sleep 3
   done
 
@@ -44,15 +51,56 @@ wait_for_db() {
   return 1
 }
 
+check_app_database() {
+  docker compose exec -T app node -e '
+    const { PrismaClient } = require("@prisma/client");
+    const prisma = new PrismaClient();
+    (async () => {
+      try {
+        await Promise.all([
+          prisma.classRoom.findFirst({ select: { id: true } }),
+          prisma.monthlyInvoice.findFirst({ select: { id: true } })
+        ]);
+      } finally {
+        await prisma.$disconnect();
+      }
+    })().catch(() => process.exit(1));
+  ' >/dev/null 2>&1
+}
+
+preserve_operation_scripts() {
+  local script_name
+  local scripts=(deploy-ec2.sh rollback-ec2.sh restore-db-ec2.sh restore-volume-ec2.sh)
+  if [[ "$SCRIPT_DIR" == "$STATE_DIR" ]]; then
+    return 0
+  fi
+  for script_name in "${scripts[@]}"; do
+    [[ -f "$APP_DIR/scripts/$script_name" ]] || die "Thiếu script vận hành: scripts/$script_name"
+  done
+  for script_name in "${scripts[@]}"; do
+    cp "$APP_DIR/scripts/$script_name" "$STATE_DIR/$script_name.tmp"
+    chmod 700 "$STATE_DIR/$script_name.tmp"
+  done
+  for script_name in "${scripts[@]}"; do
+    mv "$STATE_DIR/$script_name.tmp" "$STATE_DIR/$script_name"
+  done
+}
+
 return_to_start_on_error() {
   local exit_code="$1"
   trap - ERR INT TERM
 
   if [[ "$CODE_SWITCHED" -eq 1 && -n "$START_COMMIT" ]]; then
     log "Rollback lỗi. Đang thử đưa ứng dụng lại commit ban đầu ${START_COMMIT:0:12}..."
-    git checkout --detach "$START_COMMIT" || true
-    docker compose build app || true
-    docker compose up -d --no-deps app || true
+    if git checkout --detach "$START_COMMIT" \
+      && docker compose build app \
+      && docker compose up -d --no-deps app \
+      && wait_for_app \
+      && check_app_database; then
+      log "Đã đưa ứng dụng lại commit ban đầu và xác minh kết nối dữ liệu."
+    else
+      printf '[rollback] CRITICAL: không thể khôi phục ứng dụng về commit ban đầu %s\n' "$START_COMMIT" >&2
+    fi
   fi
   exit "$exit_code"
 }
@@ -62,7 +110,7 @@ trap 'return_to_start_on_error 130' INT TERM
 
 cd "$APP_DIR"
 
-for command_name in git docker curl flock; do
+for command_name in git docker curl flock cp chmod mv; do
   command -v "$command_name" >/dev/null 2>&1 || die "Thiếu lệnh: $command_name"
 done
 docker compose version >/dev/null 2>&1 || die "Docker Compose plugin chưa được cài"
@@ -89,9 +137,12 @@ fi
 TARGET_COMMIT="$(git rev-parse --verify --end-of-options "${TARGET_INPUT}^{commit}")" || die "Commit không hợp lệ: $TARGET_INPUT"
 START_COMMIT="$(git rev-parse HEAD)"
 
-if [[ "$TARGET_COMMIT" == "$START_COMMIT" ]]; then
+if [[ "$TARGET_COMMIT" == "$START_COMMIT" && "${FORCE_RECREATE:-}" != "YES" ]]; then
   log "Ứng dụng đã ở commit ${TARGET_COMMIT:0:12}; không cần rollback"
   exit 0
+fi
+if [[ "$TARGET_COMMIT" == "$START_COMMIT" ]]; then
+  log "FORCE_RECREATE=YES: sẽ build, khởi động và kiểm tra lại commit hiện tại"
 fi
 
 docker compose up -d db
@@ -105,13 +156,17 @@ if ! docker compose exec -T db sh -ceu \
   die "Backup database thất bại; chưa rollback"
 fi
 [[ -s "$BACKUP_FILE" ]] || die "File backup rỗng; dừng rollback"
+docker compose exec -T db pg_restore --list <"$BACKUP_FILE" >/dev/null \
+  || die "File backup không vượt qua kiểm tra pg_restore; dừng rollback"
 
 log "Đang rollback ứng dụng ${START_COMMIT:0:12} -> ${TARGET_COMMIT:0:12}..."
+preserve_operation_scripts
 git checkout --detach "$TARGET_COMMIT"
 CODE_SWITCHED=1
 docker compose build app
 docker compose up -d --no-deps app
 wait_for_app
+check_app_database
 
 TMP_STATE="$STATE_DIR/state.env.tmp"
 {
@@ -126,3 +181,4 @@ CODE_SWITCHED=0
 trap - ERR INT TERM
 log "Rollback ứng dụng thành công về ${TARGET_COMMIT:0:12}"
 log "Database chưa bị restore. Nếu migration không tương thích, xem docs/EC2-UPDATE-ROLLBACK.md"
+log "Dùng script restore đã bảo toàn: bash $STATE_DIR/restore-db-ec2.sh <file.dump>"

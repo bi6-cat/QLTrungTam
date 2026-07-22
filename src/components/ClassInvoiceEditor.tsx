@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Banknote, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
 import { updateClassDetailsAction } from "@/lib/actions";
@@ -10,6 +11,7 @@ import { formatCurrency, formatMonth } from "@/lib/format";
 
 type InvoiceRow = {
   enrollmentId: string;
+  studentId: string;
   studentName: string;
   phone: string;
   studentArchived: boolean;
@@ -260,7 +262,12 @@ export function ClassInvoiceEditor({
                   >
                     <td className="whitespace-nowrap px-2 py-3">
                       <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
-                      <div className="font-semibold">{row.studentName}</div>
+                      <Link
+                        href={`/admin/students/${row.studentId}`}
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        {row.studentName}
+                      </Link>
                       <div className="text-xs text-stone-500">{row.phone}</div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">

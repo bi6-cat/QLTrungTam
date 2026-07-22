@@ -63,8 +63,8 @@ model Enrollment {
   sessionsOverride Int?
   status           EnrollmentStatus  @default(active)
   createdAt        DateTime          @default(now())
-  classRoom        ClassRoom         @relation(fields: [classId], references: [id], onDelete: Cascade)
-  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classRoom        ClassRoom         @relation(fields: [classId], references: [id], onDelete: Restrict)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Restrict)
   invoices         MonthlyInvoice[]
   months           EnrollmentMonth[]
 

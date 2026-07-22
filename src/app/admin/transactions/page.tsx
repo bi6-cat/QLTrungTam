@@ -61,8 +61,7 @@ export default async function TransactionsPage({
     transactionCount,
     bankTransactionAggregate,
     unmatchedCount,
-    monthlyGroups,
-    unpaidInvoices
+    monthlyGroups
   ] = await Promise.all([
     prisma.monthlyInvoice.aggregate({
       where: paidInvoiceWhere,
@@ -85,13 +84,6 @@ export default async function TransactionsPage({
       _count: { _all: true },
       _sum: { amount: true },
       orderBy: [{ year: "desc" }, { month: "desc" }]
-    }),
-    prisma.monthlyInvoice.findMany({
-      where: { status: "unpaid" },
-      orderBy: [{ year: "desc" }, { month: "desc" }],
-      include: {
-        enrollment: { include: { student: true, classRoom: true } }
-      }
     })
   ]);
 
@@ -381,9 +373,12 @@ export default async function TransactionsPage({
                       {invoice.paidAt ? invoice.paidAt.toLocaleString("vi-VN") : "-"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="font-semibold">
+                      <Link
+                        href={`/admin/students/${invoice.enrollment.student.id}`}
+                        className="font-semibold text-primary hover:underline"
+                      >
                         {invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName}
-                      </div>
+                      </Link>
                       <div className="text-xs text-stone-500">
                         {invoice.studentPhoneSnapshot ?? invoice.enrollment.student.phone}
                       </div>
@@ -488,8 +483,13 @@ export default async function TransactionsPage({
                         <>
                           {transaction.matchedInvoice.classShortCodeSnapshot ??
                             transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
-                          {transaction.matchedInvoice.studentNameSnapshot ??
-                            transaction.matchedInvoice.enrollment.student.fullName} ·{" "}
+                          <Link
+                            href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
+                            className="font-semibold text-primary hover:underline"
+                          >
+                            {transaction.matchedInvoice.studentNameSnapshot ??
+                              transaction.matchedInvoice.enrollment.student.fullName}
+                          </Link>{" "}·{" "}
                           {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
                         </>
                       ) : transaction.reversedAt ? (
@@ -566,11 +566,6 @@ export default async function TransactionsPage({
                       <TransactionMatchForm
                         transactionId={transaction.id}
                         transactionAmount={transaction.amount}
-                        invoices={unpaidInvoices.map((invoice) => ({
-                          id: invoice.id,
-                          amount: invoice.amount,
-                          label: `${invoice.classShortCodeSnapshot ?? invoice.enrollment.classRoom.shortCode} · ${invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName} · ${formatMonth(invoice.month, invoice.year)} · ${formatCurrency(invoice.amount)}`
-                        }))}
                       />
                     </td>
                   </tr>

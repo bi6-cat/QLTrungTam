@@ -330,45 +330,33 @@ backup-guild.md
 
 ## 10. Quy trình update phiên bản mới
 
-Trên EC2:
+Không dùng `git pull` rồi khởi động app trước migration. Dùng script deploy có khóa chống chạy song song, backup đã kiểm tra, migration, đối soát dữ liệu và health check DB:
 
 ```bash
 cd /opt/QLTrungTam
-git pull
-docker compose --profile backup run --rm db-dump-backup
-docker compose up -d --build
+bash scripts/deploy-ec2.sh main
 ```
 
-Nếu có thay đổi schema Prisma:
-
-```bash
-docker compose --profile tools run --rm migrate
-docker compose up -d --build
-```
-
-Kiểm tra log:
-
-```bash
-docker compose logs -f app
-```
+Quy trình đầy đủ, cách bootstrap EC2 đang ở bản cũ và smoke test nằm trong `docs/EC2-UPDATE-ROLLBACK.md`.
 
 ## 11. Rollback nhanh
 
-Nếu deploy lỗi:
+Rollback về phiên bản thành công ngay trước:
 
 ```bash
-git log --oneline
-git checkout <commit-cu>
-docker compose up -d --build
+cd /opt/QLTrungTam
+bash scripts/rollback-ec2.sh
 ```
 
-Nếu DB cũng bị ảnh hưởng, restore backup theo `backup-guild.md`.
+Không tự restore DB chỉ vì rollback code. Nếu migration thật sự không tương thích, làm theo phần restore có xác nhận trong `docs/EC2-UPDATE-ROLLBACK.md`.
+Sau khi checkout commit cũ, dùng bản script đã được giữ tại `.deploy/restore-db-ec2.sh`, không dùng một bản script cũ trong working tree.
 
 ## 12. Checklist sau deploy
 
 Kiểm tra:
 
 - `https://tenmiencuaban.vn/login`
+- `http://127.0.0.1:3001/api/health` trả `{"status":"ok","database":"reachable"}`
 - Đăng nhập admin được
 - Trang Tổng quan hiển thị số liệu
 - Trang Lớp học mở được

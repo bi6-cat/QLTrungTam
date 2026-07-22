@@ -105,16 +105,18 @@ export default async function ClassesPage({
           <>
             {selectedClass ? (
               <>
-              <EditClassButton
-                classRoom={{
-                  id: selectedClass.id,
-                  name: selectedClass.name,
-                  shortCode: selectedClass.shortCode,
-                  teacherName: selectedClass.teacherName,
-                  pricePerSession: selectedClass.pricePerSession,
-                  sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault
-                }}
-              />
+              {!selectedClass.archivedAt ? (
+                <EditClassButton
+                  classRoom={{
+                    id: selectedClass.id,
+                    name: selectedClass.name,
+                    shortCode: selectedClass.shortCode,
+                    teacherName: selectedClass.teacherName,
+                    pricePerSession: selectedClass.pricePerSession,
+                    sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault
+                  }}
+                />
+              ) : null}
               {!selectedClass.archivedAt ? (
                 <CopyTeacherLinkButton
                   className={selectedClass.name}
@@ -313,6 +315,7 @@ export default async function ClassesPage({
                       selectedClass.sessionsPerMonthDefault;
                     return {
                       enrollmentId: enrollment.id,
+                      studentId: enrollment.student.id,
                       studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
                       phone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
                       studentArchived: Boolean(enrollment.student.archivedAt),

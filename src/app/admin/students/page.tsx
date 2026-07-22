@@ -5,6 +5,7 @@ import { createStudentAction } from "@/lib/actions";
 import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, Select, Textarea } from "@/components/ui";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditStudentButton } from "@/components/EditStudentButton";
+import { StudentExcelImportButton } from "@/components/StudentExcelImportButton";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,8 @@ export default async function StudentsPage({
   const params = await searchParams;
   const q = (params.q || "").trim();
   const classId = (params.classId || "").trim();
-  const requestedPage = Math.max(1, Number(params.page || 1));
+  const parsedPage = Number(params.page);
+  const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
   const showArchived = params.archived === "1";
   const filters: Prisma.StudentWhereInput[] = [
     { archivedAt: showArchived ? { not: null } : null }
@@ -82,6 +84,7 @@ export default async function StudentsPage({
               </Select>
               <Button type="submit" variant="secondary">Tìm</Button>
             </form>
+            {!showArchived ? <StudentExcelImportButton /> : null}
             <Link
               href={showArchived ? "/admin/students" : "/admin/students?archived=1"}
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
@@ -152,7 +155,12 @@ export default async function StudentsPage({
                 {students.map((student) => (
                   <tr key={student.id} className={student.archivedAt ? "bg-stone-50/70" : undefined}>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="font-semibold">{student.fullName}</div>
+                      <Link
+                        href={`/admin/students/${student.id}`}
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        {student.fullName}
+                      </Link>
                       {student.archivedAt ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
                       <div className="text-xs text-stone-500">{student.address}</div>
                     </td>
@@ -174,16 +182,18 @@ export default async function StudentsPage({
                     <td className="px-4 py-3 text-stone-600">{student.note || "-"}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <EditStudentButton
-                          student={{
-                            id: student.id,
-                            fullName: student.fullName,
-                            phone: student.phone,
-                            address: student.address,
-                            parentName: student.parentName,
-                            note: student.note
-                          }}
-                        />
+                        {!student.archivedAt ? (
+                          <EditStudentButton
+                            student={{
+                              id: student.id,
+                              fullName: student.fullName,
+                              phone: student.phone,
+                              address: student.address,
+                              parentName: student.parentName,
+                              note: student.note
+                            }}
+                          />
+                        ) : null}
                         <ArchiveEntityButton
                           kind="student"
                           entityId={student.id}

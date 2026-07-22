@@ -258,21 +258,6 @@ export async function createClassAction(formData: FormData) {
   revalidatePath("/admin/classes");
 }
 
-export async function deleteClassAction(formData: FormData) {
-  await requireAdmin();
-  const { id } = parseForm(idSchema, formData);
-  const [invoiceCount, monthCount] = await Promise.all([
-    prisma.monthlyInvoice.count({ where: { enrollment: { classId: id } } }),
-    prisma.enrollmentMonth.count({ where: { enrollment: { classId: id } } })
-  ]);
-  if (invoiceCount > 0 || monthCount > 0) {
-    throw new Error("Không thể xóa lớp đã có lịch sử theo tháng. Hãy lưu trữ lớp để giữ dữ liệu.");
-  }
-  await prisma.classRoom.delete({ where: { id } });
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin");
-}
-
 export async function archiveClassAction(formData: FormData) {
   const actor = await requireAdmin();
   try {
@@ -309,8 +294,8 @@ export async function updateClassAction(
     return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
   }
   try {
-    await prisma.classRoom.update({
-      where: { id: data.id },
+    const updated = await prisma.classRoom.updateMany({
+      where: { id: data.id, archivedAt: null },
       data: {
         name: data.name,
         teacherName: data.teacherName,
@@ -318,6 +303,9 @@ export async function updateClassAction(
         sessionsPerMonthDefault: data.sessionsPerMonthDefault
       }
     });
+    if (updated.count !== 1) {
+      return { error: "Lớp đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục lớp trước khi sửa.", ok: false };
+    }
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { error: "Mã lớp đã tồn tại, hãy chọn mã khác.", ok: false };
@@ -341,20 +329,6 @@ export async function createStudentAction(formData: FormData) {
       note: data.note
     }
   });
-  revalidatePath("/admin/students");
-}
-
-export async function deleteStudentAction(formData: FormData) {
-  await requireAdmin();
-  const { id } = parseForm(idSchema, formData);
-  const [invoiceCount, monthCount] = await Promise.all([
-    prisma.monthlyInvoice.count({ where: { enrollment: { studentId: id } } }),
-    prisma.enrollmentMonth.count({ where: { enrollment: { studentId: id } } })
-  ]);
-  if (invoiceCount > 0 || monthCount > 0) {
-    throw new Error("Không thể xóa học sinh đã có lịch sử theo tháng. Hãy lưu trữ hồ sơ để giữ dữ liệu.");
-  }
-  await prisma.student.delete({ where: { id } });
   revalidatePath("/admin/students");
 }
 
@@ -391,8 +365,8 @@ export async function updateStudentAction(
   if (error || !data) {
     return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
   }
-  await prisma.student.update({
-    where: { id: data.id },
+  const updated = await prisma.student.updateMany({
+    where: { id: data.id, archivedAt: null },
     data: {
       fullName: data.fullName,
       phone: data.phone,
@@ -401,6 +375,9 @@ export async function updateStudentAction(
       note: data.note
     }
   });
+  if (updated.count !== 1) {
+    return { error: "Học sinh đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục hồ sơ trước khi sửa.", ok: false };
+  }
   revalidatePath("/admin/students");
   revalidatePath("/admin/classes");
   return { error: "", ok: true };
