@@ -4,14 +4,7 @@ Các script này dành cho bản production chạy bằng `docker-compose.yml` t
 
 ## Deploy phiên bản mới
 
-Luôn gọi script qua `bash` như các lệnh bên dưới. Không chạy `chmod +x scripts/*-ec2.sh` trên một checkout production cũ: thay đổi mode của file Git có thể làm working tree bị đánh dấu dirty và chốt an toàn sẽ từ chối deploy.
-
-```bash
-cd /opt/QLTrungTam
-bash scripts/deploy-ec2.sh main
-```
-
-Nếu EC2 đang ở phiên bản cũ chưa có script, bootstrap riêng script từ remote để vẫn giữ được commit cũ làm mốc rollback:
+Khuyến nghị luôn bootstrap riêng script mới nhất từ đúng branch sắp phát hành. Cách này giữ nguyên commit cũ làm mốc rollback và không phụ thuộc script đang có trên EC2:
 
 ```bash
 cd /opt/QLTrungTam
@@ -22,18 +15,18 @@ APP_DIR="$PWD" bash /tmp/qltrungtam-deploy.sh main
 
 Không chạy `git pull` trước bước bootstrap này, vì như vậy script không còn xác định được commit đang chạy trước khi update.
 
-Deploy branch `main`:
+Nếu production chạy branch `dev`, thay toàn bộ `main` trong lệnh bootstrap bằng `dev`:
 
 ```bash
 cd /opt/QLTrungTam
-bash scripts/deploy-ec2.sh main
+git fetch origin dev
+git show origin/dev:scripts/deploy-ec2.sh > /tmp/qltrungtam-deploy.sh
+APP_DIR="$PWD" bash /tmp/qltrungtam-deploy.sh dev
 ```
 
-Nếu production chạy branch `dev`:
+Luôn gọi script qua `bash`. Không chạy `chmod +x scripts/*-ec2.sh` trên một checkout production cũ: thay đổi mode của file Git có thể làm working tree bị đánh dấu dirty và chốt an toàn sẽ từ chối deploy.
 
-```bash
-bash scripts/deploy-ec2.sh dev
-```
+Nếu EC2 đã checkout đúng target commit nhưng container chưa được dựng lại, sau khi xác minh commit có thể chạy lại bootstrap với `FORCE_DEPLOY=1`.
 
 Script sẽ thực hiện theo thứ tự:
 
