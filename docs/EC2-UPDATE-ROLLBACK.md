@@ -4,11 +4,11 @@ Các script này dành cho bản production chạy bằng `docker-compose.yml` t
 
 ## Deploy phiên bản mới
 
-Sau khi commit và push các script lên remote, nếu EC2 đã có thư mục `scripts/` thì lần đầu cấp quyền chạy (hoặc luôn gọi bằng `bash`):
+Luôn gọi script qua `bash` như các lệnh bên dưới. Không chạy `chmod +x scripts/*-ec2.sh` trên một checkout production cũ: thay đổi mode của file Git có thể làm working tree bị đánh dấu dirty và chốt an toàn sẽ từ chối deploy.
 
 ```bash
 cd /opt/QLTrungTam
-chmod +x scripts/*-ec2.sh
+bash scripts/deploy-ec2.sh main
 ```
 
 Nếu EC2 đang ở phiên bản cũ chưa có script, bootstrap riêng script từ remote để vẫn giữ được commit cũ làm mốc rollback:
