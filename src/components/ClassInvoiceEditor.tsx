@@ -29,6 +29,8 @@ type InvoiceRow = {
     statusReason: string | null;
   };
   defaultSessions: number;
+  /** Số buổi khôi phục khi bật lại "Đang học" từ trạng thái bảo lưu (số buổi đang là 0). */
+  fallbackSessions: number;
   pricePerSession: number;
   memoContent: string;
 };
@@ -273,7 +275,21 @@ export function ClassInvoiceEditor({
                     <td className="whitespace-nowrap px-2 py-3">
                       <div className="grid gap-1">
                         {editing && !planningLocked ? (
-                          <Select name={`status:${row.enrollmentId}`} defaultValue={row.monthlyStatus} className="w-full min-w-0">
+                          <Select
+                            name={`status:${row.enrollmentId}`}
+                            defaultValue={row.monthlyStatus}
+                            className="w-full min-w-0"
+                            onChange={(event) => {
+                              // Học sinh bảo lưu có số buổi 0; bật lại "Đang học" thì
+                              // khôi phục ngay mức mặc định để không phải nhớ nhập tay.
+                              if (event.target.value !== "active") return;
+                              setSessionDrafts((current) => {
+                                const draft = current[draftKey] ?? invoice?.sessions ?? row.defaultSessions;
+                                if (draft > 0) return current;
+                                return { ...current, [draftKey]: row.fallbackSessions };
+                              });
+                            }}
+                          >
                             <option value="active">Đang học</option>
                             <option value="on_leave">Bảo lưu</option>
                           </Select>
@@ -316,11 +332,12 @@ export function ClassInvoiceEditor({
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       {editing && !planningLocked ? (
+                        // Controlled để ô số buổi cập nhật được khi đổi trạng thái học.
                         <Input
                           name={`sessions:${row.enrollmentId}`}
                           type="number"
                           min="0"
-                          defaultValue={sessions}
+                          value={sessions}
                           onChange={(event) =>
                             setSessionDrafts((current) => ({
                               ...current,

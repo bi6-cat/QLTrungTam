@@ -322,6 +322,8 @@ export default async function ClassesPage({
                       monthlyStatus,
                       periodInitialized: Boolean(enrollmentMonth || invoice),
                       defaultSessions,
+                      fallbackSessions:
+                        enrollment.sessionsOverride ?? selectedClass.sessionsPerMonthDefault,
                       pricePerSession:
                         invoice?.pricePerSession ??
                         enrollmentMonth?.pricePerSession ??

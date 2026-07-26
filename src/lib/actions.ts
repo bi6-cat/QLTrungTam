@@ -627,13 +627,21 @@ export async function updateClassDetailsAction(formData: FormData) {
       const status =
         String(formData.get(`status:${enrollmentId}`)) === "on_leave" ? "on_leave" : "active";
       const requestedSessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
-      const sessions = status === "active" ? requestedSessions : 0;
+      // Học sinh đang bảo lưu có số buổi bằng 0, nên ô nhập trên form cũng là 0.
+      // Khi admin bật lại "Đang học" mà chưa kịp sửa số buổi thì tự khôi phục
+      // mức mặc định thay vì chặn thao tác — admin sửa lại sau nếu cần.
+      const fallbackSessions =
+        enrollment.sessionsOverride ?? enrollment.classRoom.sessionsPerMonthDefault;
+      const sessions =
+        status === "active" ? (requestedSessions > 0 ? requestedSessions : fallbackSessions) : 0;
       const periodPricePerSession =
         existingMonth?.pricePerSession ??
         existingInvoice?.pricePerSession ??
         enrollment.classRoom.pricePerSession;
       if (status === "active" && sessions <= 0) {
-        throw new Error(`Số buổi của ${enrollment.student.fullName} phải lớn hơn 0.`);
+        throw new Error(
+          `Không xác định được số buổi cho ${enrollment.student.fullName}. Hãy nhập số buổi lớn hơn 0.`
+        );
       }
 
       await tx.enrollmentMonth.upsert({
