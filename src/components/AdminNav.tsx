@@ -3,14 +3,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, FileSpreadsheet, LayoutDashboard, ReceiptText, Settings, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  FileSpreadsheet,
+  LayoutDashboard,
+  PiggyBank,
+  ReceiptText,
+  Settings,
+  Users,
+  Wallet
+} from "lucide-react";
 import { clsx } from "clsx";
 
 const nav = [
   { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/admin/classes", label: "Lớp học", icon: BookOpen },
   { href: "/admin/students", label: "Học sinh", icon: Users },
+  { href: "/admin/schedule", label: "Thời khóa biểu", icon: CalendarDays },
+  { href: "/admin/debts", label: "Công nợ", icon: Wallet },
   { href: "/admin/transactions", label: "Giao dịch", icon: ReceiptText },
+  { href: "/admin/finance", label: "Thu chi", icon: PiggyBank },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings }
 ];
