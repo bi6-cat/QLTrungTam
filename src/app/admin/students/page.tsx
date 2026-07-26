@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import { Archive, Plus, Users } from "lucide-react";
-import { createStudentAction } from "@/lib/actions";
-import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, Select, Textarea } from "@/components/ui";
+import { Badge, Button, EmptyState, Input, Panel, PageHeader, Select } from "@/components/ui";
+import { AddStudentForm } from "@/components/AddStudentForm";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditStudentButton } from "@/components/EditStudentButton";
 import { StudentExcelImportButton } from "@/components/StudentExcelImportButton";
@@ -98,31 +98,10 @@ export default async function StudentsPage({
 
       {!showArchived ? <Panel>
         <h2 className="font-bold">Thêm học sinh</h2>
-        <form action={createStudentAction} className="mt-4 grid gap-3 lg:grid-cols-4">
-          <Field label="Họ tên">
-            <Input name="fullName" required />
-          </Field>
-          <Field label="Số điện thoại">
-            <Input name="phone" required />
-          </Field>
-          <Field label="Phụ huynh">
-            <Input name="parentName" />
-          </Field>
-          <Field label="Địa chỉ">
-            <Input name="address" />
-          </Field>
-          <div className="lg:col-span-4">
-            <Field label="Ghi chú">
-              <Textarea name="note" />
-            </Field>
-          </div>
-          <div className="lg:col-span-4">
-            <Button type="submit">
-              <Plus className="h-4 w-4" />
-              Thêm học sinh
-            </Button>
-          </div>
-        </form>
+        <p className="mt-1 text-sm text-stone-600">
+          Hệ thống chặn tạo trùng khi cùng họ tên và số điện thoại với hồ sơ đã có.
+        </p>
+        <AddStudentForm />
       </Panel> : null}
 
       {students.length === 0 ? (

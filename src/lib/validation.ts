@@ -44,6 +44,21 @@ const optionalText = (max: number) =>
     .transform((v) => (v && v.length > 0 ? v : null));
 
 const requiredText = (label: string, max: number) => z.string().trim().min(1, label).max(max);
+
+/** Tên người: gom khoảng trắng thừa để so trùng không bị lệch vì gõ 2 dấu cách. */
+const personName = (label: string, max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1, label)
+    .max(max)
+    .transform((v) => v.replace(/\s+/g, " "));
+
+/** Giờ dạng HH:mm 24h. */
+const timeOfDay = z
+  .string()
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ phải có dạng HH:mm (VD 18:00)");
 const looseText = (max: number) =>
   z
     .string()
@@ -76,7 +91,13 @@ export const createClassSchema = z.object({
   shortCode,
   teacherName: looseText(120),
   pricePerSession: money,
-  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60)
+  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60),
+  teacherSharePercent: z.coerce
+    .number({ message: "Phần trăm phải là số" })
+    .int("Phần trăm phải là số nguyên")
+    .min(0, "Phần trăm không được âm")
+    .max(100, "Phần trăm tối đa là 100")
+    .catch(0)
 });
 
 export const updateClassSchema = z.object({
@@ -84,13 +105,19 @@ export const updateClassSchema = z.object({
   name: requiredText("Thiếu tên lớp", 120),
   teacherName: looseText(120),
   pricePerSession: money,
-  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60)
+  sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60),
+  teacherSharePercent: z.coerce
+    .number({ message: "Phần trăm phải là số" })
+    .int("Phần trăm phải là số nguyên")
+    .min(0, "Phần trăm không được âm")
+    .max(100, "Phần trăm tối đa là 100")
+    .catch(0)
 });
 
 export const idSchema = z.object({ id });
 
 export const createStudentSchema = z.object({
-  fullName: requiredText("Thiếu tên học sinh", 120),
+  fullName: personName("Thiếu tên học sinh", 120),
   phone,
   address: looseText(300),
   parentName: optionalText(120),
@@ -99,11 +126,42 @@ export const createStudentSchema = z.object({
 
 export const updateStudentSchema = z.object({
   id,
-  fullName: requiredText("Thiếu tên học sinh", 120),
+  fullName: personName("Thiếu tên học sinh", 120),
   phone,
   address: looseText(300),
   parentName: optionalText(120),
   note: optionalText(1000)
+});
+
+export const createScheduleSchema = z.object({
+  classId: id,
+  weekday: z.coerce.number().int().min(1, "Chọn thứ").max(7, "Chọn thứ"),
+  startTime: timeOfDay,
+  endTime: timeOfDay,
+  room: looseText(60),
+  note: optionalText(200)
+});
+
+export const expenseSchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
+  category: z
+    .enum(["teacher_salary", "rent", "utilities", "supplies", "marketing", "other"])
+    .catch("other"),
+  classId: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  description: requiredText("Thiếu nội dung chi phí", 200),
+  amount: money.refine((v) => v > 0, "Số tiền phải lớn hơn 0"),
+  note: optionalText(500)
+});
+
+export const generateSalarySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100)
 });
 
 export const enrollmentSchema = z

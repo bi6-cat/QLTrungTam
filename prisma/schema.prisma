@@ -24,21 +24,76 @@ enum PaymentMethod {
   cash
 }
 
+enum ExpenseCategory {
+  teacher_salary
+  rent
+  utilities
+  supplies
+  marketing
+  other
+}
+
 model ClassRoom {
-  id                      String       @id @default(cuid())
+  id                      String          @id @default(cuid())
   name                    String
-  shortCode               String       @unique
-  publicToken             String       @unique @default(cuid())
-  teacherName             String       @default("")
+  shortCode               String          @unique
+  publicToken             String          @unique @default(cuid())
+  teacherName             String          @default("")
   pricePerSession         Int
   sessionsPerMonthDefault Int
+  /// Phần trăm học phí đã thu của lớp được trả cho giáo viên (0–100).
+  teacherSharePercent     Int             @default(0)
   archivedAt              DateTime?
-  createdAt               DateTime     @default(now())
+  createdAt               DateTime        @default(now())
   enrollments             Enrollment[]
+  schedules               ClassSchedule[]
+  expenses                Expense[]
 
   @@index([shortCode])
   @@index([publicToken])
   @@index([archivedAt])
+}
+
+/// Lịch học cố định lặp theo tuần của một lớp.
+model ClassSchedule {
+  id        String    @id @default(cuid())
+  classId   String
+  /// 1 = Thứ 2 … 7 = Chủ nhật (theo ISO-8601).
+  weekday   Int
+  /// Giờ dạng "HH:mm" 24h.
+  startTime String
+  endTime   String
+  room      String    @default("")
+  note      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  classRoom ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, weekday, startTime])
+  @@index([classId])
+  @@index([weekday])
+}
+
+/// Chi phí vận hành theo tháng (lương giáo viên, thuê nhà, điện nước…).
+model Expense {
+  id             String          @id @default(cuid())
+  month          Int
+  year           Int
+  category       ExpenseCategory @default(other)
+  classId        String?
+  description    String
+  amount         Int
+  /// Chỉ dùng khi category = teacher_salary: % chia và số tiền gốc đã dùng để tính.
+  sharePercent   Int?
+  baseAmount     Int?
+  note           String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  classRoom      ClassRoom?      @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@index([year, month])
+  @@index([category, year, month])
+  @@index([classId])
 }
 
 model Student {
