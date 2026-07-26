@@ -31,9 +31,12 @@ import {
   assignTransactionSchema,
   changePasswordSchema,
   createClassSchema,
+  createScheduleSchema,
   createStudentSchema,
   enrollmentSchema,
+  expenseSchema,
   generateInvoicesSchema,
+  generateSalarySchema,
   idSchema,
   loginSchema,
   markCashSchema,
@@ -239,6 +242,7 @@ export async function createClassAction(formData: FormData) {
           teacherName: data.teacherName,
           pricePerSession: data.pricePerSession,
           sessionsPerMonthDefault: data.sessionsPerMonthDefault,
+          teacherSharePercent: data.teacherSharePercent,
           publicToken: generatePublicToken(attempt < 10 ? undefined : 6)
         }
       });
@@ -300,7 +304,8 @@ export async function updateClassAction(
         name: data.name,
         teacherName: data.teacherName,
         pricePerSession: data.pricePerSession,
-        sessionsPerMonthDefault: data.sessionsPerMonthDefault
+        sessionsPerMonthDefault: data.sessionsPerMonthDefault,
+        teacherSharePercent: data.teacherSharePercent
       }
     });
     if (updated.count !== 1) {
@@ -317,19 +322,71 @@ export async function updateClassAction(
   return { error: "", ok: true };
 }
 
-export async function createStudentAction(formData: FormData) {
+// File này có "use server" nên chỉ được export async function; hằng số khởi tạo
+// state phải nằm ở module khác (@/lib/action-states).
+export type CreateStudentState = { error: string; warning: string; success: string };
+
+/**
+ * Thêm học sinh thủ công, chặn trùng hồ sơ.
+ *
+ * - Trùng cả tên lẫn SĐT  -> chặn hẳn (gần như chắc chắn là nhập lặp).
+ * - Trùng ở hồ sơ đã lưu trữ -> chặn, hướng dẫn khôi phục thay vì tạo bản sao.
+ * - Chỉ trùng SĐT (khác tên) -> vẫn tạo, kèm cảnh báo vì anh chị em dùng chung
+ *   số phụ huynh là bình thường, nhưng cùng lớp thì memo sẽ đụng nhau.
+ */
+export async function createStudentAction(
+  _prevState: CreateStudentState,
+  formData: FormData
+): Promise<CreateStudentState> {
   await requireAdmin();
-  const data = parseForm(createStudentSchema, formData);
-  await prisma.student.create({
+  const { data, error } = safeParseForm(createStudentSchema, formData);
+  if (error || !data) {
+    return { warning: "", success: "", error: error ?? "Dữ liệu không hợp lệ." };
+  }
+
+  const samePhone = await prisma.student.findMany({
+    where: { phone: data.phone },
+    select: { id: true, fullName: true, archivedAt: true },
+    take: 20
+  });
+
+  const normalized = data.fullName.toLocaleLowerCase("vi");
+  const duplicate = samePhone.find(
+    (student) => student.fullName.toLocaleLowerCase("vi") === normalized
+  );
+  if (duplicate) {
+    return {
+      warning: "",
+      success: "",
+      error: duplicate.archivedAt
+        ? `"${duplicate.fullName}" (${data.phone}) đã có trong hồ sơ lưu trữ. Hãy khôi phục hồ sơ đó thay vì tạo mới.`
+        : `"${duplicate.fullName}" (${data.phone}) đã tồn tại. Không tạo thêm hồ sơ trùng.`
+    };
+  }
+
+  const created = await prisma.student.create({
     data: {
       fullName: data.fullName,
       phone: data.phone,
       address: data.address,
       parentName: data.parentName,
       note: data.note
-    }
+    },
+    select: { fullName: true }
   });
+
+  const activeSiblings = samePhone.filter((student) => !student.archivedAt);
   revalidatePath("/admin/students");
+  return {
+    error: "",
+    success: `Đã thêm ${created.fullName}.`,
+    warning:
+      activeSiblings.length > 0
+        ? `SĐT ${data.phone} đang dùng cho ${activeSiblings
+            .map((student) => student.fullName)
+            .join(", ")}. Nếu là anh chị em thì bình thường, nhưng tránh xếp chung một lớp vì nội dung chuyển khoản sẽ trùng nhau.`
+        : ""
+  };
 }
 
 export async function archiveStudentAction(formData: FormData) {
@@ -807,6 +864,197 @@ export async function unassignTransactionAction(
   } catch (ledgerError) {
     return transactionActionFailure(ledgerError);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Thời khoá biểu
+// ---------------------------------------------------------------------------
+
+function revalidateSchedulePaths() {
+  revalidatePath("/admin/schedule");
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/finance");
+  revalidatePath("/teacher/classes/[short_code]", "page");
+}
+
+export async function createScheduleAction(
+  _prevState: EditState,
+  formData: FormData
+): Promise<EditState> {
+  await requireAdmin();
+  const { data, error } = safeParseForm(createScheduleSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+  if (data.endTime <= data.startTime) {
+    return { error: "Giờ kết thúc phải sau giờ bắt đầu.", ok: false };
+  }
+
+  const classRoom = await prisma.classRoom.findUnique({
+    where: { id: data.classId },
+    select: { archivedAt: true }
+  });
+  if (!classRoom) return { error: "Không tìm thấy lớp học.", ok: false };
+  if (classRoom.archivedAt) return { error: "Không thể xếp lịch cho lớp đã lưu trữ.", ok: false };
+
+  try {
+    await prisma.classSchedule.create({
+      data: {
+        classId: data.classId,
+        weekday: data.weekday,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        room: data.room,
+        note: data.note
+      }
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { error: "Lớp này đã có buổi học trùng thứ và giờ bắt đầu.", ok: false };
+    }
+    throw e;
+  }
+
+  revalidateSchedulePaths();
+  return { error: "", ok: true };
+}
+
+export async function deleteScheduleAction(formData: FormData) {
+  await requireAdmin();
+  const { id } = parseForm(idSchema, formData);
+  await prisma.classSchedule.deleteMany({ where: { id } });
+  revalidateSchedulePaths();
+}
+
+// ---------------------------------------------------------------------------
+// Thu chi
+// ---------------------------------------------------------------------------
+
+function revalidateFinancePaths() {
+  revalidatePath("/admin/finance");
+  revalidatePath("/admin");
+}
+
+export async function createExpenseAction(
+  _prevState: EditState,
+  formData: FormData
+): Promise<EditState> {
+  await requireAdmin();
+  const { data, error } = safeParseForm(expenseSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+
+  if (data.classId) {
+    const exists = await prisma.classRoom.findUnique({
+      where: { id: data.classId },
+      select: { id: true }
+    });
+    if (!exists) return { error: "Không tìm thấy lớp học đã chọn.", ok: false };
+  }
+
+  await prisma.expense.create({
+    data: {
+      month: data.month,
+      year: data.year,
+      category: data.category,
+      classId: data.classId,
+      description: data.description,
+      amount: data.amount,
+      note: data.note
+    }
+  });
+
+  revalidateFinancePaths();
+  return { error: "", ok: true };
+}
+
+export async function deleteExpenseAction(formData: FormData) {
+  await requireAdmin();
+  const { id } = parseForm(idSchema, formData);
+  await prisma.expense.deleteMany({ where: { id } });
+  revalidateFinancePaths();
+}
+
+export type SalaryGenerationState = { error: string; success: string };
+
+/**
+ * Tạo bản ghi lương giáo viên cho tháng được chọn.
+ *
+ * Lương = % chia của lớp × học phí **đã thu** trong tháng đó. Dùng tiền đã thu
+ * (không phải tiền đã phát hành) để trung tâm không phải ứng lương cho khoản
+ * phụ huynh còn nợ. Lớp nào đã có bản ghi lương trong tháng thì bỏ qua, nên bấm
+ * lại nhiều lần không sinh trùng — muốn tính lại thì xoá bản ghi cũ trước.
+ */
+export async function generateTeacherSalaryAction(
+  _prevState: SalaryGenerationState,
+  formData: FormData
+): Promise<SalaryGenerationState> {
+  await requireAdmin();
+  const { data, error } = safeParseForm(generateSalarySchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  const { month, year } = data;
+  const [classes, existing] = await Promise.all([
+    prisma.classRoom.findMany({
+      where: { teacherSharePercent: { gt: 0 } },
+      select: {
+        id: true,
+        name: true,
+        teacherName: true,
+        teacherSharePercent: true,
+        enrollments: {
+          select: {
+            invoices: {
+              where: { month, year, status: "paid" },
+              select: { amount: true }
+            }
+          }
+        }
+      }
+    }),
+    prisma.expense.findMany({
+      where: { month, year, category: "teacher_salary", classId: { not: null } },
+      select: { classId: true }
+    })
+  ]);
+
+  const alreadyPaid = new Set(existing.map((row) => row.classId));
+  const pending = classes.filter((classRoom) => !alreadyPaid.has(classRoom.id));
+
+  const rows = pending
+    .map((classRoom) => {
+      const baseAmount = classRoom.enrollments
+        .flatMap((enrollment) => enrollment.invoices)
+        .reduce((sum, invoice) => sum + invoice.amount, 0);
+      return {
+        month,
+        year,
+        category: "teacher_salary" as const,
+        classId: classRoom.id,
+        description: `Lương ${classRoom.teacherName || "giáo viên"} · ${classRoom.name} (${classRoom.teacherSharePercent}% đã thu)`,
+        amount: Math.round((baseAmount * classRoom.teacherSharePercent) / 100),
+        sharePercent: classRoom.teacherSharePercent,
+        baseAmount
+      };
+    })
+    .filter((row) => row.amount > 0);
+
+  if (rows.length === 0) {
+    let reason: string;
+    if (classes.length === 0) {
+      reason = "Chưa lớp nào khai % chia cho giáo viên. Vào Lớp học → Sửa lớp để nhập.";
+    } else if (pending.length === 0) {
+      reason = "Tất cả lớp đã có bản ghi lương trong tháng này.";
+    } else {
+      reason = `Chưa thu được học phí nào trong tháng ${month}/${year} nên chưa có cơ sở tính lương.`;
+    }
+    return { error: reason, success: "" };
+  }
+
+  await prisma.expense.createMany({ data: rows });
+  revalidateFinancePaths();
+  const total = rows.reduce((sum, row) => sum + row.amount, 0);
+  return {
+    error: "",
+    success: `Đã tạo ${rows.length} bản ghi lương cho tháng ${month}/${year}, tổng ${total.toLocaleString("vi-VN")}đ.`
+  };
 }
 
 export async function reverseTransactionAction(
