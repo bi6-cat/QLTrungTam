@@ -9,3 +9,4 @@ db_data
 backups
 .deploy
 *.tsbuildinfo
+secrets/
