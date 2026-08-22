@@ -21,14 +21,25 @@ services:
         max-file: "3"
 
   db:
-    image: postgres:16
+    build:
+      context: ./postgres
+    image: qltrungtam-postgres-pgbackrest:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-hoctro}
-      POSTGRES_USER: ${POSTGRES_USER:-hoctro}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - "archive_command=pgbackrest --stanza=qltrungtam archive-push %p"
+      - -c
+      - archive_timeout=60
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
       - ../../monitoring/postgresql/init-pg-exporter.sh:/docker-entrypoint-initdb.d/init-pg-exporter.sh:ro
     secrets:
       - postgres_exporter_password
