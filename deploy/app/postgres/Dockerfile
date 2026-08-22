@@ -1,4 +1,4 @@
-FROM postgres:16-bookworm
+FROM postgres:16-trixie
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends pgbackrest ca-certificates \
