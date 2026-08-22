@@ -39,7 +39,7 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./monitoring/postgres/init-pg-exporter.sh:/docker-entrypoint-initdb.d/init-pg-exporter.sh:ro
+      - ./monitoring/postgresql/init-pg-exporter.sh:/docker-entrypoint-initdb.d/init-pg-exporter.sh:ro
     secrets:
       - postgres_exporter_password
     healthcheck:
