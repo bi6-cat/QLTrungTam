@@ -110,23 +110,6 @@ services:
       db:
         condition: service_healthy
 
-  db-dump-backup:
-    image: postgres:16
-    profiles: ["backup"]
-    environment:
-      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-hoctro}
-      POSTGRES_USER: ${POSTGRES_USER:-hoctro}
-    volumes:
-      - ../../backups:/backups
-    command: >
-      sh -c 'mkdir -p /backups &&
-      pg_dump -h db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c
-      -f "/backups/$${POSTGRES_DB}-$$(date +%Y%m%d-%H%M%S).dump"'
-    depends_on:
-      db:
-        condition: service_healthy
-
 volumes:
   db_data:
     name: qltrungtam_db_data
