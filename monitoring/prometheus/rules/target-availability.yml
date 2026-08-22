@@ -1,0 +1,30 @@
+groups:
+  - name: target-availability
+    rules:
+      - alert: ExporterDown
+        expr: up{job=~"node|postgres|blackbox"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: monitoring
+          environment: local
+          owner: sre
+        annotations:
+          summary: "Exporter {{ $labels.job }} is unavailable"
+          description: "Prometheus has failed to scrape {{ $labels.instance }} for at least 1 minute."
+          runbook_url: "https://example.invalid/runbooks/exporter-down"
+          dashboard_url: "http://127.0.0.1:9090/targets"
+
+      - alert: ApplicationEndpointDown
+        expr: probe_success{job="app-probe"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: qltrungtam
+          environment: local
+          owner: sre
+        annotations:
+          summary: "QLTrungTam health endpoint is unavailable"
+          description: "Blackbox probe to {{ $labels.instance }} has failed continuously for at least 1 minute."
+          runbook_url: "https://example.invalid/runbooks/application-endpoint-down"
+          dashboard_url: "http://127.0.0.1:3002/d/qltt-sre-overview"

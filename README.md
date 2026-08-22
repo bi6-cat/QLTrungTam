@@ -7,13 +7,17 @@ Web app quản lý trung tâm dạy thêm và thu học phí bằng VietQR/SePay
 Máy host không cần cài Node.js.
 
 ```bash
-docker compose -f docker-compose.dev.yml up
+# Chỉ cần chạy một lần cho local observability.
+docker network create qltrungtam-observability
+
+docker compose -f docker-compose.app.dev.yml up -d
+docker compose -f docker-compose.monitoring.dev.yml up -d
 ```
 
 Lần đầu container `app` sẽ:
 
 - `npm install`
-- `prisma db push`
+- `prisma migrate deploy`
 - seed admin, 3 lớp mẫu, học sinh mẫu và hóa đơn tháng hiện tại
 - chạy Next.js dev server tại `http://localhost:3001`
 
@@ -21,6 +25,27 @@ Tài khoản seed:
 
 - Username: `admin`
 - Password: `admin123`
+
+## Monitoring local
+
+- App: <http://127.0.0.1:3001>
+- Grafana: <http://127.0.0.1:3002>
+- Prometheus: <http://127.0.0.1:9090>
+
+Hai Compose local là hai project độc lập, cùng dùng Docker network
+`qltrungtam-observability`. App stack chạy `app`, PostgreSQL,
+`node-exporter` và `postgres-exporter`; Monitoring stack chạy Prometheus,
+Grafana, Alertmanager và Blackbox exporter.
+
+Kiểm tra nhanh sau khi khởi động:
+
+```bash
+docker compose -f docker-compose.app.dev.yml ps
+docker compose -f docker-compose.monitoring.dev.yml ps
+```
+
+Không dùng `down -v` trừ khi chủ đích xóa toàn bộ dữ liệu local trong named
+volumes.
 
 ## Các đường dẫn chính
 

@@ -1,0 +1,136 @@
+name: qltrungtam
+
+services:
+  app:
+    build: ../..
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3001:3000"
+    env_file: ../../.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    build:
+      context: ./postgres
+    image: qltrungtam-postgres-pgbackrest:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - "archive_command=pgbackrest --stanza=qltrungtam archive-push %p"
+      - -c
+      - archive_timeout=60
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ../../monitoring/postgresql/init-pg-exporter.sh:/docker-entrypoint-initdb.d/init-pg-exporter.sh:ro
+    secrets:
+      - postgres_exporter_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hoctro} -d ${POSTGRES_DB:-hoctro}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
+    ports:
+      - "10.77.0.1:9100:9100"
+    volumes:
+      - /:/host:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 100
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1@sha256:e96064f876226d94bb6ce48a4c4b3dd76edba91168ec1ab024e5c4b959310b0f
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: "db:5432/${POSTGRES_DB:-hoctro}?sslmode=disable"
+      DATA_SOURCE_USER: postgres_exporter
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_exporter_password
+      PG_EXPORTER_COLLECTION_TIMEOUT: 10s
+    secrets:
+      - postgres_exporter_password
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "10.77.0.1:9187:9187"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 100
+
+  migrate:
+    image: node:22-alpine
+    profiles: ["tools"]
+    working_dir: /app
+    command: sh -c "npm ci && npx prisma migrate deploy"
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    volumes:
+      - ../..:/app
+      - node_modules_tools:/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db-dump-backup:
+    image: postgres:16
+    profiles: ["backup"]
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-hoctro}
+      POSTGRES_USER: ${POSTGRES_USER:-hoctro}
+    volumes:
+      - ../../backups:/backups
+    command: >
+      sh -c 'mkdir -p /backups &&
+      pg_dump -h db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c
+      -f "/backups/$${POSTGRES_DB}-$$(date +%Y%m%d-%H%M%S).dump"'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+    name: qltrungtam_db_data
+  node_modules_tools:
+
+secrets:
+  postgres_exporter_password:
+    file: ../../secrets/postgres_exporter_password.txt
