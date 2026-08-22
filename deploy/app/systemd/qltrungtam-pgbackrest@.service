@@ -1,0 +1,16 @@
+[Unit]
+Description=QLTrungTam pgBackRest %i backup
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+ConditionPathExists=/opt/QLTrungTam/.env
+ConditionPathExists=/opt/QLTrungTam/deploy/app/docker-compose.yml
+
+[Service]
+Type=oneshot
+User=ubuntu
+SupplementaryGroups=docker
+WorkingDirectory=/opt/QLTrungTam
+UMask=0077
+TimeoutStartSec=4h
+ExecStart=/usr/bin/flock --nonblock --conflict-exit-code=75 /run/lock/qltrungtam-pgbackrest.lock /usr/bin/docker compose --env-file /opt/QLTrungTam/.env -f /opt/QLTrungTam/deploy/app/docker-compose.yml exec -T --user postgres db pgbackrest --stanza=qltrungtam --type=%i backup
