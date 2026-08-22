@@ -13,6 +13,7 @@ type ClassInfo = {
   teacherName: string;
   pricePerSession: number;
   sessionsPerMonthDefault: number;
+  teacherSharePercent: number;
 };
 
 export function EditClassButton({ classRoom }: { classRoom: ClassInfo }) {
@@ -76,6 +77,16 @@ function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose
             />
           </Field>
         </div>
+        <Field label="% lương giáo viên" hint="Phần trăm học phí đã thu của lớp">
+          <Input
+            name="teacherSharePercent"
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            defaultValue={classRoom.teacherSharePercent}
+          />
+        </Field>
         {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}
         <div className="mt-1 flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>

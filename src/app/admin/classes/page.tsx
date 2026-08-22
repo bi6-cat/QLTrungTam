@@ -113,7 +113,8 @@ export default async function ClassesPage({
                     shortCode: selectedClass.shortCode,
                     teacherName: selectedClass.teacherName,
                     pricePerSession: selectedClass.pricePerSession,
-                    sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault
+                    sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault,
+                    teacherSharePercent: selectedClass.teacherSharePercent
                   }}
                 />
               ) : null}
@@ -220,6 +221,9 @@ export default async function ClassesPage({
                   <Input name="sessionsPerMonthDefault" type="number" min="1" defaultValue="8" required />
                 </Field>
               </div>
+              <Field label="% lương GV" hint="% học phí đã thu, nhập sau cũng được">
+                <Input name="teacherSharePercent" type="number" min="0" max="100" defaultValue="0" />
+              </Field>
               <Button type="submit">
                 <Plus className="h-4 w-4" />
                 Tạo lớp
@@ -322,6 +326,8 @@ export default async function ClassesPage({
                       monthlyStatus,
                       periodInitialized: Boolean(enrollmentMonth || invoice),
                       defaultSessions,
+                      fallbackSessions:
+                        enrollment.sessionsOverride ?? selectedClass.sessionsPerMonthDefault,
                       pricePerSession:
                         invoice?.pricePerSession ??
                         enrollmentMonth?.pricePerSession ??

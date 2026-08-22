@@ -1,0 +1,105 @@
+name: qltrungtam-app-dev
+
+services:
+  app:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "apk add --no-cache tzdata && npm install && npx prisma generate && npx prisma migrate deploy && npm run prisma:seed && npm run dev"
+    ports:
+      - "127.0.0.1:3001:3000"
+    env_file: .env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    networks:
+      - default
+      - observability
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./monitoring/postgres/init-pg-exporter.sh:/docker-entrypoint-initdb.d/init-pg-exporter.sh:ro
+    secrets:
+      - postgres_exporter_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
+    volumes:
+      - /:/host:ro
+    networks:
+      - observability
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 100
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1@sha256:e96064f876226d94bb6ce48a4c4b3dd76edba91168ec1ab024e5c4b959310b0f
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: "db:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}?sslmode=disable"
+      DATA_SOURCE_USER: postgres_exporter
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_exporter_password
+      PG_EXPORTER_COLLECTION_TIMEOUT: 10s
+    secrets:
+      - postgres_exporter_password
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - observability
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 100
+
+volumes:
+  db_data:
+  node_modules:
+  next_cache:
+
+networks:
+  observability:
+    name: qltrungtam-observability
+    external: true
+
+secrets:
+  postgres_exporter_password:
+    file: ./secrets/postgres_exporter_password.txt
