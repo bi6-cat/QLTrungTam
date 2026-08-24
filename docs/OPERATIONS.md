@@ -100,6 +100,8 @@ IMDSv2, không lưu AWS access key trong `.env`.
 - 10 alert rules healthy/inactive tại lần go-live.
 - Prometheus thấy Alertmanager active, dropped rỗng.
 - Grafana public HTTPS hoạt động.
+- Dashboard `QLTrungTam SRE Overview` được provision từ Git với health, resource,
+  HTTP probe, PostgreSQL, WAL và backup panels.
 
 Restore drill kiểm tra WAL replay/promote, `pg_is_in_recovery()=false`, 11 migrations,
 row-count sanity và full `pg_dump`; container/volume drill đã cleanup và production DB
@@ -108,7 +110,7 @@ vẫn healthy.
 ## Việc còn mở
 
 1. Cấu hình Discord receiver và test cả firing/resolved.
-2. Version-control dashboard và liên kết alert tới runbook.
+2. Liên kết alert annotations tới runbook phù hợp.
 3. Kiểm tra resource usage/retention sau đủ chu kỳ bảy ngày.
 4. Viết CI; CD làm sau bằng GitHub OIDC + AWS SSM có approval.
 5. Rotate DB/admin/session/API secrets sau maintenance planning.

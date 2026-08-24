@@ -106,6 +106,19 @@ mount, tránh lệch schema giữa tài liệu latest và phiên bản productio
 
 ## Grafana và Caddy
 
+Dashboard `QLTrungTam SRE Overview` được quản lý tại
+`monitoring/grafana/dashboards/sre-overview.json` và gồm:
+
+- Target, PostgreSQL, application, firing alert và textfile health.
+- Full/diff backup status, age và duration.
+- CPU, memory, root filesystem và network throughput.
+- HTTP status/probe duration.
+- PostgreSQL connections/size và WAL archive health.
+
+Grafana provider quét file mỗi 30 giây. Sau khi pull commit mới trên Monitoring VM,
+dashboard sẽ tự cập nhật mà không cần sửa trực tiếp trong UI hoặc restart Grafana.
+Nếu không cập nhật, kiểm tra Grafana logs và mount `/etc/grafana/dashboards`.
+
 ```bash
 systemctl is-active caddy
 sudo caddy validate \
