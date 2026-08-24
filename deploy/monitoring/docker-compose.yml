@@ -108,6 +108,8 @@ services:
       - --enable-feature=utf8-strict-mode
     ports:
       - "127.0.0.1:9093:9093"
+    secrets:
+      - alertmanager_discord_webhook_url
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
@@ -168,3 +170,5 @@ volumes:
 secrets:
   grafana_admin_password:
     file: ../../secrets/grafana_admin_password.txt
+  alertmanager_discord_webhook_url:
+    file: ../../secrets/alertmanager_discord_webhook_url.txt

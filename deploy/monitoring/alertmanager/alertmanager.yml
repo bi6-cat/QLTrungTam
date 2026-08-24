@@ -2,7 +2,7 @@ global:
   resolve_timeout: 5m
 
 route:
-  receiver: null-receiver
+  receiver: discord
   group_by:
     - alertname
     - instance
@@ -12,4 +12,18 @@ route:
   repeat_interval: 4h
 
 receivers:
-  - name: null-receiver
+  - name: discord
+    discord_configs:
+      - webhook_url_file: /run/secrets/alertmanager_discord_webhook_url
+        send_resolved: true
+        title: '{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }}: {{ .CommonLabels.alertname }}'
+        message: |-
+          **Severity:** `{{ .CommonLabels.severity }}`
+          **Service:** `{{ .CommonLabels.service }}`
+          **Environment:** `{{ .CommonLabels.environment }}`
+
+          {{ range .Alerts -}}
+          **{{ .Annotations.summary }}**
+          {{ .Annotations.description }}
+          {{ with .Labels.instance }}Instance: `{{ . }}`{{ end }}
+          {{ end }}
