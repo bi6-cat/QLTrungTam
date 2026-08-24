@@ -1,108 +1,71 @@
-# QL Trung Tâm
+# QLTrungTam
 
-Web app quản lý trung tâm dạy thêm và thu học phí bằng VietQR/SePay.
+Ứng dụng quản lý trung tâm dạy thêm và thu học phí qua VietQR/SePay, xây dựng bằng
+Next.js, Prisma và PostgreSQL.
 
-## Chạy nhanh bằng Docker
+## Chạy local bằng Docker
 
-Máy host không cần cài Node.js.
+Yêu cầu Docker Engine/Desktop có Compose plugin. Host không cần cài Node.js.
 
-```bash
-# Chỉ cần chạy một lần cho local observability.
+```powershell
+Copy-Item .env.example .env
+New-Item -ItemType Directory -Force secrets | Out-Null
+[guid]::NewGuid().ToString("N") | Set-Content -NoNewline secrets/postgres_exporter_password.txt
+[guid]::NewGuid().ToString("N") | Set-Content -NoNewline secrets/grafana_admin_password.txt
 docker network create qltrungtam-observability
-
 docker compose -f docker-compose.app.dev.yml up -d
 docker compose -f docker-compose.monitoring.dev.yml up -d
 ```
 
-Lần đầu container `app` sẽ:
+Nếu network đã tồn tại, `docker network create` sẽ báo lỗi vô hại; không cần tạo lại.
+`.env.example` và credential sinh ở trên chỉ dành cho local. Trước khi seed, kiểm tra
+`SEED_DEMO`; giá trị khác `false` cho phép seed dữ liệu demo.
 
-- `npm install`
-- `prisma migrate deploy`
-- seed admin, 3 lớp mẫu, học sinh mẫu và hóa đơn tháng hiện tại
-- chạy Next.js dev server tại `http://localhost:3001`
+Kiểm tra:
 
-Tài khoản seed:
-
-- Username: `admin`
-- Password: `admin123`
-
-## Monitoring local
-
-- App: <http://127.0.0.1:3001>
-- Grafana: <http://127.0.0.1:3002>
-- Prometheus: <http://127.0.0.1:9090>
-
-Hai Compose local là hai project độc lập, cùng dùng Docker network
-`qltrungtam-observability`. App stack chạy `app`, PostgreSQL,
-`node-exporter` và `postgres-exporter`; Monitoring stack chạy Prometheus,
-Grafana, Alertmanager và Blackbox exporter.
-
-Kiểm tra nhanh sau khi khởi động:
-
-```bash
+```powershell
 docker compose -f docker-compose.app.dev.yml ps
 docker compose -f docker-compose.monitoring.dev.yml ps
 ```
 
-Không dùng `down -v` trừ khi chủ đích xóa toàn bộ dữ liệu local trong named
-volumes.
+Endpoints local:
 
-## Các đường dẫn chính
+- App: <http://127.0.0.1:3001>
+- Grafana: <http://127.0.0.1:3002>
+- Prometheus: <http://127.0.0.1:9090>
+- PostgreSQL: `127.0.0.1:5433`
 
-- Admin: `http://localhost:3001/admin`
-- Đăng nhập: `http://localhost:3001/login`
-- Trang phụ huynh / giáo viên: link chứa **token ngẫu nhiên** cho mỗi lớp, lấy bằng nút "Copy Zalo phụ huynh" / "Link giáo viên" trong màn Lớp học (dạng `/pay/<token>`, `/teacher/classes/<token>`). Không còn dùng mã lớp trong URL để tránh dò đoán.
-- Webhook SePay: `POST http://localhost:3001/api/webhook/sepay`
+Không chạy `docker compose down -v` nếu muốn giữ dữ liệu trong named volumes.
 
-## Test webhook nhanh
-
-Sau khi có hóa đơn chưa đóng với memo `HP L10A 0912345678 T7`, gửi payload mẫu:
+## Lệnh kiểm tra chất lượng
 
 ```bash
-curl -X POST http://localhost:3001/api/webhook/sepay \
-  -H "Content-Type: application/json" \
-  -d "{\"id\":\"test-001\",\"content\":\"HP L10A 0912345678 T7\",\"amount\":1200000}"
+npm ci
+npm run prisma:validate
+npm run typecheck
+npm test
+npm run build
 ```
 
-Nếu bạn đặt `SEPAY_WEBHOOK_SECRET`, thêm header:
+Integration tests cần database test theo hướng dẫn trong [tests/README.md](tests/README.md).
+
+## Tài liệu
+
+- [Tổng quan vận hành, kiến trúc, security và checklist](docs/OPERATIONS.md)
+- [Deploy/rollback](docs/runbooks/APP-DEPLOY-ROLLBACK.md)
+- [Backup/restore PostgreSQL](docs/runbooks/POSTGRES-BACKUP-RESTORE.md)
+- [Monitoring](docs/runbooks/MONITORING.md)
+
+## Quy ước production quan trọng
+
+App production luôn dùng:
 
 ```bash
--H "x-sepay-secret: <secret>"
+docker compose \
+  --env-file /opt/QLTrungTam/.env \
+  -f /opt/QLTrungTam/deploy/app/docker-compose.yml \
+  <command>
 ```
 
-## Biến môi trường
-
-Sao chép `.env.example` thành `.env` nếu cần đổi cấu hình.
-
-- `DATABASE_URL`: PostgreSQL connection string
-- `DB_PASSWORD`: mật khẩu Postgres trong Docker
-- `ADMIN_USERNAME`: tên đăng nhập admin
-- `ADMIN_PASSWORD`: mật khẩu seed nếu chưa có `ADMIN_PASSWORD_HASH`
-- `ADMIN_PASSWORD_HASH`: hash dạng `scrypt:<salt>:<hash>`
-- `SESSION_SECRET`: khóa ký session cookie
-- `SEPAY_API_KEY` / `SEPAY_WEBHOOK_SECRET`: dùng để verify webhook
-- `BANK_ACCOUNT_NUMBER`, `BANK_ACCOUNT_NAME`, `BANK_BIN`: thông tin VietQR
-
-## Đã hoàn thành trong MVP
-
-- Next.js App Router + Tailwind + Prisma/Postgres
-- Session cookie admin đơn giản
-- Quản lý lớp/học sinh bằng lưu trữ mềm, không xóa cascade lịch sử
-- Lớp học có trường tên giáo viên
-- Kế hoạch ghi danh và số buổi tách theo từng tháng; hóa đơn giữ snapshot lịch sử
-- Vòng đời hóa đơn: chưa đóng, đã đóng, miễn, hủy; có lý do và audit log
-- Trang phụ huynh `/pay/[short_code]` chọn học sinh, xem QR, poll trạng thái
-- Webhook SePay với parse memo và matching invoice
-- Sổ giao dịch tách tiền mặt/chuyển khoản, gán có kiểm tra, bỏ gán/hoàn tác có lý do
-- Bàn xử lý giao dịch tìm hóa đơn theo tên, SĐT, memo, lớp và ưu tiên đúng số tiền
-- Import Excel học sinh/ghi danh có preview, sửa lỗi, cảnh báo trùng SĐT và file mẫu
-- Hồ sơ học sinh 360° gồm lớp, kỳ học, hóa đơn, thanh toán và dòng thời gian
-- Dashboard tổng quan và export Excel
-
-## Việc nên làm tiếp
-
-- Đổi tài khoản admin và `SESSION_SECRET` trước khi deploy thật
-- Xác nhận chính xác format header/payload SePay trong tài khoản live
-- Đổi thông tin ngân hàng thật trong `.env`
-- Chạy smoke test SePay Test Mode và đối soát `npm run audit:data` trước/sau deploy
-- Xem `docs/EC2-UPDATE-ROLLBACK.md` và `docs/DEPENDENCY-AUDIT-2026-07-22.md` trước khi cập nhật production
+Không commit `.env`, `secrets/`, `backups/` hoặc `.deploy/`. Không paste secret vào
+issue, pull request, chat hay log vận hành.

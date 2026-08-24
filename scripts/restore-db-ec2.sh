@@ -9,6 +9,12 @@ LEGACY_HEALTH_URL="${LEGACY_HEALTH_URL:-http://127.0.0.1:3001/login}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 STATE_DIR="$APP_DIR/.deploy"
 BACKUP_DIR="$APP_DIR/backups"
+COMPOSE_FILE="$APP_DIR/deploy/app/docker-compose.yml"
+ENV_FILE="$APP_DIR/.env"
+
+compose() {
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+}
 
 log() {
   printf '[restore-db] %s\n' "$*"
@@ -22,12 +28,12 @@ die() {
 restore_dump() {
   local dump_file="$1"
 
-  docker compose exec -T db sh -ceu '
+  compose exec -T db sh -ceu '
     export PGPASSWORD="$POSTGRES_PASSWORD"
     dropdb --if-exists --force -h 127.0.0.1 -U "$POSTGRES_USER" "$POSTGRES_DB"
     createdb -h 127.0.0.1 -U "$POSTGRES_USER" -O "$POSTGRES_USER" "$POSTGRES_DB"
   '
-  docker compose exec -T db sh -ceu \
+  compose exec -T db sh -ceu \
     'export PGPASSWORD="$POSTGRES_PASSWORD"; pg_restore --exit-on-error --no-owner --no-privileges -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
     <"$dump_file"
 }
@@ -35,7 +41,7 @@ restore_dump() {
 wait_for_db() {
   local attempt
   for ((attempt = 1; attempt <= 30; attempt++)); do
-    if docker compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+    if compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -57,12 +63,12 @@ wait_for_app() {
     sleep 3
   done
 
-  docker compose logs --tail=100 app >&2 || true
+  compose logs --tail=100 app >&2 || true
   return 1
 }
 
 check_app_database() {
-  docker compose exec -T app node -e '
+  compose exec -T app node -e '
     const { PrismaClient } = require("@prisma/client");
     const prisma = new PrismaClient();
     (async () => {
@@ -88,6 +94,7 @@ for command_name in docker curl flock; do
 done
 docker compose version >/dev/null 2>&1 || die "Docker Compose plugin chưa được cài"
 [[ -f .env ]] || die "Không tìm thấy $APP_DIR/.env"
+[[ -f "$COMPOSE_FILE" ]] || die "Không tìm thấy production Compose: $COMPOSE_FILE"
 [[ "$HEALTH_RETRIES" =~ ^[1-9][0-9]*$ ]] || die "HEALTH_RETRIES phải là số nguyên dương"
 
 case "$1" in
@@ -100,32 +107,32 @@ mkdir -p "$STATE_DIR" "$BACKUP_DIR"
 exec 9>"$STATE_DIR/deploy.lock"
 flock -n 9 || die "Một tiến trình deploy/rollback khác đang chạy"
 
-docker compose up -d db
+compose up -d db
 wait_for_db || die "PostgreSQL chưa sẵn sàng"
-docker compose exec -T db pg_restore --list <"$DUMP_FILE" >/dev/null \
+compose exec -T db pg_restore --list <"$DUMP_FILE" >/dev/null \
   || die "File không phải PostgreSQL custom dump hợp lệ"
 
 RESCUE_FILE="$BACKUP_DIR/pre-db-restore-$(date +%Y%m%d-%H%M%S).dump"
 log "Tạo bản cứu hộ database hiện tại: $RESCUE_FILE"
-if ! docker compose exec -T db sh -ceu \
+if ! compose exec -T db sh -ceu \
   'export PGPASSWORD="$POSTGRES_PASSWORD"; pg_dump -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   >"$RESCUE_FILE"; then
   rm -f "$RESCUE_FILE"
   die "Không tạo được bản cứu hộ; database chưa bị thay đổi"
 fi
 [[ -s "$RESCUE_FILE" ]] || die "Bản cứu hộ rỗng; chưa dừng app hoặc thay đổi database"
-docker compose exec -T db pg_restore --list <"$RESCUE_FILE" >/dev/null \
+compose exec -T db pg_restore --list <"$RESCUE_FILE" >/dev/null \
   || die "Bản cứu hộ không vượt qua kiểm tra pg_restore; chưa thay đổi database"
 
 log "Dừng app và restore từ $DUMP_FILE..."
-docker compose stop app
+compose stop app
 
 if ! restore_dump "$DUMP_FILE"; then
   log "Restore thất bại; đang phục hồi lại bản cứu hộ..."
   if restore_dump "$RESCUE_FILE"; then
-    docker compose start app
+    compose start app
     if ! wait_for_app || ! check_app_database; then
-      docker compose stop app
+      compose stop app
       die "Restore đích thất bại; database cứu hộ đã phục hồi nhưng app không qua kiểm tra và đang dừng"
     fi
     die "Restore thất bại; đã phục hồi database về trạng thái ngay trước thao tác"
@@ -133,9 +140,9 @@ if ! restore_dump "$DUMP_FILE"; then
   die "CRITICAL: cả restore và phục hồi bản cứu hộ đều thất bại; app đang dừng"
 fi
 
-docker compose up -d --no-deps app
+compose up -d --no-deps app
 if ! wait_for_app || ! check_app_database; then
-  docker compose stop app
+  compose stop app
   die "Database đã restore nhưng app/schema không tương thích; app đã được dừng"
 fi
 log "Restore database thành công. Bản cứu hộ: $RESCUE_FILE"

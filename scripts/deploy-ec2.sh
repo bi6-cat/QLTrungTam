@@ -4,14 +4,20 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-BRANCH="${1:-${DEPLOY_BRANCH:-main}}"
+BRANCH="${1:-${DEPLOY_BRANCH:-dev}}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3001/api/health}"
 ROLLBACK_HEALTH_URL="${ROLLBACK_HEALTH_URL:-http://127.0.0.1:3001/login}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 STATE_DIR="$APP_DIR/.deploy"
 BACKUP_DIR="$APP_DIR/backups"
+COMPOSE_FILE="$APP_DIR/deploy/app/docker-compose.yml"
+ENV_FILE="$APP_DIR/.env"
 CODE_SWITCHED=0
 OLD_COMMIT=""
+
+compose() {
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+}
 
 log() {
   printf '[deploy] %s\n' "$*"
@@ -25,7 +31,7 @@ die() {
 wait_for_db() {
   local attempt
   for ((attempt = 1; attempt <= 30; attempt++)); do
-    if docker compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+    if compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -43,12 +49,12 @@ wait_for_app() {
     sleep 3
   done
 
-  docker compose logs --tail=100 app >&2 || true
+  compose logs --tail=100 app >&2 || true
   return 1
 }
 
 check_app_database() {
-  docker compose exec -T app node -e '
+  compose exec -T app node -e '
     const { PrismaClient } = require("@prisma/client");
     const prisma = new PrismaClient();
     (async () => {
@@ -105,8 +111,8 @@ rollback_on_error() {
   if [[ "$CODE_SWITCHED" -eq 1 && -n "$OLD_COMMIT" ]]; then
     log "Deploy lỗi. Đang tự động rollback ứng dụng về ${OLD_COMMIT:0:12}..."
     if git checkout --detach "$OLD_COMMIT" \
-      && docker compose build app \
-      && docker compose up -d --no-deps app \
+      && compose build app \
+      && compose up -d --no-deps app \
       && wait_for_app "$ROLLBACK_HEALTH_URL" \
       && check_app_database; then
       log "Đã rollback ứng dụng thành công. Database chưa bị restore."
@@ -128,6 +134,7 @@ for command_name in git docker curl flock cp chmod mv; do
 done
 docker compose version >/dev/null 2>&1 || die "Docker Compose plugin chưa được cài"
 [[ -f .env ]] || die "Không tìm thấy $APP_DIR/.env"
+[[ -f "$COMPOSE_FILE" ]] || die "Không tìm thấy production Compose: $COMPOSE_FILE"
 [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || die "Tên branch không hợp lệ: $BRANCH"
 [[ "$HEALTH_RETRIES" =~ ^[1-9][0-9]*$ ]] || die "HEALTH_RETRIES phải là số nguyên dương"
 [[ -z "$(git status --porcelain --untracked-files=normal)" ]] || die "Working tree có thay đổi. Hãy commit/stash trước khi deploy"
@@ -140,6 +147,8 @@ OLD_COMMIT="$(git rev-parse HEAD)"
 log "Đang lấy origin/$BRANCH..."
 git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 TARGET_COMMIT="$(git rev-parse --verify "refs/remotes/origin/$BRANCH^{commit}")"
+git cat-file -e "$TARGET_COMMIT:deploy/app/docker-compose.yml" 2>/dev/null \
+  || die "Commit mục tiêu không có deploy/app/docker-compose.yml"
 
 if [[ "$TARGET_COMMIT" == "$OLD_COMMIT" && "${FORCE_DEPLOY:-0}" != "1" ]]; then
   log "EC2 đã ở phiên bản mới nhất: ${TARGET_COMMIT:0:12}"
@@ -149,19 +158,19 @@ fi
 log "Phiên bản hiện tại: ${OLD_COMMIT:0:12}"
 log "Phiên bản sẽ deploy: ${TARGET_COMMIT:0:12}"
 
-docker compose up -d db
+compose up -d db
 wait_for_db || die "PostgreSQL chưa sẵn sàng"
 
 BACKUP_FILE="$BACKUP_DIR/pre-deploy-$(date +%Y%m%d-%H%M%S)-${OLD_COMMIT:0:12}.dump"
 log "Đang backup database vào $BACKUP_FILE..."
-if ! docker compose exec -T db sh -ceu \
+if ! compose exec -T db sh -ceu \
   'export PGPASSWORD="$POSTGRES_PASSWORD"; pg_dump -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   >"$BACKUP_FILE"; then
   rm -f "$BACKUP_FILE"
   die "Backup database thất bại; chưa thay đổi phiên bản"
 fi
 [[ -s "$BACKUP_FILE" ]] || die "File backup rỗng; dừng deploy"
-docker compose exec -T db pg_restore --list <"$BACKUP_FILE" >/dev/null \
+compose exec -T db pg_restore --list <"$BACKUP_FILE" >/dev/null \
   || die "File backup không vượt qua kiểm tra pg_restore; dừng deploy"
 
 log "Đang checkout commit mới..."
@@ -170,14 +179,14 @@ CODE_SWITCHED=1
 preserve_operation_scripts
 
 log "Đang build image ứng dụng..."
-docker compose build app
+compose build app
 
 log "Đang chạy Prisma migrations và đối soát dữ liệu tài chính..."
-docker compose --profile tools run --rm migrate \
+compose --profile tools run --rm migrate \
   sh -ceu 'npm ci && npx prisma migrate deploy && npm run audit:data'
 
 log "Đang thay container ứng dụng..."
-docker compose up -d --no-deps app
+compose up -d --no-deps app
 
 log "Đang kiểm tra $HEALTH_URL..."
 wait_for_app
