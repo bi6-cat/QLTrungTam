@@ -488,13 +488,14 @@
       "gridPos": { "h": 7, "w": 4, "x": 8, "y": 18 },
       "id": 15,
       "options": {
-        "colorMode": "value",
+        "colorMode": "none",
         "graphMode": "area",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
       },
       "targets": [
         { "editorMode": "code", "expr": "pg_database_size_bytes{job=\"postgres\",datname=\"qltrungtam\"}", "instant": true, "range": false, "refId": "A" }
       ],
+      "description": "Current logical size of the qltrungtam database. Growth is informational; capacity alerts should be based on filesystem utilization and growth rate.",
       "title": "Database size",
       "type": "stat"
     },
@@ -506,8 +507,8 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": 0 },
-              { "color": "yellow", "value": 300 },
-              { "color": "red", "value": 900 }
+              { "color": "yellow", "value": 21600 },
+              { "color": "red", "value": 86400 }
             ]
           },
           "unit": "s"
@@ -524,7 +525,8 @@
       "targets": [
         { "editorMode": "code", "expr": "pg_stat_archiver_last_archive_age{job=\"postgres\"}", "instant": true, "range": false, "refId": "A" }
       ],
-      "title": "Last WAL archive age",
+      "description": "Advisory age of the latest archived WAL: yellow after 6 hours and red after 24 hours. An idle database may legitimately show an old value; use new WAL failures as the primary health signal.",
+      "title": "Last WAL archive age (advisory)",
       "type": "stat"
     },
     {
