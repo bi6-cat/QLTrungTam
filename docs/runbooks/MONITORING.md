@@ -7,7 +7,11 @@
 - Alertmanager: private `127.0.0.1:9093`.
 - Blackbox exporter: chỉ trong Docker network.
 - Retention Prometheus: 7 ngày hoặc tối đa 1 GB.
-- Alertmanager hiện dùng `null-receiver`; notification thật chưa production-ready.
+- Alertmanager dùng receiver `discord`; webhook được đọc từ Docker secret
+  `/run/secrets/alertmanager_discord_webhook_url` và không nằm trong Git.
+- Controlled firing notification qua API Alertmanager đã tới Discord. Lần triển khai
+  này không thực hiện controlled rule test xuyên suốt Prometheus và không ghi nhận
+  riêng notification `resolved`.
 
 ## Lệnh Compose chuẩn
 
@@ -160,13 +164,19 @@ tại và chỉ nhận config mới sau khi parse thành công; vẫn phải smo
 
 ## Receiver và controlled test
 
-Chưa coi alerting production-ready cho tới khi:
+Đã xác minh receiver thật đọc secret ngoài Git, `amtool check-config` thành công bằng
+đúng binary production và một controlled firing alert gửi trực tiếp tới API
+Alertmanager đã tới Discord.
 
-1. Receiver thật đọc secret ngoài Git.
-2. `amtool check-config` thành công bằng đúng binary đang chạy.
-3. Controlled alert đi qua Prometheus -> Alertmanager -> receiver.
-4. Nhận cả notification `firing` và `resolved`.
-5. Runbook ghi cách rotate/revoke credential receiver.
+Giới hạn nghiệm thu được chấp nhận trong lần triển khai này: chưa tạo controlled rule
+đi đủ Prometheus -> Alertmanager -> Discord và chưa quan sát riêng notification
+`resolved`. `send_resolved: true` đã được cấu hình và validate. Thực hiện hai kiểm thử
+này trong change window tiếp theo nếu cần nâng mức assurance.
 
 Không test bằng cách làm hỏng production database hoặc xóa backup metrics. Dùng rule
 test riêng có thời hạn hoặc gửi alert API có nhãn rõ `severity=test`, rồi xóa sau test.
+
+Khi rotate webhook: tạo webhook mới, thay file secret ngoài Git, recreate riêng service
+Alertmanager, gửi controlled alert và chỉ revoke webhook cũ sau khi notification mới
+thành công. Nếu webhook bị lộ, revoke ngay trong Discord trước rồi mới điều tra và cấp
+credential thay thế.

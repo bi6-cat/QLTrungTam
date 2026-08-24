@@ -54,9 +54,12 @@ Không chạy Compose mặc định ở repo root và không chạy `down -v` tr
 - `.env.example` chỉ dành cho local; production dùng `/opt/QLTrungTam/.env` mode
   `0600` và `SEED_DEMO=false`.
 - `.env`, `secrets/`, `backups/`, `.deploy/` đã được ignore.
-- Docker secrets hiện có: password Postgres exporter và Grafana admin.
-- Discord webhook sẽ nằm trong `secrets/alertmanager_discord_webhook_url.txt`; chưa
-  kích hoạt cho tới khi receiver được validate/test.
+- Docker secrets hiện có: password Postgres exporter, Grafana admin và Discord
+  webhook cho Alertmanager.
+- Discord webhook nằm trong `secrets/alertmanager_discord_webhook_url.txt`. Với
+  Docker Compose file-backed secret, file phải đọc được bởi UID runtime của
+  Alertmanager; thư mục `secrets/` vẫn chỉ cho `root` truy cập và secret chỉ được
+  mount read-only vào service cần dùng.
 - Không paste secret vào chat, issue, log hoặc command line có lưu history.
 - Khi rotate DB, đổi đồng bộ DB role password, `DB_PASSWORD`, `DATABASE_URL` và
   credential exporter liên quan.
@@ -99,6 +102,9 @@ IMDSv2, không lưu AWS access key trong `.env`.
 - Full/diff backup success và exit code `0`; đủ 10 backup metric series.
 - 10 alert rules healthy/inactive tại lần go-live.
 - Prometheus thấy Alertmanager active, dropped rỗng.
+- Alertmanager đã nạp Discord receiver và một controlled firing notification đã tới
+  Discord. Controlled Prometheus-rule end-to-end test và quan sát riêng notification
+  `resolved` được bỏ qua trong lần triển khai này.
 - Grafana public HTTPS hoạt động.
 - Dashboard `QLTrungTam SRE Overview` được provision từ Git với health, resource,
   HTTP probe, PostgreSQL, WAL và backup panels.
@@ -109,11 +115,11 @@ vẫn healthy.
 
 ## Việc còn mở
 
-1. Cấu hình Discord receiver và test cả firing/resolved.
-2. Liên kết alert annotations tới runbook phù hợp.
-3. Kiểm tra resource usage/retention sau đủ chu kỳ bảy ngày.
-4. Viết CI; CD làm sau bằng GitHub OIDC + AWS SSM có approval.
-5. Rotate DB/admin/session/API secrets sau maintenance planning.
+1. Liên kết alert annotations tới runbook phù hợp.
+2. Kiểm tra resource usage/retention sau đủ chu kỳ bảy ngày.
+3. Mở rộng CI để validate cấu hình vận hành; CD làm sau bằng GitHub OIDC + AWS SSM
+   có approval.
+4. Rotate DB/admin/session/API secrets sau maintenance planning.
 
 ## Triage sự cố nhanh
 
