@@ -19,7 +19,10 @@ services:
       GF_SECURITY_DISABLE_GRAVATAR: "true"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
-      GF_SERVER_ROOT_URL: http://127.0.0.1:3000
+      GF_SERVER_DOMAIN: monitor.zett.io.vn
+      GF_SERVER_ROOT_URL: https://monitor.zett.io.vn
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: lax
       GF_LOG_MODE: console
     secrets:
       - grafana_admin_password
