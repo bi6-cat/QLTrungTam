@@ -1,0 +1,64 @@
+groups:
+  - name: qltrungtam-k8s-lab
+    rules:
+      - alert: ExporterDown
+        expr: up{job=~"node|postgres|kube-state-metrics|blackbox"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          environment: k8s-lab
+        annotations:
+          summary: "Exporter {{ $labels.job }} is unavailable"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for at least one minute."
+
+      - alert: ApplicationEndpointDown
+        expr: probe_success{job="app-probe"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          environment: k8s-lab
+          service: qltrungtam
+        annotations:
+          summary: QLTrungTam health endpoint is unavailable
+          description: "The external probe to {{ $labels.instance }} has failed for one minute."
+
+      - alert: PostgreSQLDown
+        expr: pg_up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          environment: k8s-lab
+          service: postgresql
+        annotations:
+          summary: PostgreSQL is unavailable
+          description: The exporter cannot connect to the CloudNativePG read/write service.
+
+      - alert: KubernetesNodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          environment: k8s-lab
+        annotations:
+          summary: "Kubernetes node {{ $labels.node }} is not Ready"
+          description: "Node {{ $labels.node }} has remained NotReady for two minutes."
+
+      - alert: KubernetesDeploymentUnavailable
+        expr: kube_deployment_status_replicas_unavailable{namespace="qltrungtam"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          environment: k8s-lab
+        annotations:
+          summary: "Deployment {{ $labels.deployment }} has unavailable replicas"
+          description: "Namespace {{ $labels.namespace }} has unavailable deployment replicas for two minutes."
+
+      - alert: KubernetesPodCrashLooping
+        expr: kube_pod_container_status_waiting_reason{namespace="qltrungtam",reason="CrashLoopBackOff"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          environment: k8s-lab
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash-looping"
+          description: "Container {{ $labels.container }} is in CrashLoopBackOff."

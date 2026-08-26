@@ -1,0 +1,17 @@
+modules:
+  http_app_health:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      follow_redirects: false
+      headers:
+        Accept: application/json
+        Host: qltrungtam.lab
+      fail_if_body_not_matches_regexp:
+        - '"status"\s*:\s*"ok"'
+        - '"database"\s*:\s*"reachable"'

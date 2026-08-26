@@ -10,3 +10,6 @@ backups
 .deploy
 *.tsbuildinfo
 secrets/
+deploy/k8s-lab/.app.env
+deploy/k8s-lab/.db.env
+deploy/k8s-lab/*.tar

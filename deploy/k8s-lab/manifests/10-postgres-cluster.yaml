@@ -1,0 +1,37 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: qltrungtam-postgres
+  namespace: qltrungtam
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/part-of: qltrungtam
+spec:
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:16-minimal-trixie
+  primaryUpdateStrategy: unsupervised
+  bootstrap:
+    initdb:
+      database: qltrungtam
+      owner: qltrungtam
+      secret:
+        name: qltrungtam-db-app
+  storage:
+    storageClass: local-path
+    size: 20Gi
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: required
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: 256MB
+      timezone: Asia/Ho_Chi_Minh

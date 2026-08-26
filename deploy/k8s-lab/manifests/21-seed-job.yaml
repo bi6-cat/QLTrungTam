@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qltrungtam-seed
+  namespace: qltrungtam
+  labels:
+    app.kubernetes.io/name: qltrungtam
+    app.kubernetes.io/component: seed
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qltrungtam
+        app.kubernetes.io/component: seed
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: qltrungtam-migrate:lab
+          imagePullPolicy: IfNotPresent
+          command: ["npm", "run", "prisma:seed"]
+          envFrom:
+            - secretRef:
+                name: qltrungtam-app
+          env:
+            - name: SEED_DEMO
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

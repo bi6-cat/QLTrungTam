@@ -55,6 +55,7 @@ Integration tests cần database test theo hướng dẫn trong [tests/README.md
 - [Deploy/rollback](docs/runbooks/APP-DEPLOY-ROLLBACK.md)
 - [Backup/restore PostgreSQL](docs/runbooks/POSTGRES-BACKUP-RESTORE.md)
 - [Monitoring](docs/runbooks/MONITORING.md)
+- [Lab Kubernetes HA: 3 control plane + 2 worker + 1 VM monitoring](docs/labs/K8S-HA-LAB.md)
 
 ## Quy ước production quan trọng
 

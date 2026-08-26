@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qltrungtam-migrate
+  namespace: qltrungtam
+  labels:
+    app.kubernetes.io/name: qltrungtam
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qltrungtam
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -ec
+            - until pg_isready -h qltrungtam-postgres-rw -p 5432 -U qltrungtam -d qltrungtam; do sleep 2; done
+      containers:
+        - name: migrate
+          image: qltrungtam-migrate:lab
+          imagePullPolicy: IfNotPresent
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - secretRef:
+                name: qltrungtam-app
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: qltrungtam
+  labels:
+    app.kubernetes.io/name: postgres-exporter
+    app.kubernetes.io/part-of: qltrungtam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-exporter
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1@sha256:e96064f876226d94bb6ce48a4c4b3dd76edba91168ec1ab024e5c4b959310b0f
+          ports:
+            - name: metrics
+              containerPort: 9187
+          env:
+            - name: DATA_SOURCE_URI
+              value: qltrungtam-postgres-rw:5432/qltrungtam?sslmode=require
+            - name: DATA_SOURCE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: qltrungtam-db-app
+                  key: username
+            - name: DATA_SOURCE_PASS_FILE
+              value: /run/secrets/postgres/password
+            - name: PG_EXPORTER_COLLECTION_TIMEOUT
+              value: 10s
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: db-secret
+              mountPath: /run/secrets/postgres
+              readOnly: true
+      volumes:
+        - name: db-secret
+          secret:
+            secretName: qltrungtam-db-app
+            items:
+              - key: password
+                path: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter
+  namespace: qltrungtam
+  annotations:
+    metallb.io/address-pool: lab-services
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 172.16.0.21
+  selector:
+    app.kubernetes.io/name: postgres-exporter
+  ports:
+    - name: metrics
+      port: 9187
+      targetPort: metrics
