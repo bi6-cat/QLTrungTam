@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Copy, ExternalLink, ListChecks } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, ListChecks, Loader2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -98,6 +98,8 @@ function ParentLinkDialog({
   );
   const [draft, setDraft] = useState(defaultMessage);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const outstandingAmount = rows
     .filter((row) => row.status === "unpaid")
     .reduce((sum, row) => sum + row.amount, 0);
@@ -109,6 +111,147 @@ function ParentLinkDialog({
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       /* Clipboard có thể bị trình duyệt chặn; nội dung vẫn có thể chép thủ công. */
+    }
+  }
+
+  async function downloadOverviewImage() {
+    setExporting(true);
+    setExportError("");
+
+    try {
+      await document.fonts?.ready;
+
+      const width = 1200;
+      const sidePadding = 64;
+      const headerHeight = 190;
+      const tableHeaderHeight = 58;
+      const rowHeight = 62;
+      const summaryHeight = 82;
+      const footerHeight = 70;
+      const bodyRows = Math.max(rows.length, 1);
+      const height = headerHeight + tableHeaderHeight + bodyRows * rowHeight + summaryHeight + footerHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Trình duyệt không hỗ trợ tạo ảnh.");
+
+      const drawText = (
+        value: string,
+        x: number,
+        y: number,
+        maxWidth: number,
+        align: CanvasTextAlign = "left"
+      ) => {
+        context.textAlign = align;
+        if (context.measureText(value).width <= maxWidth) {
+          context.fillText(value, x, y);
+          return;
+        }
+
+        let shortened = value;
+        while (shortened.length > 1 && context.measureText(`${shortened}…`).width > maxWidth) {
+          shortened = shortened.slice(0, -1);
+        }
+        context.fillText(`${shortened}…`, x, y);
+      };
+
+      context.fillStyle = "#f5f5f4";
+      context.fillRect(0, 0, width, height);
+      context.fillStyle = "#3730a3";
+      context.fillRect(0, 0, width, headerHeight);
+      context.fillStyle = "#ffffff";
+      context.font = "700 25px Arial, sans-serif";
+      context.fillText("APLUS ACADEMY", sidePadding, 58);
+      context.font = "700 38px Arial, sans-serif";
+      drawText(className, sidePadding, 112, width - sidePadding * 2);
+      context.fillStyle = "#e0e7ff";
+      context.font = "500 22px Arial, sans-serif";
+      context.fillText(`Tổng quan học phí · ${formatMonth(month, year)}`, sidePadding, 153);
+
+      const tableLeft = sidePadding;
+      const tableWidth = width - sidePadding * 2;
+      const studentX = tableLeft + 24;
+      const statusX = tableLeft + 530;
+      const sessionsX = tableLeft + 860;
+      const amountX = tableLeft + tableWidth - 24;
+
+      context.fillStyle = "#e7e5e4";
+      context.fillRect(tableLeft, headerHeight, tableWidth, tableHeaderHeight);
+      context.fillStyle = "#57534e";
+      context.font = "700 18px Arial, sans-serif";
+      context.fillText("HỌC SINH", studentX, headerHeight + 37);
+      context.fillText("TRẠNG THÁI", statusX, headerHeight + 37);
+      context.textAlign = "right";
+      context.fillText("SỐ BUỔI", sessionsX, headerHeight + 37);
+      context.fillText("SỐ TIỀN", amountX, headerHeight + 37);
+      context.textAlign = "left";
+
+      if (rows.length === 0) {
+        context.fillStyle = "#ffffff";
+        context.fillRect(tableLeft, headerHeight + tableHeaderHeight, tableWidth, rowHeight);
+        context.fillStyle = "#78716c";
+        context.font = "500 20px Arial, sans-serif";
+        context.fillText("Chưa có học sinh trong tháng này", studentX, headerHeight + tableHeaderHeight + 39);
+      } else {
+        rows.forEach((row, index) => {
+          const top = headerHeight + tableHeaderHeight + index * rowHeight;
+          context.fillStyle = index % 2 === 0 ? "#ffffff" : "#fafaf9";
+          context.fillRect(tableLeft, top, tableWidth, rowHeight);
+          context.fillStyle = "#1c1917";
+          context.font = "600 21px Arial, sans-serif";
+          drawText(row.studentName, studentX, top + 39, 460);
+
+          const meta = STATUS_META[row.status];
+          context.fillStyle = row.status === "paid" ? "#15803d" : row.status === "unpaid" ? "#c2410c" : "#57534e";
+          context.font = "600 19px Arial, sans-serif";
+          drawText(meta.label, statusX, top + 39, 250);
+          context.fillStyle = "#292524";
+          context.textAlign = "right";
+          context.font = "500 20px Arial, sans-serif";
+          context.fillText(String(row.sessions), sessionsX, top + 39);
+          context.font = "600 20px Arial, sans-serif";
+          context.fillText(formatCurrency(row.amount), amountX, top + 39);
+          context.textAlign = "left";
+        });
+      }
+
+      const summaryTop = headerHeight + tableHeaderHeight + bodyRows * rowHeight;
+      context.fillStyle = "#ffffff";
+      context.fillRect(tableLeft, summaryTop, tableWidth, summaryHeight);
+      context.strokeStyle = "#d6d3d1";
+      context.beginPath();
+      context.moveTo(tableLeft, summaryTop);
+      context.lineTo(tableLeft + tableWidth, summaryTop);
+      context.stroke();
+      context.fillStyle = "#57534e";
+      context.font = "600 21px Arial, sans-serif";
+      context.fillText(`${rows.length} học sinh`, studentX, summaryTop + 50);
+      context.textAlign = "right";
+      context.fillText("Còn phải thu:", amountX - 235, summaryTop + 50);
+      context.fillStyle = "#c2410c";
+      context.font = "700 25px Arial, sans-serif";
+      context.fillText(formatCurrency(outstandingAmount), amountX, summaryTop + 50);
+      context.textAlign = "left";
+
+      context.fillStyle = "#78716c";
+      context.font = "400 17px Arial, sans-serif";
+      context.fillText("Danh sách được xuất từ hệ thống quản lý APLUS ACADEMY.", sidePadding, height - 30);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("Không thể tạo file ảnh.");
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `hoc-phi-${classShortCode}-${year}-${String(month).padStart(2, "0")}.png`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Không thể tải ảnh danh sách.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -152,6 +295,15 @@ function ParentLinkDialog({
             </span>
           </div>
         </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <span>Ảnh có thông tin học phí cả lớp, chỉ nên gửi đúng nhóm phụ huynh của lớp.</span>
+          <Button type="button" variant="secondary" onClick={downloadOverviewImage} disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {exporting ? "Đang tạo ảnh..." : "Tải ảnh danh sách"}
+          </Button>
+        </div>
+        {exportError ? <p className="text-sm font-medium text-warning">{exportError}</p> : null}
 
         <div>
           <label htmlFor="parent-link-message" className="text-sm font-semibold text-neutralText">
