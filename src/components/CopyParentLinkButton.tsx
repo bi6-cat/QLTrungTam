@@ -12,6 +12,7 @@ type OverviewRow = {
   studentName: string;
   status: OverviewStatus;
   sessions: number;
+  pricePerSession: number;
   amount: number;
 };
 
@@ -100,9 +101,6 @@ function ParentLinkDialog({
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
-  const outstandingAmount = rows
-    .filter((row) => row.status === "unpaid")
-    .reduce((sum, row) => sum + row.amount, 0);
 
   async function copyMessage() {
     try {
@@ -126,7 +124,7 @@ function ParentLinkDialog({
       const headerHeight = 190;
       const tableHeaderHeight = 58;
       const rowHeight = 62;
-      const summaryHeight = 82;
+      const summaryHeight = 72;
       const footerHeight = 70;
       const bodyRows = Math.max(rows.length, 1);
       const height = headerHeight + tableHeaderHeight + bodyRows * rowHeight + summaryHeight + footerHeight;
@@ -171,19 +169,23 @@ function ParentLinkDialog({
 
       const tableLeft = sidePadding;
       const tableWidth = width - sidePadding * 2;
-      const studentX = tableLeft + 24;
-      const statusX = tableLeft + 530;
-      const sessionsX = tableLeft + 860;
+      const orderX = tableLeft + 24;
+      const studentX = tableLeft + 90;
+      const statusX = tableLeft + 445;
+      const sessionsX = tableLeft + 720;
+      const priceX = tableLeft + 900;
       const amountX = tableLeft + tableWidth - 24;
 
       context.fillStyle = "#e7e5e4";
       context.fillRect(tableLeft, headerHeight, tableWidth, tableHeaderHeight);
       context.fillStyle = "#57534e";
       context.font = "700 18px Arial, sans-serif";
+      context.fillText("STT", orderX, headerHeight + 37);
       context.fillText("HỌC SINH", studentX, headerHeight + 37);
       context.fillText("TRẠNG THÁI", statusX, headerHeight + 37);
       context.textAlign = "right";
       context.fillText("SỐ BUỔI", sessionsX, headerHeight + 37);
+      context.fillText("TIỀN / BUỔI", priceX, headerHeight + 37);
       context.fillText("SỐ TIỀN", amountX, headerHeight + 37);
       context.textAlign = "left";
 
@@ -199,8 +201,10 @@ function ParentLinkDialog({
           context.fillStyle = index % 2 === 0 ? "#ffffff" : "#fafaf9";
           context.fillRect(tableLeft, top, tableWidth, rowHeight);
           context.fillStyle = "#1c1917";
+          context.font = "500 20px Arial, sans-serif";
+          context.fillText(String(index + 1), orderX, top + 39);
           context.font = "600 21px Arial, sans-serif";
-          drawText(row.studentName, studentX, top + 39, 460);
+          drawText(row.studentName, studentX, top + 39, 310);
 
           const meta = STATUS_META[row.status];
           context.fillStyle = row.status === "paid" ? "#15803d" : row.status === "unpaid" ? "#c2410c" : "#57534e";
@@ -210,6 +214,7 @@ function ParentLinkDialog({
           context.textAlign = "right";
           context.font = "500 20px Arial, sans-serif";
           context.fillText(String(row.sessions), sessionsX, top + 39);
+          context.fillText(formatCurrency(row.pricePerSession), priceX, top + 39);
           context.font = "600 20px Arial, sans-serif";
           context.fillText(formatCurrency(row.amount), amountX, top + 39);
           context.textAlign = "left";
@@ -226,13 +231,7 @@ function ParentLinkDialog({
       context.stroke();
       context.fillStyle = "#57534e";
       context.font = "600 21px Arial, sans-serif";
-      context.fillText(`${rows.length} học sinh`, studentX, summaryTop + 50);
-      context.textAlign = "right";
-      context.fillText("Còn phải thu:", amountX - 235, summaryTop + 50);
-      context.fillStyle = "#c2410c";
-      context.font = "700 25px Arial, sans-serif";
-      context.fillText(formatCurrency(outstandingAmount), amountX, summaryTop + 50);
-      context.textAlign = "left";
+      context.fillText(`Tổng số: ${rows.length} học sinh`, studentX, summaryTop + 45);
 
       context.fillStyle = "#78716c";
       context.font = "400 17px Arial, sans-serif";
@@ -264,12 +263,14 @@ function ParentLinkDialog({
       <div className="grid gap-5">
         <div className="overflow-hidden rounded-xl border border-stone-200">
           <div className="max-h-80 overflow-auto">
-            <table className="w-full min-w-[600px] text-left text-sm">
+            <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="sticky top-0 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
+                  <th className="w-14 px-3 py-2.5 text-center">STT</th>
                   <th className="px-3 py-2.5">Học sinh</th>
                   <th className="px-3 py-2.5">Trạng thái</th>
                   <th className="px-3 py-2.5 text-right">Số buổi</th>
+                  <th className="px-3 py-2.5 text-right">Số tiền / buổi</th>
                   <th className="px-3 py-2.5 text-right">Số tiền</th>
                 </tr>
               </thead>
@@ -278,9 +279,11 @@ function ParentLinkDialog({
                   const meta = STATUS_META[row.status];
                   return (
                     <tr key={`${row.studentName}-${index}`}>
+                      <td className="px-3 py-2.5 text-center text-stone-500">{index + 1}</td>
                       <td className="px-3 py-2.5 font-medium text-neutralText">{row.studentName}</td>
                       <td className="px-3 py-2.5"><Badge tone={meta.tone}>{meta.label}</Badge></td>
                       <td className="px-3 py-2.5 text-right">{row.sessions}</td>
+                      <td className="px-3 py-2.5 text-right">{formatCurrency(row.pricePerSession)}</td>
                       <td className="px-3 py-2.5 text-right font-semibold">{formatCurrency(row.amount)}</td>
                     </tr>
                   );
@@ -288,11 +291,8 @@ function ParentLinkDialog({
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap justify-between gap-2 border-t border-stone-200 bg-stone-50 px-3 py-3 text-sm">
-            <span>{rows.length} học sinh</span>
-            <span>
-              Còn phải thu: <strong className="text-warning">{formatCurrency(outstandingAmount)}</strong>
-            </span>
+          <div className="border-t border-stone-200 bg-stone-50 px-3 py-3 text-sm">
+            Tổng số: <strong>{rows.length} học sinh</strong>
           </div>
         </div>
 

@@ -148,6 +148,7 @@ export default async function ClassesPage({
                     studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
                     status: invoice?.status ?? (monthlyStatus === "on_leave" ? "on_leave" : "not_created"),
                     sessions: monthlyStatus === "on_leave" && !invoice ? 0 : sessions,
+                    pricePerSession,
                     amount: invoice?.amount ?? (monthlyStatus === "on_leave" ? 0 : sessions * pricePerSession)
                   };
                 })}
