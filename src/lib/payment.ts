@@ -10,9 +10,17 @@ export function buildMemo(shortCode: string, phone: string, month: number, year:
 }
 
 export function parseMemo(content: string) {
-  const match = content
-    .toUpperCase()
-    .match(/\bHP\s+([A-Z0-9_-]+)\s+(\d{8,12})\s+(?:(\d{2})T|T)(1[0-2]|[1-9])\b/);
+  const normalizedContent = content.toUpperCase();
+  const match =
+    normalizedContent.match(
+      /\bHP\s+([A-Z0-9_-]+)\s+(\d{8,12})\s+(?:(\d{2})T|T)(1[0-2]|[1-9])\b/
+    ) ??
+    // Một số ngân hàng loại bỏ khoảng trắng trong phần đầu nội dung chuyển khoản,
+    // ví dụ: "HP LS12A 0987787878 26T8" -> "HPLS12A0987787878 26T8".
+    // Ưu tiên dạng số Việt Nam để xác định đúng ranh giới giữa mã lớp và SĐT.
+    normalizedContent.match(
+      /\bHP\s*([A-Z0-9_-]+?)\s*(0\d{9}|84\d{9})\s*(?:(\d{2})T|T)(1[0-2]|[1-9])\b/
+    );
 
   if (!match) return null;
 

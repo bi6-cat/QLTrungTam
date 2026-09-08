@@ -1,6 +1,7 @@
 import { CENTER_INFO } from "@/lib/center";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_DEBT_REMINDER_TEMPLATE } from "@/lib/settings";
 
 export type DebtInvoice = {
   id: string;
@@ -151,38 +152,39 @@ export async function getOutstandingDebts(options?: {
  * tay bằng tài khoản cá nhân, chỉ cần copy là xong, không tốn phí và không phải
  * chờ duyệt ứng dụng.
  */
-export function buildReminderMessage(row: DebtRow) {
-  const lines = [
-    `Kính gửi phụ huynh em ${row.studentName},`,
-    "",
-    `${CENTER_INFO.name} xin thông báo khoản học phí chưa hoàn thành:`
-  ];
-
-  for (const invoice of row.invoices) {
+export function buildReminderMessage(
+  row: DebtRow,
+  template = DEFAULT_DEBT_REMINDER_TEMPLATE
+) {
+  const debtDetails = row.invoices.map((invoice) => {
     const overdueNote = invoice.monthsOverdue > 0 ? ` — quá hạn ${invoice.monthsOverdue} tháng` : "";
-    lines.push(
-      `• ${formatMonth(invoice.month, invoice.year)} · ${invoice.className}: ${formatCurrency(invoice.amount)}${overdueNote}`
-    );
-  }
+    return `• ${formatMonth(invoice.month, invoice.year)} · ${invoice.className}: ${formatCurrency(invoice.amount)}${overdueNote}`;
+  }).join("\n");
+  const paymentSection = row.primaryPayUrl
+    ? [
+        "Phụ huynh vui lòng thanh toán tại link sau:",
+        row.primaryPayUrl,
+        "(Chọn tên con, quét mã QR rồi chuyển khoản — không cần sửa nội dung chuyển khoản)"
+      ].join("\n")
+    : "";
+  const values: Record<string, string> = {
+    studentName: row.studentName,
+    parentName: row.parentName ?? "",
+    debtDetails,
+    totalAmount: formatCurrency(row.totalAmount),
+    payUrl: row.primaryPayUrl,
+    paymentSection,
+    centerName: CENTER_INFO.name,
+    centerPhone: CENTER_INFO.phone
+  };
 
-  lines.push("", `Tổng cộng: ${formatCurrency(row.totalAmount)}`);
-
-  if (row.primaryPayUrl) {
-    lines.push(
-      "",
-      "Phụ huynh vui lòng thanh toán tại link sau:",
-      row.primaryPayUrl,
-      "(Chọn tên con, quét mã QR rồi chuyển khoản — không cần sửa nội dung chuyển khoản)"
-    );
-  }
-
-  lines.push(
-    "",
-    `Nếu phụ huynh đã chuyển khoản, xin bỏ qua tin nhắn này. Mọi thắc mắc xin liên hệ ${CENTER_INFO.phone}.`,
-    "Trân trọng cảm ơn!"
-  );
-
-  return lines.join("\n");
+  return Object.entries(values)
+    .reduce(
+      (message, [key, value]) => message.split(`{{${key}}}`).join(value),
+      template
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Link mở cửa sổ chat Zalo với số phụ huynh. */

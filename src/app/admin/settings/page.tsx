@@ -1,7 +1,7 @@
 import { Save } from "lucide-react";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { updateSettingsAction } from "@/lib/actions";
-import { Field, Input, Panel, PageHeader, Button } from "@/components/ui";
+import { Field, Input, Panel, PageHeader, Button, Textarea } from "@/components/ui";
 import { getAppSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function SettingsPage() {
     <div className="grid gap-6">
       <PageHeader
         title="Cài đặt"
-        description="Cấu hình thông tin thanh toán, tài khoản nhận tiền và key webhook."
+        description="Cấu hình thanh toán, key webhook và mẫu tin nhắn gửi phụ huynh."
       />
 
       <Panel>
@@ -32,6 +32,20 @@ export default async function SettingsPage() {
               <Input name="appUrl" defaultValue={settings.appUrl} placeholder="http://localhost:3001" />
             </Field>
           </div>
+
+          <Field
+            label="Mẫu tin nhắn nhắc nợ"
+            hint="Biến dùng được: {{studentName}}, {{parentName}}, {{debtDetails}}, {{totalAmount}}, {{paymentSection}}, {{payUrl}}, {{centerName}}, {{centerPhone}}"
+          >
+            <Textarea
+              name="debtReminderTemplate"
+              defaultValue={settings.debtReminderTemplate}
+              rows={14}
+              maxLength={5000}
+              required
+              className="font-mono text-sm"
+            />
+          </Field>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="SePay API Key">

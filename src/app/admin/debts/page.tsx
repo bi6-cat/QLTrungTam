@@ -166,7 +166,7 @@ export default async function DebtsPage({
                       <div className="flex justify-end">
                         <DebtReminderButton
                           studentName={row.studentName}
-                          message={buildReminderMessage(row)}
+                          message={buildReminderMessage(row, settings.debtReminderTemplate)}
                           zaloUrl={buildZaloLink(row.phone)}
                         />
                       </div>

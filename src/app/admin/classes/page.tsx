@@ -128,6 +128,29 @@ export default async function ClassesPage({
                 className={selectedClass.name}
                 classShortCode={selectedClass.shortCode}
                 payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.publicToken}`}
+                month={month}
+                year={year}
+                rows={selectedClass.enrollments.map((enrollment) => {
+                  const invoice = enrollment.invoices[0];
+                  const enrollmentMonth = enrollment.months[0];
+                  const monthlyStatus = enrollmentMonth?.status ?? (invoice ? "active" : enrollment.status);
+                  const sessions =
+                    invoice?.sessions ??
+                    enrollmentMonth?.sessions ??
+                    enrollment.sessionsOverride ??
+                    selectedClass.sessionsPerMonthDefault;
+                  const pricePerSession =
+                    invoice?.pricePerSession ??
+                    enrollmentMonth?.pricePerSession ??
+                    selectedClass.pricePerSession;
+
+                  return {
+                    studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
+                    status: invoice?.status ?? (monthlyStatus === "on_leave" ? "on_leave" : "not_created"),
+                    sessions: monthlyStatus === "on_leave" && !invoice ? 0 : sessions,
+                    amount: invoice?.amount ?? (monthlyStatus === "on_leave" ? 0 : sessions * pricePerSession)
+                  };
+                })}
               />
               </>
             ) : null}

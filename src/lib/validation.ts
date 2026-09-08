@@ -223,7 +223,8 @@ export const updateSettingsSchema = z.object({
   bankAccountNumber: requiredText("Thiếu số tài khoản", 40),
   bankAccountName: requiredText("Thiếu tên tài khoản", 120),
   bankBin: requiredText("Thiếu mã ngân hàng", 20),
-  appUrl: looseText(200)
+  appUrl: looseText(200),
+  debtReminderTemplate: requiredText("Thiếu mẫu tin nhắn nhắc nợ", 5000)
 });
 
 export const markCashSchema = z.object({

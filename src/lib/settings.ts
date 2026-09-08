@@ -1,5 +1,16 @@
 import { prisma } from "@/lib/prisma";
 
+export const DEFAULT_DEBT_REMINDER_TEMPLATE = `Kính gửi phụ huynh em {{studentName}},
+
+{{centerName}} xin thông báo khoản học phí chưa hoàn thành:
+{{debtDetails}}
+
+Tổng cộng: {{totalAmount}}
+{{paymentSection}}
+
+Nếu phụ huynh đã chuyển khoản, xin bỏ qua tin nhắn này. Mọi thắc mắc xin liên hệ {{centerPhone}}.
+Trân trọng cảm ơn!`;
+
 export type AppSettings = {
   sepayApiKey: string;
   sepayWebhookSecret: string;
@@ -7,6 +18,7 @@ export type AppSettings = {
   bankAccountName: string;
   bankBin: string;
   appUrl: string;
+  debtReminderTemplate: string;
 };
 
 const settingKeys: Record<keyof AppSettings, string> = {
@@ -15,7 +27,8 @@ const settingKeys: Record<keyof AppSettings, string> = {
   bankAccountNumber: "BANK_ACCOUNT_NUMBER",
   bankAccountName: "BANK_ACCOUNT_NAME",
   bankBin: "BANK_BIN",
-  appUrl: "NEXT_PUBLIC_APP_URL"
+  appUrl: "NEXT_PUBLIC_APP_URL",
+  debtReminderTemplate: "DEBT_REMINDER_TEMPLATE"
 };
 
 const defaults: AppSettings = {
@@ -24,7 +37,8 @@ const defaults: AppSettings = {
   bankAccountNumber: process.env.BANK_ACCOUNT_NUMBER || "19000000000000",
   bankAccountName: process.env.BANK_ACCOUNT_NAME || "APLUS ACADEMY",
   bankBin: process.env.BANK_BIN || "970407",
-  appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001"
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001",
+  debtReminderTemplate: process.env.DEBT_REMINDER_TEMPLATE || DEFAULT_DEBT_REMINDER_TEMPLATE
 };
 
 export async function getAppSettings(): Promise<AppSettings> {
@@ -37,7 +51,9 @@ export async function getAppSettings(): Promise<AppSettings> {
     bankAccountNumber: byKey.get(settingKeys.bankAccountNumber) ?? defaults.bankAccountNumber,
     bankAccountName: byKey.get(settingKeys.bankAccountName) ?? defaults.bankAccountName,
     bankBin: byKey.get(settingKeys.bankBin) ?? defaults.bankBin,
-    appUrl: byKey.get(settingKeys.appUrl) ?? defaults.appUrl
+    appUrl: byKey.get(settingKeys.appUrl) ?? defaults.appUrl,
+    debtReminderTemplate:
+      byKey.get(settingKeys.debtReminderTemplate) ?? defaults.debtReminderTemplate
   };
 }
 

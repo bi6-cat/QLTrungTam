@@ -761,6 +761,7 @@ export async function updateSettingsAction(formData: FormData) {
   const data = parseForm(updateSettingsSchema, formData);
   await saveAppSettings(data);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/debts");
   revalidatePath("/pay/[short_code]", "page");
 }
 

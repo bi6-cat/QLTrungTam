@@ -58,6 +58,24 @@ describe("parseMemo", () => {
     });
   });
 
+  test("accepts a memo whose HP prefix, class code and phone are joined by the bank", () => {
+    assert.deepEqual(parseMemo("HPLS12A0987787878 26T8"), {
+      shortCode: "LS12A",
+      phone: "0987787878",
+      year: 2026,
+      month: 8
+    });
+  });
+
+  test("accepts a joined memo when the class code ends in a digit", () => {
+    assert.deepEqual(parseMemo("HPENA2091234567826T8"), {
+      shortCode: "ENA2",
+      phone: "0912345678",
+      year: 2026,
+      month: 8
+    });
+  });
+
   test("accepts phone numbers at the documented parser boundaries", () => {
     assert.equal(parseMemo("HP A 12345678 26T1")?.phone, "12345678");
     assert.equal(parseMemo("HP A 123456789012 26T12")?.phone, "123456789012");
