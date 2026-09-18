@@ -19,8 +19,11 @@ export default async function PayPage({
     include: {
       enrollments: {
         where: {
+          // Bảo lưu được ghi theo tháng ở EnrollmentMonth; Enrollment.status chỉ do
+          // import Excel đặt một lần và không có UI nào cập nhật lại, nên lọc theo cờ
+          // đó sẽ ẩn mất học sinh mà trang quản lý lớp vẫn đang hiển thị.
           OR: [
-            { status: "active", student: { archivedAt: null } },
+            { student: { archivedAt: null } },
             { invoices: { some: { status: "unpaid" } } }
           ]
         },
@@ -28,7 +31,9 @@ export default async function PayPage({
         include: {
           student: true,
           invoices: {
-            where: { status: { in: ["unpaid", "paid", "waived", "void"] } },
+            // Hóa đơn đã hủy hoặc được miễn không phải khoản cần đóng, cũng không
+            // phải biên lai, nên không gửi xuống trang phụ huynh.
+            where: { status: { in: ["unpaid", "paid"] } },
             orderBy: [{ year: "desc" }, { month: "desc" }]
           }
         }
