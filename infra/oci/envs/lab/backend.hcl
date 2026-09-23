@@ -1,0 +1,1 @@
+endpoints = { s3 = "https://axc0kifhpgju.compat.objectstorage.ap-kulai-2.oraclecloud.com" }
