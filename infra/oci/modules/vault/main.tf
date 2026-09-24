@@ -1,3 +1,10 @@
+terraform {
+  required_version = ">= 1.10.0"
+  required_providers {
+    oci = { source = "oracle/oci", version = "~> 9.0" }
+  }
+}
+
 variable "compartment_id" { type = string }
 variable "secret_names" { type = list(string) }
 variable "secret_values" {
