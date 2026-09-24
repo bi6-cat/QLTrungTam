@@ -3,9 +3,10 @@ variable "compartment_id" { type = string }
 variable "email_domain" { type = string } # identity domain bắt buộc email cho user
 
 terraform {
+  required_version = ">= 1.10.0"
   required_providers {
-    oci = { source = "oracle/oci", configuration_aliases = [oci.home] }
-    tls = { source = "hashicorp/tls" }
+    oci = { source = "oracle/oci", version = "~> 9.0", configuration_aliases = [oci.home] }
+    tls = { source = "hashicorp/tls", version = "~> 4.0" }
   }
 }
 

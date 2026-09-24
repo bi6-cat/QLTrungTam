@@ -1,3 +1,10 @@
+terraform {
+  required_version = ">= 1.10.0"
+  required_providers {
+    oci = { source = "oracle/oci", version = "~> 9.0" }
+  }
+}
+
 variable "tenancy_id" { type = string }
 variable "amount" { type = number }
 variable "actual_thresholds" { type = list(number) }
