@@ -1,0 +1,102 @@
+name: infra
+on:
+  pull_request:
+    branches: [oci-lab]
+    paths: ["infra/oci/**", ".github/workflows/infra.yml"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: infra-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with: { tofu_wrapper: false }
+      - run: tofu fmt -check -recursive infra/oci
+      - uses: terraform-linters/setup-tflint@v4
+      - run: tflint --init && tflint --recursive --chdir infra/oci
+      - name: Trivy config scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infra/oci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  plan:
+    needs: static
+    runs-on: ubuntu-24.04
+    environment: lab-plan
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        stack: [foundation, lab]
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.CI_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_S3_SECRET_KEY }}
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      TF_VAR_state_passphrase: ${{ secrets.STATE_PASSPHRASE }}
+      TF_VAR_tenancy_ocid: ${{ vars.OCI_TENANCY_OCID }}
+      TF_VAR_compartment_ocid: ${{ vars.OCI_COMPARTMENT_OCID }}
+      TF_VAR_home_region: ${{ vars.OCI_HOME_REGION }}
+      TF_VAR_s3_endpoint: ${{ vars.S3_ENDPOINT }}
+      TF_VAR_admin_cidr: ${{ vars.ADMIN_CIDR }}
+      TF_VAR_svc_email_domain: ${{ vars.SVC_EMAIL_DOMAIN }}
+      TF_VAR_budget_email: ${{ vars.BUDGET_EMAIL }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_discord_webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    defaults:
+      run:
+        working-directory: infra/oci/envs/${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with: { tofu_wrapper: false }
+      - name: OCI config
+        run: |
+          mkdir -p ~/.oci
+          printf '%s\n' "${{ secrets.OCI_CI_PRIVATE_KEY }}" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_CI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_CI_FINGERPRINT }}
+          tenancy=${{ vars.OCI_TENANCY_OCID }}
+          region=ap-kulai-2
+          key_file=~/.oci/key.pem
+          EOF
+          chmod 600 ~/.oci/config
+      - run: tofu init -input=false -backend-config=backend.hcl
+      - run: tofu validate
+      - id: plan
+        run: |
+          set +e
+          tofu plan -input=false -lock=false -no-color -detailed-exitcode -out plan.bin > plan.txt 2>&1
+          ec=$?
+          echo "exitcode=$ec" >> "$GITHUB_OUTPUT"
+          [ $ec -eq 1 ] && { cat plan.txt; exit 1; }
+          exit 0
+      - name: Comment plan
+        uses: actions/github-script@v7
+        env:
+          STACK: ${{ matrix.stack }}
+          EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        with:
+          script: |
+            const fs = require('fs');
+            let body = fs.readFileSync(`infra/oci/envs/${process.env.STACK}/plan.txt`, 'utf8');
+            const summary = (body.match(/^Plan: .*$/m) || body.match(/No changes\..*$/m) || ['?'])[0];
+            if (body.length > 60000) body = body.slice(-60000);
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: `### tofu plan · \`${process.env.STACK}\` · ${summary}\n<details><summary>chi tiết</summary>\n\n\`\`\`\n${body}\n\`\`\`\n</details>`
+            });

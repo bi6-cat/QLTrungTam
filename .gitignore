@@ -13,3 +13,14 @@ secrets/
 deploy/k8s-lab/.app.env
 deploy/k8s-lab/.db.env
 deploy/k8s-lab/*.tar
+
+# OCI lab
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+infra/oci/envs/*/terraform.tfvars
+infra/oci/envs/*/*.auto.tfvars
+!infra/oci/envs/*/*.tfvars.example
+kubeconfig*
