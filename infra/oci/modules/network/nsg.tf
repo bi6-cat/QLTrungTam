@@ -19,7 +19,7 @@ locals {
       { nsg = "api", dir = "EGRESS", proto = "all", peer = local.cidr.pods, peer_type = "CIDR_BLOCK", ports = null, icmp = null, desc = "api->pods (webhooks)" },
       { nsg = "api", dir = "EGRESS", proto = "1", peer = local.cidr.workers, peer_type = "CIDR_BLOCK", ports = null, icmp = [3, 4], desc = "path mtu" },
     ],
-     [
+    [
       { nsg = "workers", dir = "INGRESS", proto = "all", peer = local.cidr.workers, peer_type = "CIDR_BLOCK", ports = null, icmp = null, desc = "node<->node" },
       { nsg = "workers", dir = "INGRESS", proto = "all", peer = local.cidr.pods, peer_type = "CIDR_BLOCK", ports = null, icmp = null, desc = "pods->node" },
       { nsg = "workers", dir = "INGRESS", proto = "6", peer = local.cidr.api, peer_type = "CIDR_BLOCK", ports = [10250, 10250], icmp = null, desc = "api->kubelet" },
@@ -31,7 +31,7 @@ locals {
     [for p in var.envoy_node_ports :
       { nsg = "workers", dir = "INGRESS", proto = "6", peer = local.anywhere, peer_type = "CIDR_BLOCK", ports = [p, p], icmp = null, desc = "internet->envoy nodeport ${p}" }
     ],
-         # ---------- Pods ----------
+    # ---------- Pods ----------
     [
       { nsg = "pods", dir = "INGRESS", proto = "all", peer = local.cidr.workers, peer_type = "CIDR_BLOCK", ports = null, icmp = null, desc = "node->pod" },
       { nsg = "pods", dir = "INGRESS", proto = "all", peer = local.cidr.pods, peer_type = "CIDR_BLOCK", ports = null, icmp = null, desc = "pod<->pod" },
@@ -73,13 +73,13 @@ resource "oci_core_network_security_group_security_rule" "this" {
   network_security_group_id = oci_core_network_security_group.this[each.value.nsg].id
   direction                 = each.value.dir
   protocol                  = each.value.proto
-  description                = each.value.desc
-  stateless                  = false
+  description               = each.value.desc
+  stateless                 = false
 
-  source            = each.value.dir == "INGRESS" ? each.value.peer : null
-  source_type       = each.value.dir == "INGRESS" ? each.value.peer_type : null
-  destination       = each.value.dir == "EGRESS" ? each.value.peer : null
-  destination_type  = each.value.dir == "EGRESS" ? each.value.peer_type : null
+  source           = each.value.dir == "INGRESS" ? each.value.peer : null
+  source_type      = each.value.dir == "INGRESS" ? each.value.peer_type : null
+  destination      = each.value.dir == "EGRESS" ? each.value.peer : null
+  destination_type = each.value.dir == "EGRESS" ? each.value.peer_type : null
 
   dynamic "tcp_options" {
     for_each = each.value.proto == "6" && each.value.ports != null ? [each.value.ports] : []
