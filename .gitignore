@@ -23,4 +23,5 @@ crash.log
 infra/oci/envs/*/terraform.tfvars
 infra/oci/envs/*/*.auto.tfvars
 !infra/oci/envs/*/*.tfvars.example
+!infra/oci/envs/lab/lab.auto.tfvars
 kubeconfig*
