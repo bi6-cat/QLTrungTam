@@ -18,3 +18,4 @@ secrets/
 terraform.tfvars
 *-key.json
 kubeconfig*
+.env.gcp

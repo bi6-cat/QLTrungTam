@@ -13,7 +13,7 @@ Mục tiêu: có kinh nghiệm thật với Terraform, Kubernetes, CI/CD và v�
 | --- | --- |
 | GCP | Free Trial $300, kích hoạt **2026-09-25**, hết hạn khoảng **2026-12-24**. Không nâng lên tài khoản trả phí |
 | Budget | $150, cảnh báo qua email ở 50% / 90% / 100% |
-| Project | 1 project: `PROJECT_ID = __________` (điền ở M0) |
+| Project | 1 project: `PROJECT_ID = project-070733c0-e22c-4fbf-a55` (tên "QLTT K8S"). Biến shell nằm trong `.env.gcp` ở gốc repo (đã gitignore) |
 | Region / zone | `asia-southeast1` (Singapore) / `asia-southeast1-a` |
 | Domain | Chỉ dùng `gcp.zett.io.vn`, được trỏ NS từ Cloudflare sang Cloud DNS |
 | Máy chạy lệnh | Mac (Apple Silicon, arm64), nên image phải build cho `linux/amd64` |
@@ -64,7 +64,7 @@ Phiên bản tool và chart: ghi vào đây khi dùng tới.
 
 | Thành phần | Phiên bản |
 | --- | --- |
-| Terraform / provider `hashicorp/google` | |
+| Terraform / provider `hashicorp/google` | 1.16.4 / |
 | GKE | |
 | argo-cd · argo-rollouts | |
 | kube-prometheus-stack · loki · alloy | |
@@ -95,9 +95,9 @@ vì Gateway API là hướng thay thế Ingress. Không dùng ingress-nginx vì 
 Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấn hay gặp mà mảng đó giúp trả lời.
 
 ### M0 · Chuẩn bị (1–2h)
-- [ ] 0.1 Chốt sổ OCI: commit code Day 2 làm archive, tắt Mutagen, tạo nhánh `gcp-lab` từ `dev`
+- [x] 0.1 Chốt sổ OCI: commit code Day 2 làm archive, tắt Mutagen, tạo nhánh `gcp-lab` từ `dev`
 - [ ] 0.2 Cài tool trên Mac: gcloud, terraform, kubectl, helm, k9s, ansible, k6, gh, tflint, OrbStack (Docker)
-- [ ] 0.3 `gcloud init`, tạo project, gắn billing, đặt region mặc định
+- [x] 0.3 `gcloud init`, tạo project, gắn billing, đặt region mặc định
 - [ ] 0.4 Budget $150 + cảnh báo
 - [ ] 0.5 Đọc quota thật (CPU, IP, disk) và ghi vào journal
 - [ ] 0.6 Bật API, tạo bucket state, DNS zone, Artifact Registry
@@ -227,7 +227,7 @@ docs/labs/gcp/          # README này, journal.md, incidents/
 ## 8. Nhịp mỗi buổi
 
 Đầu buổi:
-1. `source ~/.qltt-gcp.env`, rồi `gcloud config list` để chắc chắn đang đúng project.
+1. `source .env.gcp`, rồi `gcloud config list` để chắc chắn đang đúng project.
 2. Vào Billing → Reports xem chi phí hôm qua.
 3. `terraform apply`.
 
