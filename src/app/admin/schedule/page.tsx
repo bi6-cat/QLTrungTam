@@ -1,7 +1,8 @@
 import { CalendarDays, Clock, MapPin, Trash2 } from "lucide-react";
 import { deleteScheduleAction } from "@/lib/actions";
 import { AddScheduleForm } from "@/components/AddScheduleForm";
-import { Badge, Button, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
+import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { WEEKDAYS, countScheduledSessions, sortSchedules, weekdayLabel } from "@/lib/schedule";
@@ -204,14 +205,13 @@ export default async function SchedulePage() {
                         </div>
                         <form action={deleteScheduleAction}>
                           <input type="hidden" name="id" value={slot.id} />
-                          <Button
-                            type="submit"
+                          <SubmitButton
                             variant="ghost"
                             className="h-8 w-8 px-0 text-stone-400 hover:bg-rose-50 hover:text-warning"
                             title="Xóa buổi học"
                           >
                             <Trash2 className="h-4 w-4" />
-                          </Button>
+                          </SubmitButton>
                         </form>
                       </div>
                     ))}

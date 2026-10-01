@@ -1,7 +1,8 @@
 import { Save } from "lucide-react";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { updateSettingsAction } from "@/lib/actions";
-import { Field, Input, Panel, PageHeader, Button, Textarea } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
+import { Field, Input, Panel, PageHeader, Textarea } from "@/components/ui";
 import { getAppSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -61,10 +62,10 @@ export default async function SettingsPage() {
           </div>
 
           <div>
-            <Button type="submit">
+            <SubmitButton pendingLabel="Đang lưu...">
               <Save className="h-4 w-4" />
               Lưu cài đặt
-            </Button>
+            </SubmitButton>
           </div>
         </form>
       </Panel>

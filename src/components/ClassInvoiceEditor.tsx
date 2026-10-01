@@ -1,10 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Banknote, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
-import { updateClassDetailsAction, type ClassDetailsActionState } from "@/lib/actions";
+import {
+  recordCashPaymentAction,
+  updateClassDetailsAction,
+  type ClassDetailsActionState
+} from "@/lib/actions";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -57,7 +60,6 @@ export function ClassInvoiceEditor({
   rows: InvoiceRow[];
   billingLocked?: boolean;
 }) {
-  const router = useRouter();
   const hasAnyInvoice = rows.some((row) => row.invoice);
   const missingInvoiceCount = rows.filter(
     (row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active"
@@ -68,6 +70,7 @@ export function ClassInvoiceEditor({
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
   const [cashSubmittingId, setCashSubmittingId] = useState<string | null>(null);
   const [cashError, setCashError] = useState("");
+  const [, startCashTransition] = useTransition();
   const [saveState, saveAction, saving] = useActionState(
     async (prevState: ClassDetailsActionState, formData: FormData) => {
       const result = await updateClassDetailsAction(prevState, formData);
@@ -126,25 +129,21 @@ export function ClassInvoiceEditor({
       ? "Lưu thay đổi"
       : "Tạo hóa đơn tháng này";
 
-  async function markCashPaid(invoiceId: string) {
-    if (editing) return;
+  function markCashPaid(invoiceId: string) {
+    if (editing || cashSubmittingId) return;
     setCashError("");
     setCashSubmittingId(invoiceId);
-    try {
-      const response = await fetch(`/api/admin/invoices/${invoiceId}/cash`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin"
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error || "Không ghi nhận được tiền mặt.");
+    startCashTransition(async () => {
+      try {
+        // Action trả kèm dữ liệu mới của trang nên không cần router.refresh().
+        const result = await recordCashPaymentAction(invoiceId);
+        if (!result.ok) setCashError(result.error);
+      } catch {
+        setCashError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
+      } finally {
+        setCashSubmittingId(null);
       }
-      router.refresh();
-    } catch (error) {
-      setCashError(error instanceof Error ? error.message : "Không ghi nhận được tiền mặt.");
-      setCashSubmittingId(null);
-    }
+    });
   }
 
   return (

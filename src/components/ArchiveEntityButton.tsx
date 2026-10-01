@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Archive, RotateCcw } from "lucide-react";
 import {
   archiveClassAction,
@@ -27,7 +26,6 @@ export function ArchiveEntityButton({
   archived: boolean;
   compact?: boolean;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -54,8 +52,8 @@ export function ArchiveEntityButton({
           setError(result.error);
           return;
         }
+        // Action đã revalidatePath và trả kèm dữ liệu mới, không cần router.refresh().
         setOpen(false);
-        router.refresh();
       } catch (actionError) {
         setError(actionError instanceof Error ? actionError.message : `Không thể ${label.toLowerCase()} ${entityLabel}.`);
       }

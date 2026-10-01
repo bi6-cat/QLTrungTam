@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { deleteExpenseAction } from "@/lib/actions";
 import { AddExpenseForm, GenerateSalaryButton } from "@/components/FinanceForms";
+import { SubmitButton } from "@/components/SubmitButton";
 import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
 import { getMonthlyFinance } from "@/lib/finance";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -295,14 +296,13 @@ export default async function FinancePage({
                       <div className="flex justify-end">
                         <form action={deleteExpenseAction}>
                           <input type="hidden" name="id" value={expense.id} />
-                          <Button
-                            type="submit"
+                          <SubmitButton
                             variant="ghost"
                             className="h-8 w-8 px-0 text-stone-400 hover:bg-rose-50 hover:text-warning"
                             title="Xóa chi phí"
                           >
                             <Trash2 className="h-4 w-4" />
-                          </Button>
+                          </SubmitButton>
                         </form>
                       </div>
                     </td>

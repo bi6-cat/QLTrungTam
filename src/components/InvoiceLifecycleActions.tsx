@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Ban, Gift, MoreHorizontal, RotateCcw } from "lucide-react";
+import { changeInvoiceStatusAction } from "@/lib/actions";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -35,7 +35,6 @@ export function InvoiceLifecycleActions({
   status: InvoiceStatus;
   disabled?: boolean;
 }) {
-  const router = useRouter();
   const [chooserOpen, setChooserOpen] = useState(false);
   const [target, setTarget] = useState<InvoiceStatus | null>(null);
   const [reason, setReason] = useState("");
@@ -56,18 +55,15 @@ export function InvoiceLifecycleActions({
     setPending(true);
     setError("");
     try {
-      const response = await fetch(`/api/admin/invoices/${invoiceId}/status`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetStatus: target, reason })
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Không thể đổi trạng thái hóa đơn.");
+      // Action trả kèm dữ liệu mới của trang nên không cần router.refresh().
+      const result = await changeInvoiceStatusAction(invoiceId, target, reason);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setTarget(null);
-      router.refresh();
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Không thể đổi trạng thái hóa đơn.");
+    } catch {
+      setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
     } finally {
       setPending(false);
     }

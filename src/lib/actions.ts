@@ -13,6 +13,11 @@ import {
   reverseTransaction,
   unassignTransaction
 } from "@/lib/ledger";
+import {
+  changeInvoiceLifecycle,
+  InvoiceLifecycleError,
+  type InvoiceLifecycleStatus
+} from "@/lib/invoice-lifecycle";
 import { buildMemo } from "@/lib/payment";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +45,6 @@ import {
   generateSalarySchema,
   idSchema,
   loginSchema,
-  markCashSchema,
   parseForm,
   resolveTransactionSchema,
   reverseTransactionSchema,
@@ -793,22 +797,68 @@ export async function updateSettingsAction(formData: FormData) {
   revalidatePath("/pay/[short_code]", "page");
 }
 
-export async function markInvoiceCashPaidAction(formData: FormData) {
+// Import Excel lưu qua API route (payload lớn); sau đó client gọi action này thay cho
+// router.refresh() để nhận dữ liệu mới trong response của action.
+export async function refreshAfterStudentImportAction() {
+  await requireAdmin();
+  revalidatePath("/admin");
+  revalidatePath("/admin/students");
+  revalidatePath("/admin/classes");
+}
+
+export type InvoiceActionState = { error: string; ok: boolean };
+
+function invoiceActionFailure(error: unknown, fallback: string): InvoiceActionState {
+  if (error instanceof LedgerError || error instanceof InvoiceLifecycleError) {
+    return { error: error.message, ok: false };
+  }
+  console.error(fallback, error);
+  return { error: `${fallback} Vui lòng tải lại trang và thử lại.`, ok: false };
+}
+
+// Client gọi thẳng action thay vì fetch API rồi router.refresh(): revalidatePath trong
+// action gửi kèm dữ liệu mới của trang hiện tại trong cùng response, không cần vẽ lại lần hai.
+export async function recordCashPaymentAction(invoiceId: string): Promise<InvoiceActionState> {
   const session = await requireAdmin();
-  const { invoiceId, returnTo } = parseForm(markCashSchema, formData);
   try {
-    await recordCashPayment({ invoiceId, actor: session });
+    await recordCashPayment({ invoiceId: String(invoiceId), actor: session });
   } catch (error) {
-    // Giữ tính idempotent cho form cũ: bấm lặp hóa đơn đã đóng không tạo thêm giao dịch.
+    // Bấm lặp hóa đơn đã đóng không tạo thêm giao dịch; chỉ làm mới để thấy trạng thái thật.
     if (!(error instanceof LedgerError && error.code === "INVOICE_ALREADY_PAID")) {
-      throw error;
+      return invoiceActionFailure(error, "Không ghi nhận được tiền mặt.");
     }
   }
 
   revalidateFinancialPaths();
-  if (returnTo.startsWith("/admin/classes")) {
-    redirect(returnTo);
+  return { error: "", ok: true };
+}
+
+const LIFECYCLE_TARGETS = new Set<InvoiceLifecycleStatus>(["unpaid", "void", "waived"]);
+
+export async function changeInvoiceStatusAction(
+  invoiceId: string,
+  targetStatus: InvoiceLifecycleStatus,
+  reason: string
+): Promise<InvoiceActionState> {
+  const session = await requireAdmin();
+  const trimmedReason = String(reason ?? "").trim();
+  if (!LIFECYCLE_TARGETS.has(targetStatus) || !trimmedReason || trimmedReason.length > 500) {
+    return { error: "Chọn trạng thái và nhập lý do từ 1 đến 500 ký tự.", ok: false };
   }
+
+  try {
+    await changeInvoiceLifecycle({
+      invoiceId: String(invoiceId),
+      targetStatus,
+      reason: trimmedReason,
+      actor: session
+    });
+  } catch (error) {
+    return invoiceActionFailure(error, "Không thể đổi trạng thái hóa đơn.");
+  }
+
+  revalidateFinancialPaths();
+  return { error: "", ok: true };
 }
 
 export type TransactionActionState = { error: string; success: string };

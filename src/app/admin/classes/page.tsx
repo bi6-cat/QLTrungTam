@@ -14,6 +14,7 @@ import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -248,10 +249,10 @@ export default async function ClassesPage({
               <Field label="% lương GV" hint="% học phí đã thu, nhập sau cũng được">
                 <Input name="teacherSharePercent" type="number" min="0" max="100" defaultValue="0" />
               </Field>
-              <Button type="submit">
+              <SubmitButton pendingLabel="Đang tạo...">
                 <Plus className="h-4 w-4" />
                 Tạo lớp
-              </Button>
+              </SubmitButton>
             </form>
           </Panel> : null}
         </div>
