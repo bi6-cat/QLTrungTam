@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { generatePublicToken } from "@/lib/publicToken";
 import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
 import { saveAppSettings } from "@/lib/settings";
+import type { z } from "zod";
 
 const LOGIN_LIMIT = { max: 8, windowMs: 15 * 60 * 1000 };
 
@@ -634,9 +635,40 @@ export async function updateInvoiceAction(formData: FormData) {
   revalidatePath("/admin/invoices");
 }
 
-export async function updateClassDetailsAction(formData: FormData) {
+export type ClassDetailsActionState = { error: string; ok: boolean };
+
+// Không redirect sau khi lưu: redirect về chính URL đang xem dễ đua với request
+// prefetch của <Link> và làm vùng nội dung trắng. revalidatePath đã gửi kèm dữ
+// liệu mới trong response của action; client tự thoát chế độ sửa khi ok.
+export async function updateClassDetailsAction(
+  _prevState: ClassDetailsActionState,
+  formData: FormData
+): Promise<ClassDetailsActionState> {
   await requireAdmin();
-  const parsed = parseForm(updateClassDetailsSchema, formData);
+  const { data: parsed, error } = safeParseForm(updateClassDetailsSchema, formData);
+  if (error || !parsed) return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+
+  try {
+    await saveClassDetails(parsed, formData);
+  } catch (saveError) {
+    // Lỗi nghiệp vụ là Error thường với thông báo tiếng Việt; lỗi Prisma/hạ tầng thì
+    // không lộ chi tiết ra giao diện.
+    if (saveError instanceof Error && !saveError.name.startsWith("PrismaClient")) {
+      return { error: saveError.message, ok: false };
+    }
+    console.error("Update class details failed", saveError);
+    return { error: "Không lưu được thay đổi. Vui lòng tải lại trang và thử lại.", ok: false };
+  }
+
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin");
+  return { error: "", ok: true };
+}
+
+async function saveClassDetails(
+  parsed: z.infer<typeof updateClassDetailsSchema>,
+  formData: FormData
+) {
   const month = parsed.month || new Date().getMonth() + 1;
   const year = parsed.year || new Date().getFullYear();
   const periodEnd = new Date(year, month, 1);
@@ -750,10 +782,6 @@ export async function updateClassDetailsAction(formData: FormData) {
       }
     }
   });
-
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin");
-  redirect(`/admin/classes?classId=${parsed.classId}&month=${month}&year=${year}`);
 }
 
 export async function updateSettingsAction(formData: FormData) {

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Banknote, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
-import { updateClassDetailsAction } from "@/lib/actions";
+import { updateClassDetailsAction, type ClassDetailsActionState } from "@/lib/actions";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -36,6 +36,7 @@ type InvoiceRow = {
 };
 
 const PAGE_SIZE = 10;
+const INITIAL_SAVE_STATE: ClassDetailsActionState = { error: "", ok: false };
 const INVOICE_STATUS = {
   unpaid: { label: "Chưa đóng", tone: "warning" },
   paid: { label: "Đã đóng", tone: "success" },
@@ -67,6 +68,18 @@ export function ClassInvoiceEditor({
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
   const [cashSubmittingId, setCashSubmittingId] = useState<string | null>(null);
   const [cashError, setCashError] = useState("");
+  const [saveState, saveAction, saving] = useActionState(
+    async (prevState: ClassDetailsActionState, formData: FormData) => {
+      const result = await updateClassDetailsAction(prevState, formData);
+      // Action không redirect nữa nên component không mount lại: tự thoát chế độ sửa.
+      if (result.ok) {
+        setEditing(false);
+        setSessionDrafts({});
+      }
+      return result;
+    },
+    INITIAL_SAVE_STATE
+  );
   useEffect(() => {
     if (!billingLocked) return;
     setEditing(false);
@@ -175,6 +188,7 @@ export function ClassInvoiceEditor({
               <Button
                 type="button"
                 variant="secondary"
+                disabled={saving}
                 onClick={() => {
                   setSessionDrafts({});
                   setEditing(false);
@@ -193,10 +207,15 @@ export function ClassInvoiceEditor({
         </div>
       </div>
 
-      <form id={formId} action={updateClassDetailsAction}>
+      <form id={formId} action={saveAction}>
         <input type="hidden" name="classId" value={classId} />
         <input type="hidden" name="month" value={month} />
         <input type="hidden" name="year" value={year} />
+        {saveState.error && !billingLocked && (editing || hasMissingInvoice) ? (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700">
+            {saveState.error}
+          </div>
+        ) : null}
         {cashError ? (
           <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700">
             {cashError}
@@ -449,9 +468,9 @@ export function ClassInvoiceEditor({
                 ? "Tạo hóa đơn cho các học sinh đang học chưa có hóa đơn trong tháng này. Có thể sửa số buổi trước khi tạo."
                 : "Chỉ sửa số buổi và trạng thái học cho hóa đơn chưa đóng. Hóa đơn đã đóng, hủy hoặc miễn được khóa để giữ đúng lịch sử."}
             </p>
-            <Button type="submit" name="intent" value={editing ? "save" : "create"}>
+            <Button type="submit" name="intent" value={editing ? "save" : "create"} disabled={saving}>
               {editing ? <Check className="h-4 w-4" /> : hasMissingInvoice || !hasAnyInvoice ? <FilePlus2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-              {submitLabel}
+              {saving ? "Đang lưu..." : submitLabel}
             </Button>
           </div>
         ) : null}
