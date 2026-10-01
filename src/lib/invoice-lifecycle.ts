@@ -164,6 +164,8 @@ export async function changeInvoiceLifecycle(
         amount: true,
         month: true,
         year: true,
+        sessions: true,
+        enrollmentId: true,
         matchedTransaction: { select: { id: true } }
       }
     });
@@ -208,6 +210,19 @@ export async function changeInvoiceLifecycle(
         "CONCURRENT_MODIFICATION",
         "Hóa đơn vừa được thanh toán hoặc thay đổi bởi thao tác khác."
       );
+    }
+
+    if (input.targetStatus === "unpaid") {
+      // Khôi phục hóa đơn đã hủy do Bảo lưu: kế hoạch tháng quay về "Đang học" theo hóa đơn.
+      await tx.enrollmentMonth.updateMany({
+        where: {
+          enrollmentId: invoice.enrollmentId,
+          month: invoice.month,
+          year: invoice.year,
+          status: "on_leave"
+        },
+        data: { status: "active", sessions: invoice.sessions }
+      });
     }
 
     const action =

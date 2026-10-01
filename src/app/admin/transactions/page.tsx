@@ -5,6 +5,7 @@ import { TransactionDetailsButton } from "@/components/TransactionDetailsButton"
 import { TransactionReference } from "@/components/TransactionReference";
 import { TransactionReviewActions } from "@/components/TransactionReviewActions";
 import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
+import { periodIndex } from "@/lib/enrollment-period";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -256,7 +257,7 @@ export default async function TransactionsPage({
     <div className="grid gap-6">
       <PageHeader
         title="Giao dịch"
-        description="Theo dõi lịch sử chuyển khoản, lịch sử đóng tiền theo tháng và xử lý giao dịch chưa khớp."
+        description="Học phí theo kỳ (tháng của hóa đơn) và tiền về theo ngày giao dịch là hai cách xem khác nhau: tiền tháng 9 đóng muộn trong tháng 10 nằm ở kỳ T9 nhưng là tiền về T10."
       />
 
       <Panel>
@@ -275,14 +276,14 @@ export default async function TransactionsPage({
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
-          label={`Đã ghi nhận ${formatMonth(selectedMonth, selectedYear)}`}
+          label={`Học phí kỳ ${formatMonth(selectedMonth, selectedYear)} đã đóng`}
           tone="success"
           value={formatCurrency(totalPaid)}
           hint={`${paid.total} hóa đơn đã đóng`}
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <StatCard
-          label={`Chuyển khoản ${formatMonth(selectedMonth, selectedYear)}`}
+          label={`Chuyển khoản về trong ${formatMonth(selectedMonth, selectedYear)}`}
           tone="primary"
           value={formatCurrency(totalBankTransactions)}
           hint={`${bankTransactionAggregate._count._all} giao dịch ngân hàng hợp lệ`}
@@ -347,7 +348,8 @@ export default async function TransactionsPage({
       <Panel className="overflow-hidden p-0">
         <div className="flex items-center gap-2 border-b border-stone-200 p-5">
           <History className="h-5 w-5 text-primary" />
-          <h2 className="font-bold">Lịch sử đóng tiền {formatMonth(selectedMonth, selectedYear)}</h2>
+          <h2 className="font-bold">Học phí kỳ {formatMonth(selectedMonth, selectedYear)} đã đóng</h2>
+          <span className="text-xs text-stone-500">· theo tháng của hóa đơn, kể cả đóng muộn</span>
         </div>
         {paid.total === 0 ? (
           <div className="p-5">
@@ -408,7 +410,16 @@ export default async function TransactionsPage({
                     <td className="overflow-hidden px-3 py-3">
                       <p className="truncate whitespace-nowrap" title={teacherName}>{teacherName}</p>
                     </td>
-                    <td className="overflow-hidden whitespace-nowrap px-3 py-3">{formatMonth(invoice.month, invoice.year)}</td>
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3">
+                      {formatMonth(invoice.month, invoice.year)}
+                      {invoice.paidAt &&
+                      periodIndex(invoice.paidAt.getMonth() + 1, invoice.paidAt.getFullYear()) >
+                        periodIndex(invoice.month, invoice.year) ? (
+                        <div>
+                          <Badge tone="warning">Đóng muộn</Badge>
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">{formatCurrency(invoice.amount)}</td>
                     <td className="overflow-hidden px-3 py-3">
                       {invoice.transaction?.gatewayRef ? (
@@ -444,7 +455,8 @@ export default async function TransactionsPage({
       <Panel className="overflow-hidden p-0">
         <div className="flex items-center gap-2 border-b border-stone-200 p-5">
           <Landmark className="h-5 w-5 text-primary" />
-          <h2 className="font-bold">Lịch sử giao dịch {formatMonth(selectedMonth, selectedYear)}</h2>
+          <h2 className="font-bold">Tiền về trong {formatMonth(selectedMonth, selectedYear)}</h2>
+          <span className="text-xs text-stone-500">· theo ngày giao dịch, gồm cả tiền của kỳ khác</span>
         </div>
         {tx.total === 0 ? (
           <div className="p-5">

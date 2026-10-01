@@ -48,6 +48,7 @@ export default async function FinancePage({
         amount: true,
         sharePercent: true,
         baseAmount: true,
+        lateBaseAmount: true,
         note: true,
         classRoom: { select: { name: true, shortCode: true } }
       }
@@ -65,7 +66,7 @@ export default async function FinancePage({
     <div className="grid gap-6">
       <PageHeader
         title="Thu chi"
-        description="Doanh thu ghi theo kỳ học phí, trừ lương giáo viên và chi phí vận hành để ra lãi/lỗ từng tháng."
+        description="Doanh thu ghi theo kỳ học phí (tiền tháng 9 đóng muộn vẫn tính cho tháng 9), trừ lương giáo viên và chi phí vận hành để ra lãi/lỗ từng tháng."
       />
 
       <Panel>
@@ -84,7 +85,7 @@ export default async function FinancePage({
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label={`Doanh thu ${formatMonth(month, year)}`}
+          label={`Học phí kỳ ${formatMonth(month, year)} đã thu`}
           tone="success"
           value={formatCurrency(finance.collected)}
           hint={`Còn ${formatCurrency(finance.outstanding)} chưa thu`}
@@ -121,6 +122,31 @@ export default async function FinancePage({
           }
         />
       </div>
+
+      <Panel>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-bold">Tiền thực về trong {formatMonth(month, year)}</h2>
+          <p className="text-xs text-stone-500">Theo ngày phụ huynh đóng, kể cả tiền của kỳ khác</p>
+        </div>
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <div className="text-stone-500">Tổng tiền về</div>
+            <div className="text-lg font-bold text-success">{formatCurrency(finance.cashIn.total)}</div>
+          </div>
+          <div>
+            <div className="text-stone-500">Học phí kỳ {formatMonth(month, year)}</div>
+            <div className="font-semibold">{formatCurrency(finance.cashIn.currentPeriod)}</div>
+          </div>
+          <div>
+            <div className="text-stone-500">Thu nợ các tháng trước</div>
+            <div className="font-semibold text-warning">{formatCurrency(finance.cashIn.earlierPeriods)}</div>
+          </div>
+          <div>
+            <div className="text-stone-500">Đóng trước cho tháng sau</div>
+            <div className="font-semibold">{formatCurrency(finance.cashIn.laterPeriods)}</div>
+          </div>
+        </div>
+      </Panel>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="overflow-hidden p-0">
@@ -177,6 +203,11 @@ export default async function FinancePage({
                         {row.teacherSharePercent > 0 ? (
                           <div className="text-xs text-stone-400">{row.teacherSharePercent}% đã thu</div>
                         ) : null}
+                        {row.collectedAfterSalary > 0 ? (
+                          <div className="text-xs text-amber-700" title="Học phí kỳ này thu sau khi đã chốt lương">
+                            +{formatCurrency(row.collectedAfterSalary)} thu sau chốt → gộp lương tháng sau
+                          </div>
+                        ) : null}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right text-stone-600">
                         {formatCurrency(row.otherCost)}
@@ -200,8 +231,9 @@ export default async function FinancePage({
           <Panel>
             <h2 className="font-bold">Tính lương giáo viên</h2>
             <p className="mb-4 mt-1 text-sm text-stone-600">
-              Lương = % chia của từng lớp × học phí <strong>đã thu</strong> trong tháng. Lớp đã có
-              bản ghi lương sẽ bị bỏ qua; muốn tính lại thì xóa bản ghi cũ trước.
+              Lương = % chia của từng lớp × (học phí kỳ này <strong>đã thu</strong> + học phí các tháng
+              trước <strong>thu muộn</strong> sau khi đã chốt lương). Mỗi khoản chỉ được tính một lần.
+              Lớp đã có bản ghi lương sẽ bị bỏ qua; xóa bản ghi thì lần bấm sau tính lại.
             </p>
             <GenerateSalaryButton month={month} year={year} />
           </Panel>
@@ -286,7 +318,9 @@ export default async function FinancePage({
                     </td>
                     <td className="px-4 py-3 text-xs text-stone-500">
                       {expense.sharePercent !== null && expense.baseAmount !== null
-                        ? `${expense.sharePercent}% × ${formatCurrency(expense.baseAmount)} đã thu`
+                        ? expense.lateBaseAmount
+                          ? `${expense.sharePercent}% × (${formatCurrency(expense.baseAmount)} kỳ này + ${formatCurrency(expense.lateBaseAmount)} thu muộn)`
+                          : `${expense.sharePercent}% × ${formatCurrency(expense.baseAmount)} đã thu`
                         : "Nhập tay"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">

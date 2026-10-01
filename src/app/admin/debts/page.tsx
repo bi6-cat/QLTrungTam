@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, Users, Wallet } from "lucide-react";
+import { DebtCashButton } from "@/components/DebtCashButton";
 import { DebtReminderButton } from "@/components/DebtReminderButton";
 import { Badge, Button, EmptyState, Field, Panel, PageHeader, Select, StatCard } from "@/components/ui";
 import { buildReminderMessage, buildZaloLink, getOutstandingDebts } from "@/lib/debts";
@@ -150,6 +151,7 @@ export default async function DebtsPage({
                             <span className="font-medium">{formatMonth(invoice.month, invoice.year)}</span>
                             <span className="text-xs text-stone-500">{invoice.classShortCode}</span>
                             <span className="font-semibold text-warning">{formatCurrency(invoice.amount)}</span>
+                            <DebtCashButton invoiceId={invoice.id} amount={invoice.amount} />
                           </li>
                         ))}
                       </ul>

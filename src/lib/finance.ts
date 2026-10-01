@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { periodIndex } from "@/lib/enrollment-period";
 import { countScheduledSessions } from "@/lib/schedule";
 
 export type ClassMargin = {
@@ -14,6 +15,16 @@ export type ClassMargin = {
   sessions: number | null;
   teacherSharePercent: number;
   hasSalaryRecord: boolean;
+  /** Học phí kỳ này thu sau khi đã chốt lương; sẽ gộp vào lương tháng sau. */
+  collectedAfterSalary: number;
+};
+
+/** Tiền thực về trong tháng (theo ngày đóng), tách theo kỳ học phí. */
+export type MonthlyCashIn = {
+  total: number;
+  currentPeriod: number;
+  earlierPeriods: number;
+  laterPeriods: number;
 };
 
 export type MonthlyFinance = {
@@ -29,6 +40,7 @@ export type MonthlyFinance = {
   marginRate: number;
   expensesByCategory: Array<{ category: string; amount: number }>;
   classMargins: ClassMargin[];
+  cashIn: MonthlyCashIn;
 };
 
 /**
@@ -39,7 +51,7 @@ export type MonthlyFinance = {
  * muộn sang tháng 8 vẫn được tính vào tháng 7.
  */
 export async function getMonthlyFinance(month: number, year: number): Promise<MonthlyFinance> {
-  const [invoices, expenses, classes] = await Promise.all([
+  const [invoices, expenses, classes, paidInMonth] = await Promise.all([
     prisma.monthlyInvoice.groupBy({
       by: ["status"],
       where: { month, year },
@@ -64,13 +76,27 @@ export async function getMonthlyFinance(month: number, year: number): Promise<Mo
           select: {
             invoices: {
               where: { month, year },
-              select: { status: true, amount: true }
+              select: { status: true, amount: true, salaryExpenseId: true }
             }
           }
         }
       }
+    }),
+    prisma.monthlyInvoice.findMany({
+      where: { status: "paid", paidAt: { gte: new Date(year, month - 1, 1), lt: new Date(year, month, 1) } },
+      select: { month: true, year: true, amount: true }
     })
   ]);
+
+  const currentIndex = periodIndex(month, year);
+  const cashIn: MonthlyCashIn = { total: 0, currentPeriod: 0, earlierPeriods: 0, laterPeriods: 0 };
+  for (const invoice of paidInMonth) {
+    const index = periodIndex(invoice.month, invoice.year);
+    cashIn.total += invoice.amount;
+    if (index === currentIndex) cashIn.currentPeriod += invoice.amount;
+    else if (index < currentIndex) cashIn.earlierPeriods += invoice.amount;
+    else cashIn.laterPeriods += invoice.amount;
+  }
 
   const sumByStatus = (status: string) =>
     invoices.find((row) => row.status === status)?._sum.amount ?? 0;
@@ -126,6 +152,11 @@ export async function getMonthlyFinance(month: number, year: number): Promise<Mo
         sessions: countScheduledSessions(classRoom.schedules, month, year),
         teacherSharePercent: classRoom.teacherSharePercent,
         hasSalaryRecord: cost.hasSalary,
+        collectedAfterSalary: cost.hasSalary
+          ? periodInvoices
+              .filter((invoice) => invoice.status === "paid" && !invoice.salaryExpenseId)
+              .reduce((sum, invoice) => sum + invoice.amount, 0)
+          : 0,
         archived: Boolean(classRoom.archivedAt),
         hasActivity: periodInvoices.length > 0 || cost.teacher > 0 || cost.other > 0
       };
@@ -150,6 +181,7 @@ export async function getMonthlyFinance(month: number, year: number): Promise<Mo
     expensesByCategory: [...categoryTotals.entries()]
       .map(([category, amount]) => ({ category, amount }))
       .sort((left, right) => right.amount - left.amount),
-    classMargins
+    classMargins,
+    cashIn
   };
 }

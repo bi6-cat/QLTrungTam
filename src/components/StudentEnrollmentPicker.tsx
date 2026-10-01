@@ -26,6 +26,7 @@ export function StudentEnrollmentPicker({
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => {
@@ -42,23 +43,37 @@ export function StudentEnrollmentPicker({
   async function handleSubmit(formData: FormData) {
     if (selectedIds.size === 0) return;
     setPending(true);
-    try {
-      const sessionsOverride = formData.get("sessionsOverride");
-      const status = formData.get("status");
-      await Promise.all(
-        [...selectedIds].map((studentId) => {
-          const data = new FormData();
-          data.set("classId", classId);
-          data.set("studentId", studentId);
-          if (sessionsOverride) data.set("sessionsOverride", sessionsOverride);
-          if (status) data.set("status", status);
-          return createEnrollmentAction(data);
-        })
-      );
-      onSuccess?.();
-    } finally {
-      setPending(false);
+    setError("");
+    const sessionsOverride = formData.get("sessionsOverride");
+    const status = formData.get("status");
+    const failed: Array<{ id: string; message: string }> = [];
+    // Thêm lần lượt từng em: một em lỗi không làm hỏng cả lượt, và biết rõ em nào chưa vào lớp.
+    for (const studentId of selectedIds) {
+      const data = new FormData();
+      data.set("classId", classId);
+      data.set("studentId", studentId);
+      if (sessionsOverride) data.set("sessionsOverride", sessionsOverride);
+      if (status) data.set("status", status);
+      try {
+        const result = await createEnrollmentAction(data);
+        if (!result.ok) failed.push({ id: studentId, message: result.error });
+      } catch {
+        failed.push({ id: studentId, message: "Không kết nối được máy chủ." });
+      }
     }
+    setPending(false);
+
+    if (failed.length === 0) {
+      onSuccess?.();
+      return;
+    }
+    const nameById = new Map(students.map((student) => [student.id, student.fullName]));
+    const added = selectedIds.size - failed.length;
+    setSelectedIds(new Set(failed.map((item) => item.id)));
+    setError(
+      `${added > 0 ? `Đã thêm ${added} học sinh. ` : ""}Chưa thêm được: ` +
+        failed.map((item) => `${nameById.get(item.id) ?? "học sinh"} (${item.message})`).join("; ")
+    );
   }
 
   const filtered = useMemo(() => {
@@ -154,6 +169,12 @@ export function StudentEnrollmentPicker({
           </div>
         ) : null}
       </div>
+
+      {error ? (
+        <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-[160px_160px_auto]">
         <Field label="Buổi riêng">

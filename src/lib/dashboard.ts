@@ -1,3 +1,4 @@
+import { isEnrollmentActiveInPeriod } from "@/lib/enrollment-period";
 import { prisma } from "@/lib/prisma";
 
 export type DashboardClassRow = {
@@ -108,6 +109,7 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
           },
           select: {
             status: true,
+            leftAt: true,
             sessionsOverride: true,
             student: { select: { archivedAt: true } },
             invoices: { where: { month, year }, select: { status: true, amount: true } },
@@ -142,6 +144,7 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
     .map((classRoom) => {
       const active = classRoom.enrollments.filter((enrollment) => {
         if (classRoom.archivedAt || enrollment.student.archivedAt) return false;
+        if (!isEnrollmentActiveInPeriod(enrollment.leftAt, month, year)) return false;
         const invoice = enrollment.invoices[0];
         return (
           (enrollment.months[0]?.status ?? (invoice ? "active" : enrollment.status)) === "active"

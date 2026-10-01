@@ -13,6 +13,7 @@ import { CopyTeacherLinkButton } from "@/components/CopyTeacherLinkButton";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
+import { enrollmentVisibleInPeriodWhere, remainingScheduledSessions } from "@/lib/enrollment-period";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -36,13 +37,13 @@ export default async function ClassesPage({
       ? parsedYear
       : now.getFullYear();
   const showArchived = params.archived === "1";
-  const periodEnd = new Date(year, month, 1);
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
   const [classes, students, settings] = await Promise.all([
     prisma.classRoom.findMany({
       where: { archivedAt: showArchived ? { not: null } : null },
       orderBy: { createdAt: "asc" },
       include: {
+        schedules: { select: { weekday: true } },
         enrollments: {
           where: showArchived
             ? {
@@ -51,24 +52,7 @@ export default async function ClassesPage({
                   { invoices: { some: { month, year } } }
                 ]
               }
-            : {
-                AND: [
-                  {
-                    OR: [
-                      { createdAt: { lt: periodEnd } },
-                      { months: { some: { month, year } } },
-                      { invoices: { some: { month, year } } }
-                    ]
-                  },
-                  {
-                    OR: [
-                      { student: { archivedAt: null } },
-                      { months: { some: { month, year } } },
-                      { invoices: { some: { month, year } } }
-                    ]
-                  }
-                ]
-              },
+            : enrollmentVisibleInPeriodWhere(month, year),
           orderBy: { student: { fullName: "asc" } },
           include: {
             student: true,
@@ -84,6 +68,24 @@ export default async function ClassesPage({
 
   const selectedClass =
     classes.find((classRoom) => classRoom.id === params.classId) ?? classes[0] ?? null;
+  // Nợ các tháng trước của học sinh trong lớp, để sang tháng mới vẫn thấy ai còn nợ.
+  const olderDebts = selectedClass
+    ? await prisma.monthlyInvoice.findMany({
+        where: {
+          status: "unpaid",
+          enrollment: { classId: selectedClass.id },
+          OR: [{ year: { lt: year } }, { year, month: { lt: month } }]
+        },
+        orderBy: [{ year: "asc" }, { month: "asc" }],
+        select: { enrollmentId: true, month: true, year: true, amount: true }
+      })
+    : [];
+  const olderDebtsByEnrollment = new Map<string, Array<{ month: number; year: number; amount: number }>>();
+  for (const debt of olderDebts) {
+    const list = olderDebtsByEnrollment.get(debt.enrollmentId) ?? [];
+    list.push({ month: debt.month, year: debt.year, amount: debt.amount });
+    olderDebtsByEnrollment.set(debt.enrollmentId, list);
+  }
   const duplicatePhones = new Set(
     selectedClass
       ? Object.entries(
@@ -342,6 +344,12 @@ export default async function ClassesPage({
                       enrollmentMonth?.sessions ??
                       enrollment.sessionsOverride ??
                       selectedClass.sessionsPerMonthDefault;
+                    // Vào lớp giữa tháng: chỉ gợi ý số buổi còn lại theo lịch, không tự đổi
+                    // (ngày ghi danh có thể là ngày nhập liệu chứ không phải ngày bắt đầu học).
+                    const remainingSessions =
+                      enrollmentMonth || invoice
+                        ? null
+                        : remainingScheduledSessions(selectedClass.schedules, enrollment.createdAt, month, year);
                     return {
                       enrollmentId: enrollment.id,
                       studentId: enrollment.student.id,
@@ -350,6 +358,14 @@ export default async function ClassesPage({
                       studentArchived: Boolean(enrollment.student.archivedAt),
                       monthlyStatus,
                       periodInitialized: Boolean(enrollmentMonth || invoice),
+                      olderDebts: olderDebtsByEnrollment.get(enrollment.id) ?? [],
+                      joinHint:
+                        remainingSessions !== null && remainingSessions < defaultSessions
+                          ? {
+                              joinedOn: `${enrollment.createdAt.getDate()}/${enrollment.createdAt.getMonth() + 1}`,
+                              sessions: remainingSessions
+                            }
+                          : null,
                       defaultSessions,
                       fallbackSessions:
                         enrollment.sessionsOverride ?? selectedClass.sessionsPerMonthDefault,

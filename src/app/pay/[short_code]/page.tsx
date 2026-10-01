@@ -20,7 +20,11 @@ export default async function PayPage({
       enrollments: {
         where: {
           OR: [
-            { status: "active", student: { archivedAt: null } },
+            {
+              status: "active",
+              student: { archivedAt: null },
+              OR: [{ leftAt: null }, { leftAt: { gt: new Date() } }]
+            },
             { invoices: { some: { status: "unpaid" } } }
           ]
         },
@@ -47,7 +51,9 @@ export default async function PayPage({
   const payableEnrollments = classRoom.enrollments.filter(
     (enrollment) =>
       enrollment.invoices.some((invoice) => invoice.status === "unpaid") ||
-      (!classRoom.archivedAt && !enrollment.student.archivedAt)
+      (!classRoom.archivedAt &&
+        !enrollment.student.archivedAt &&
+        (!enrollment.leftAt || enrollment.leftAt.getTime() > Date.now()))
   );
   const students = payableEnrollments.map((enrollment) => ({
     id: enrollment.student.id,

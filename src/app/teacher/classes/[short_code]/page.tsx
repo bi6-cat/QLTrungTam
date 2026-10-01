@@ -4,6 +4,7 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Graduatio
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
 import { Badge, Button, EmptyState, Field, Input } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import { enrollmentVisibleInPeriodWhere } from "@/lib/enrollment-period";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 
@@ -23,31 +24,13 @@ export default async function TeacherClassPage({
   const month = Math.min(12, Math.max(1, Number(query.month) || now.getMonth() + 1));
   const year = Number(query.year) || now.getFullYear();
   const requestedPage = Math.max(1, Number(query.page) || 1);
-  const periodEnd = new Date(year, month, 1);
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
 
   const classRoom = await prisma.classRoom.findUnique({
     where: { publicToken: short_code },
     include: {
       enrollments: {
-        where: {
-          AND: [
-            {
-              OR: [
-                { createdAt: { lt: periodEnd } },
-                { months: { some: { month, year } } },
-                { invoices: { some: { month, year } } }
-              ]
-            },
-            {
-              OR: [
-                { student: { archivedAt: null } },
-                { months: { some: { month, year } } },
-                { invoices: { some: { month, year } } }
-              ]
-            }
-          ]
-        },
+        where: enrollmentVisibleInPeriodWhere(month, year),
         orderBy: { student: { fullName: "asc" } },
         include: {
           student: true,

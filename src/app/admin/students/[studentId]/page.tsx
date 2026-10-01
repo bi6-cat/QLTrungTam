@@ -563,6 +563,11 @@ export default async function Student360Page({
                       <div className="mt-1 flex flex-wrap gap-1">
                         <Badge tone="primary">{enrollment.classRoom.shortCode}</Badge>
                         {enrollment.classRoom.archivedAt ? <Badge tone="neutral">Lớp đã lưu trữ</Badge> : null}
+                        {enrollment.leftAt ? (
+                          <Badge tone="warning">
+                            Nghỉ lớp từ T{enrollment.leftAt.getMonth() + 1}/{enrollment.leftAt.getFullYear()}
+                          </Badge>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-stone-700">{enrollment.classRoom.teacherName || "-"}</td>

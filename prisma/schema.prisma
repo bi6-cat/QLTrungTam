@@ -86,10 +86,13 @@ model Expense {
   /// Chỉ dùng khi category = teacher_salary: % chia và số tiền gốc đã dùng để tính.
   sharePercent   Int?
   baseAmount     Int?
+  /// Học phí các tháng trước thu muộn (sau khi tháng đó đã chốt lương), gộp vào bản ghi này.
+  lateBaseAmount Int?
   note           String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   classRoom      ClassRoom?      @relation(fields: [classId], references: [id], onDelete: SetNull)
+  salaryInvoices MonthlyInvoice[]
 
   @@index([year, month])
   @@index([category, year, month])
@@ -117,6 +120,8 @@ model Enrollment {
   classId          String
   sessionsOverride Int?
   status           EnrollmentStatus  @default(active)
+  /// Ngày đầu của tháng đầu tiên học sinh không còn học lớp này; null = đang học.
+  leftAt           DateTime?
   createdAt        DateTime          @default(now())
   classRoom        ClassRoom         @relation(fields: [classId], references: [id], onDelete: Restrict)
   student          Student           @relation(fields: [studentId], references: [id], onDelete: Restrict)
@@ -157,6 +162,8 @@ model MonthlyInvoice {
   statusChangedAt        DateTime?
   paidAt                 DateTime?
   transactionId          String?       @unique
+  /// Bản ghi lương giáo viên đã tính hóa đơn này (đã thu) vào; null = chưa tính lương.
+  salaryExpenseId        String?
   studentNameSnapshot    String?
   studentPhoneSnapshot   String?
   classNameSnapshot      String?
@@ -167,8 +174,10 @@ model MonthlyInvoice {
   enrollment             Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   transaction            Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
   matchedTransaction     Transaction?  @relation("TransactionMatchedInvoice")
+  salaryExpense          Expense?      @relation(fields: [salaryExpenseId], references: [id], onDelete: SetNull)
 
   @@unique([enrollmentId, month, year])
+  @@index([salaryExpenseId])
   @@index([status, month, year])
   @@index([memoContent])
 }

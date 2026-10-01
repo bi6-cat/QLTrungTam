@@ -18,6 +18,7 @@ import {
   InvoiceLifecycleError,
   type InvoiceLifecycleStatus
 } from "@/lib/invoice-lifecycle";
+import { isEnrollmentActiveInPeriod, periodIndex, periodStartDate } from "@/lib/enrollment-period";
 import { buildMemo } from "@/lib/payment";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -445,9 +446,21 @@ export async function updateStudentAction(
   return { error: "", ok: true };
 }
 
-export async function createEnrollmentAction(formData: FormData) {
+export async function createEnrollmentAction(formData: FormData): Promise<EditState> {
   await requireAdmin();
-  const data = parseForm(enrollmentSchema, formData);
+  const { data, error } = safeParseForm(enrollmentSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+  try {
+    await addEnrollment(data);
+  } catch (enrollError) {
+    return actionErrorState(enrollError, "Không thêm được học sinh vào lớp.");
+  }
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/students");
+  return { error: "", ok: true };
+}
+
+async function addEnrollment(data: z.infer<typeof enrollmentSchema>) {
   await runSerializableAction(async (tx) => {
     const [student, classRoom] = await Promise.all([
       tx.student.findUnique({
@@ -469,7 +482,8 @@ export async function createEnrollmentAction(formData: FormData) {
       where: {
         studentId_classId: { studentId: data.studentId, classId: data.classId }
       },
-      update: { sessionsOverride: data.sessionsOverride, status: data.status },
+      // Thêm lại học sinh đã nghỉ lớp: học tiếp từ tháng này.
+      update: { sessionsOverride: data.sessionsOverride, status: data.status, leftAt: null },
       create: {
         studentId: data.studentId,
         classId: data.classId,
@@ -478,8 +492,147 @@ export async function createEnrollmentAction(formData: FormData) {
       }
     });
   });
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/students");
+}
+
+/** Lỗi nghiệp vụ (Error thường, tiếng Việt) trả nguyên văn; lỗi Prisma/hạ tầng thì ẩn chi tiết. */
+function actionErrorState(error: unknown, fallback: string): EditState {
+  if (error instanceof Error && !error.name.startsWith("PrismaClient")) {
+    return { error: error.message, ok: false };
+  }
+  console.error(fallback, error);
+  return { error: `${fallback} Vui lòng tải lại trang và thử lại.`, ok: false };
+}
+
+export type LeaveClassInput = {
+  enrollmentId: string;
+  fromMonth: number;
+  fromYear: number;
+  reason: string;
+};
+
+/**
+ * Cho học sinh nghỉ một lớp từ đầu tháng chỉ định. Hóa đơn chưa đóng từ tháng đó trở đi
+ * bị hủy kèm lý do; nếu đã đóng tiền tháng đó thì chặn để admin chọn tháng sau hoặc
+ * hoàn giao dịch trước. Học sinh vẫn học các lớp khác bình thường.
+ */
+export async function leaveClassAction(input: LeaveClassInput): Promise<EditState> {
+  const actor = await requireAdmin();
+  const enrollmentId = String(input.enrollmentId ?? "");
+  const fromMonth = Number(input.fromMonth);
+  const fromYear = Number(input.fromYear);
+  const reason = String(input.reason ?? "").trim();
+  if (
+    !enrollmentId ||
+    !Number.isInteger(fromMonth) ||
+    fromMonth < 1 ||
+    fromMonth > 12 ||
+    !Number.isInteger(fromYear) ||
+    fromYear < 2000 ||
+    fromYear > 2100
+  ) {
+    return { error: "Tháng nghỉ không hợp lệ.", ok: false };
+  }
+  if (!reason || reason.length > 500) {
+    return { error: "Nhập lý do nghỉ từ 1 đến 500 ký tự.", ok: false };
+  }
+
+  try {
+    await runSerializableAction(async (tx) => {
+      const enrollment = await tx.enrollment.findUnique({
+        where: { id: enrollmentId },
+        select: {
+          id: true,
+          leftAt: true,
+          student: { select: { fullName: true } },
+          classRoom: { select: { name: true } },
+          invoices: {
+            select: {
+              id: true,
+              month: true,
+              year: true,
+              status: true,
+              transactionId: true,
+              paidAt: true,
+              updatedAt: true,
+              matchedTransaction: { select: { id: true } }
+            }
+          }
+        }
+      });
+      if (!enrollment) throw new Error("Không tìm thấy ghi danh.");
+
+      const fromIndex = periodIndex(fromMonth, fromYear);
+      const affected = enrollment.invoices.filter(
+        (invoice) => periodIndex(invoice.month, invoice.year) >= fromIndex
+      );
+      const paid = affected.find((invoice) => invoice.status === "paid");
+      if (paid) {
+        throw new Error(
+          `${enrollment.student.fullName} đã đóng học phí tháng ${paid.month}/${paid.year}. ` +
+            "Chọn nghỉ từ tháng sau, hoặc hoàn giao dịch đó trước."
+        );
+      }
+
+      const changedAt = new Date();
+      for (const invoice of affected.filter((item) => item.status === "unpaid")) {
+        if (invoice.transactionId || invoice.paidAt || invoice.matchedTransaction) {
+          throw new Error(`Hóa đơn tháng ${invoice.month}/${invoice.year} đang gắn giao dịch, cần đối soát trước.`);
+        }
+        const voided = await tx.monthlyInvoice.updateMany({
+          where: { id: invoice.id, status: "unpaid", transactionId: null, updatedAt: invoice.updatedAt },
+          data: { status: "void", statusReason: `Nghỉ học: ${reason}`, statusChangedAt: changedAt }
+        });
+        if (voided.count !== 1) {
+          throw new Error(`Hóa đơn tháng ${invoice.month}/${invoice.year} vừa thay đổi. Vui lòng tải lại.`);
+        }
+        await tx.auditLog.create({
+          data: {
+            actorUserId: actor.userId,
+            actorUsername: actor.username.trim(),
+            action: "invoice.voided",
+            entityType: "MonthlyInvoice",
+            entityId: invoice.id,
+            reason: `Nghỉ học: ${reason}`,
+            metadata: { previousStatus: "unpaid", targetStatus: "void", month: invoice.month, year: invoice.year }
+          }
+        });
+      }
+
+      // Kế hoạch số buổi từ tháng nghỉ trở đi không còn ý nghĩa.
+      await tx.enrollmentMonth.deleteMany({
+        where: {
+          enrollmentId: enrollment.id,
+          OR: [{ year: { gt: fromYear } }, { year: fromYear, month: { gte: fromMonth } }]
+        }
+      });
+
+      const leftAt = periodStartDate(fromMonth, fromYear);
+      await tx.enrollment.update({ where: { id: enrollment.id }, data: { leftAt } });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actor.userId,
+          actorUsername: actor.username.trim(),
+          action: "enrollment.left",
+          entityType: "Enrollment",
+          entityId: enrollment.id,
+          reason,
+          metadata: {
+            className: enrollment.classRoom.name,
+            studentName: enrollment.student.fullName,
+            previousLeftAt: enrollment.leftAt?.toISOString() ?? null,
+            leftAt: leftAt.toISOString(),
+            voidedInvoiceIds: affected.filter((item) => item.status === "unpaid").map((item) => item.id)
+          }
+        }
+      });
+    });
+  } catch (leaveError) {
+    return actionErrorState(leaveError, "Không cho nghỉ lớp được.");
+  }
+
+  revalidateFinancialPaths();
+  revalidatePath("/admin/students", "layout");
+  return { error: "", ok: true };
 }
 
 export async function updateEnrollmentStatusAction(formData: FormData) {
@@ -648,20 +801,14 @@ export async function updateClassDetailsAction(
   _prevState: ClassDetailsActionState,
   formData: FormData
 ): Promise<ClassDetailsActionState> {
-  await requireAdmin();
+  const actor = await requireAdmin();
   const { data: parsed, error } = safeParseForm(updateClassDetailsSchema, formData);
   if (error || !parsed) return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
 
   try {
-    await saveClassDetails(parsed, formData);
+    await saveClassDetails(parsed, formData, actor);
   } catch (saveError) {
-    // Lỗi nghiệp vụ là Error thường với thông báo tiếng Việt; lỗi Prisma/hạ tầng thì
-    // không lộ chi tiết ra giao diện.
-    if (saveError instanceof Error && !saveError.name.startsWith("PrismaClient")) {
-      return { error: saveError.message, ok: false };
-    }
-    console.error("Update class details failed", saveError);
-    return { error: "Không lưu được thay đổi. Vui lòng tải lại trang và thử lại.", ok: false };
+    return actionErrorState(saveError, "Không lưu được thay đổi.");
   }
 
   revalidatePath("/admin/classes");
@@ -671,7 +818,8 @@ export async function updateClassDetailsAction(
 
 async function saveClassDetails(
   parsed: z.infer<typeof updateClassDetailsSchema>,
-  formData: FormData
+  formData: FormData,
+  actor: { userId: string; username: string }
 ) {
   const month = parsed.month || new Date().getMonth() + 1;
   const year = parsed.year || new Date().getFullYear();
@@ -703,7 +851,8 @@ async function saveClassDetails(
       if (
         !enrollment ||
         enrollment.classId !== parsed.classId ||
-        enrollment.student.archivedAt
+        enrollment.student.archivedAt ||
+        !isEnrollmentActiveInPeriod(enrollment.leftAt, month, year)
       ) {
         continue;
       }
@@ -766,6 +915,36 @@ async function saveClassDetails(
         if (updatedInvoice.count !== 1) {
           throw new Error(`Hóa đơn của ${enrollment.student.fullName} vừa được thanh toán hoặc thay đổi. Vui lòng tải lại.`);
         }
+      } else if (existingInvoice?.status === "unpaid" && status === "on_leave") {
+        // Bảo lưu cả tháng: hủy hóa đơn chưa đóng để phụ huynh không còn bị đòi tiền.
+        // Muốn học lại thì bấm "Khôi phục" hóa đơn, kế hoạch tháng tự về "Đang học".
+        const voided = await tx.monthlyInvoice.updateMany({
+          where: {
+            id: existingInvoice.id,
+            status: "unpaid",
+            transactionId: null,
+            paidAt: null,
+            matchedTransaction: { is: null },
+            updatedAt: existingInvoice.updatedAt
+          },
+          data: { status: "void", statusReason: "Bảo lưu", statusChangedAt: new Date() }
+        });
+        if (voided.count !== 1) {
+          throw new Error(
+            `Hóa đơn của ${enrollment.student.fullName} vừa thay đổi hoặc đang gắn giao dịch. Vui lòng tải lại.`
+          );
+        }
+        await tx.auditLog.create({
+          data: {
+            actorUserId: actor.userId,
+            actorUsername: actor.username.trim(),
+            action: "invoice.voided",
+            entityType: "MonthlyInvoice",
+            entityId: existingInvoice.id,
+            reason: "Bảo lưu",
+            metadata: { previousStatus: "unpaid", targetStatus: "void", month, year }
+          }
+        });
       } else if (!existingInvoice && parsed.intent === "create" && status === "active") {
         await tx.monthlyInvoice.create({
           data: {
@@ -1056,10 +1235,14 @@ export type SalaryGenerationState = { error: string; success: string };
 /**
  * Tạo bản ghi lương giáo viên cho tháng được chọn.
  *
- * Lương = % chia của lớp × học phí **đã thu** trong tháng đó. Dùng tiền đã thu
- * (không phải tiền đã phát hành) để trung tâm không phải ứng lương cho khoản
- * phụ huynh còn nợ. Lớp nào đã có bản ghi lương trong tháng thì bỏ qua, nên bấm
- * lại nhiều lần không sinh trùng — muốn tính lại thì xoá bản ghi cũ trước.
+ * Lương = % chia của lớp × học phí **đã thu**, gồm hai phần:
+ * - Học phí kỳ này đã thu tới lúc chốt lương.
+ * - "Thu muộn gộp": học phí các tháng trước đã chốt lương nhưng phụ huynh đóng sau đó.
+ *
+ * Mỗi hóa đơn đã tính được gắn vào bản ghi lương (salaryExpenseId) nên không bị trả
+ * hai lần và không bị sót. Lớp đã có bản ghi lương trong tháng thì bỏ qua; xóa bản ghi
+ * thì các hóa đơn của nó được tính lại ở lần bấm sau. Tháng chưa từng chốt lương không
+ * bị gộp vào tháng sau — hãy chốt lương tháng đó trước.
  */
 export async function generateTeacherSalaryAction(
   _prevState: SalaryGenerationState,
@@ -1070,70 +1253,114 @@ export async function generateTeacherSalaryAction(
   if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
 
   const { month, year } = data;
-  const [classes, existing] = await Promise.all([
-    prisma.classRoom.findMany({
-      where: { teacherSharePercent: { gt: 0 } },
-      select: {
-        id: true,
-        name: true,
-        teacherName: true,
-        teacherSharePercent: true,
-        enrollments: {
+  const currentIndex = periodIndex(month, year);
+
+  try {
+    const result = await runSerializableAction(async (tx) => {
+      const [classes, salaryRecords] = await Promise.all([
+        tx.classRoom.findMany({
+          where: { teacherSharePercent: { gt: 0 } },
           select: {
-            invoices: {
-              where: { month, year, status: "paid" },
-              select: { amount: true }
+            id: true,
+            name: true,
+            teacherName: true,
+            teacherSharePercent: true,
+            enrollments: {
+              select: {
+                invoices: {
+                  where: {
+                    status: "paid",
+                    salaryExpenseId: null,
+                    OR: [{ year: { lt: year } }, { year, month: { lte: month } }]
+                  },
+                  select: { id: true, month: true, year: true, amount: true }
+                }
+              }
             }
           }
+        }),
+        tx.expense.findMany({
+          where: { category: "teacher_salary", classId: { not: null } },
+          select: { classId: true, month: true, year: true }
+        })
+      ]);
+
+      const closedPeriods = new Set(
+        salaryRecords.map((row) => `${row.classId}:${periodIndex(row.month, row.year)}`)
+      );
+      const pending = classes.filter((classRoom) => !closedPeriods.has(`${classRoom.id}:${currentIndex}`));
+
+      const rows = pending
+        .map((classRoom) => {
+          const invoices = classRoom.enrollments.flatMap((enrollment) => enrollment.invoices);
+          const current = invoices.filter((invoice) => periodIndex(invoice.month, invoice.year) === currentIndex);
+          // Chỉ gộp tiền của tháng đã chốt lương; tháng chưa chốt thì để chốt riêng.
+          const late = invoices.filter((invoice) => {
+            const index = periodIndex(invoice.month, invoice.year);
+            return index < currentIndex && closedPeriods.has(`${classRoom.id}:${index}`);
+          });
+          const baseAmount = current.reduce((sum, invoice) => sum + invoice.amount, 0);
+          const lateBaseAmount = late.reduce((sum, invoice) => sum + invoice.amount, 0);
+          const amount = Math.round(((baseAmount + lateBaseAmount) * classRoom.teacherSharePercent) / 100);
+          return { classRoom, invoiceIds: [...current, ...late].map((invoice) => invoice.id), baseAmount, lateBaseAmount, amount };
+        })
+        .filter((row) => row.amount > 0);
+
+      for (const row of rows) {
+        const teacher = row.classRoom.teacherName || "giáo viên";
+        const expense = await tx.expense.create({
+          data: {
+            month,
+            year,
+            category: "teacher_salary",
+            classId: row.classRoom.id,
+            description:
+              `Lương ${teacher} · ${row.classRoom.name} (${row.classRoom.teacherSharePercent}% đã thu` +
+              (row.lateBaseAmount > 0 ? ", gồm thu muộn)" : ")"),
+            amount: row.amount,
+            sharePercent: row.classRoom.teacherSharePercent,
+            baseAmount: row.baseAmount,
+            lateBaseAmount: row.lateBaseAmount
+          },
+          select: { id: true }
+        });
+        const linked = await tx.monthlyInvoice.updateMany({
+          where: { id: { in: row.invoiceIds }, status: "paid", salaryExpenseId: null },
+          data: { salaryExpenseId: expense.id }
+        });
+        if (linked.count !== row.invoiceIds.length) {
+          throw new Error("Dữ liệu học phí vừa thay đổi trong lúc tính lương. Vui lòng bấm lại.");
         }
       }
-    }),
-    prisma.expense.findMany({
-      where: { month, year, category: "teacher_salary", classId: { not: null } },
-      select: { classId: true }
-    })
-  ]);
 
-  const alreadyPaid = new Set(existing.map((row) => row.classId));
-  const pending = classes.filter((classRoom) => !alreadyPaid.has(classRoom.id));
+      return { classCount: classes.length, pendingCount: pending.length, rows };
+    });
 
-  const rows = pending
-    .map((classRoom) => {
-      const baseAmount = classRoom.enrollments
-        .flatMap((enrollment) => enrollment.invoices)
-        .reduce((sum, invoice) => sum + invoice.amount, 0);
-      return {
-        month,
-        year,
-        category: "teacher_salary" as const,
-        classId: classRoom.id,
-        description: `Lương ${classRoom.teacherName || "giáo viên"} · ${classRoom.name} (${classRoom.teacherSharePercent}% đã thu)`,
-        amount: Math.round((baseAmount * classRoom.teacherSharePercent) / 100),
-        sharePercent: classRoom.teacherSharePercent,
-        baseAmount
-      };
-    })
-    .filter((row) => row.amount > 0);
-
-  if (rows.length === 0) {
-    let reason: string;
-    if (classes.length === 0) {
-      reason = "Chưa lớp nào khai % chia cho giáo viên. Vào Lớp học → Sửa lớp để nhập.";
-    } else if (pending.length === 0) {
-      reason = "Tất cả lớp đã có bản ghi lương trong tháng này.";
-    } else {
-      reason = `Chưa thu được học phí nào trong tháng ${month}/${year} nên chưa có cơ sở tính lương.`;
+    if (result.rows.length === 0) {
+      let reason: string;
+      if (result.classCount === 0) {
+        reason = "Chưa lớp nào khai % chia cho giáo viên. Vào Lớp học → Sửa lớp để nhập.";
+      } else if (result.pendingCount === 0) {
+        reason = "Tất cả lớp đã có bản ghi lương trong tháng này. Tiền thu thêm sẽ gộp vào lương tháng sau.";
+      } else {
+        reason = `Chưa thu được học phí nào cho tháng ${month}/${year} nên chưa có cơ sở tính lương.`;
+      }
+      return { error: reason, success: "" };
     }
-    return { error: reason, success: "" };
-  }
 
-  await prisma.expense.createMany({ data: rows });
-  revalidateFinancePaths();
-  const total = rows.reduce((sum, row) => sum + row.amount, 0);
-  return {
-    error: "",
-    success: `Đã tạo ${rows.length} bản ghi lương cho tháng ${month}/${year}, tổng ${total.toLocaleString("vi-VN")}đ.`
-  };
+    revalidateFinancePaths();
+    const total = result.rows.reduce((sum, row) => sum + row.amount, 0);
+    const lateTotal = result.rows.reduce((sum, row) => sum + row.lateBaseAmount, 0);
+    return {
+      error: "",
+      success:
+        `Đã tạo ${result.rows.length} bản ghi lương cho tháng ${month}/${year}, tổng ${total.toLocaleString("vi-VN")}đ` +
+        (lateTotal > 0 ? ` (có gộp ${lateTotal.toLocaleString("vi-VN")}đ học phí tháng trước thu muộn).` : ".")
+    };
+  } catch (salaryError) {
+    const state = actionErrorState(salaryError, "Không tính được lương.");
+    return { error: state.error, success: "" };
+  }
 }
 
 export async function reverseTransactionAction(

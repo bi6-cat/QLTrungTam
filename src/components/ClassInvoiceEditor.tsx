@@ -9,6 +9,7 @@ import {
   type ClassDetailsActionState
 } from "@/lib/actions";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
+import { LeaveClassButton } from "@/components/LeaveClassButton";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 
@@ -34,6 +35,10 @@ type InvoiceRow = {
   defaultSessions: number;
   /** Số buổi khôi phục khi bật lại "Đang học" từ trạng thái bảo lưu (số buổi đang là 0). */
   fallbackSessions: number;
+  /** Hóa đơn chưa đóng của các tháng trước trong lớp này. */
+  olderDebts: Array<{ month: number; year: number; amount: number }>;
+  /** Vào lớp giữa tháng: gợi ý số buổi còn lại theo lịch. */
+  joinHint: { joinedOn: string; sessions: number } | null;
   pricePerSession: number;
   memoContent: string;
 };
@@ -289,6 +294,32 @@ export function ClassInvoiceEditor({
                         {row.studentName}
                       </Link>
                       <div className="text-xs text-stone-500">{row.phone}</div>
+                      {row.olderDebts.map((debt) => (
+                        <Link
+                          key={`${debt.year}-${debt.month}`}
+                          href={`/admin/classes?classId=${classId}&month=${debt.month}&year=${debt.year}`}
+                          className="block whitespace-normal text-[11px] font-semibold text-warning hover:underline"
+                          title="Bấm để mở tháng đó, hoặc thu ở trang Công nợ"
+                        >
+                          Còn nợ T{debt.month}/{debt.year}: {formatCurrency(debt.amount)}
+                        </Link>
+                      ))}
+                      {row.joinHint && !planningLocked ? (
+                        <div className="whitespace-normal text-[11px] font-medium text-amber-700">
+                          Vào lớp {row.joinHint.joinedOn} · lịch còn {row.joinHint.sessions} buổi
+                          {editing ? (
+                            <button
+                              type="button"
+                              className="ml-1 underline hover:text-amber-900"
+                              onClick={() =>
+                                setSessionDrafts((current) => ({ ...current, [draftKey]: row.joinHint!.sessions }))
+                              }
+                            >
+                              Dùng {row.joinHint.sessions} buổi
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       <div className="grid gap-1">
@@ -389,6 +420,18 @@ export function ClassInvoiceEditor({
                       </code>
                     </td>
                     <td className="whitespace-nowrap px-2 py-3 text-right">
+                      <div className="flex flex-nowrap items-center justify-end gap-1">
+                      {!billingLocked && !row.studentArchived ? (
+                        <LeaveClassButton
+                          enrollmentId={row.enrollmentId}
+                          studentName={row.studentName}
+                          month={month}
+                          year={year}
+                          paidThisMonth={invoice?.status === "paid"}
+                          unpaidThisMonth={invoice?.status === "unpaid"}
+                          disabled={editing}
+                        />
+                      ) : null}
                       {invoice?.status === "unpaid" ? (
                         <div className="flex flex-nowrap items-center justify-end gap-1">
                           <Button
@@ -418,6 +461,7 @@ export function ClassInvoiceEditor({
                       ) : (
                         <span className="text-xs text-stone-400">-</span>
                       )}
+                      </div>
                     </td>
                   </tr>
                 );
