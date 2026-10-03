@@ -3,8 +3,6 @@ import { runSerializable as runSerializableTransaction } from "@/lib/serializabl
 
 export type LedgerErrorCode =
   | "INVALID_ACTOR"
-  | "REASON_REQUIRED"
-  | "FORCE_REASON_REQUIRED"
   | "TRANSACTION_NOT_FOUND"
   | "INVOICE_NOT_FOUND"
   | "TRANSACTION_ALREADY_MATCHED"
@@ -37,8 +35,8 @@ export type AssignTransactionInput = {
   invoiceId: string;
   actor: LedgerActor;
   /**
-   * Strict amount matching is the default. Setting force to true always requires
-   * a reason, even when the amounts happen to be equal.
+   * Strict amount matching is the default. Setting force to true always stores an
+   * override reason (a default one when left blank) so the mismatch stays visible.
    */
   force?: boolean;
   reason?: string;
@@ -47,7 +45,7 @@ export type AssignTransactionInput = {
 export type TransactionReasonInput = {
   transactionId: string;
   actor: LedgerActor;
-  reason: string;
+  reason?: string;
 };
 
 export type LedgerMutationResult = {
@@ -75,18 +73,7 @@ function optionalReason(reason: string | undefined) {
   return normalized.slice(0, MAX_REASON_LENGTH);
 }
 
-function requiredReason(reason: string | undefined, code: "REASON_REQUIRED" | "FORCE_REASON_REQUIRED") {
-  const normalized = optionalReason(reason);
-  if (!normalized) {
-    throw new LedgerError(
-      code,
-      code === "FORCE_REASON_REQUIRED"
-        ? "Cần nhập lý do khi cưỡng chế gán giao dịch."
-        : "Cần nhập lý do cho thao tác này."
-    );
-  }
-  return normalized;
-}
+const NO_OVERRIDE_REASON = "Không ghi lý do";
 
 function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   // Unique link giữa hóa đơn và giao dịch là lớp chặn cuối nếu hai request cùng đua.
@@ -165,9 +152,9 @@ export async function assignTransactionToInvoice(
   input: AssignTransactionInput
 ): Promise<AssignTransactionResult> {
   assertActor(input.actor);
-  const overrideReason = input.force
-    ? requiredReason(input.reason, "FORCE_REASON_REQUIRED")
-    : null;
+  const reason = optionalReason(input.reason);
+  // Trang Giao dịch dựa vào matchOverrideReason để hiện "Gán lệch", nên luôn có giá trị khi cưỡng chế gán.
+  const overrideReason = input.force ? reason ?? NO_OVERRIDE_REASON : null;
 
   return runSerializable(async (tx) => {
     const [transaction, invoice] = await Promise.all([
@@ -205,7 +192,7 @@ export async function assignTransactionToInvoice(
     if (amountDifference !== 0 && !input.force) {
       throw new LedgerError(
         "AMOUNT_MISMATCH",
-        "Số tiền giao dịch không khớp hóa đơn. Hãy kiểm tra lại hoặc cưỡng chế gán kèm lý do."
+        "Số tiền giao dịch không khớp hóa đơn. Hãy kiểm tra lại hoặc chọn gán lệch tiền."
       );
     }
 
@@ -255,7 +242,7 @@ export async function assignTransactionToInvoice(
       action: "transaction.assigned",
       entityType: "Transaction",
       entityId: transaction.id,
-      reason: overrideReason,
+      reason,
       metadata: {
         invoiceId: invoice.id,
         transactionAmount: transaction.amount,
@@ -281,7 +268,7 @@ export async function assignTransactionToInvoice(
 /** Removes a valid match while preserving both records and the audit trail. */
 export async function unassignTransaction(input: TransactionReasonInput): Promise<LedgerMutationResult> {
   assertActor(input.actor);
-  const reason = requiredReason(input.reason, "REASON_REQUIRED");
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const transaction = await tx.transaction.findUnique({
@@ -385,7 +372,7 @@ export async function unassignTransaction(input: TransactionReasonInput): Promis
  */
 export async function reverseTransaction(input: TransactionReasonInput): Promise<LedgerMutationResult> {
   assertActor(input.actor);
-  const reason = requiredReason(input.reason, "REASON_REQUIRED");
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const transaction = await tx.transaction.findUnique({
@@ -451,7 +438,7 @@ export async function reverseTransaction(input: TransactionReasonInput): Promise
         // Giữ giao dịch khỏi hàng đợi unmatched nếu phải rollback tạm về app cũ,
         // vì phiên bản cũ chưa hiểu cột reversedAt.
         resolvedAt: reversedAt,
-        resolvedNote: `Hoàn tác: ${reason}`,
+        resolvedNote: reason ? `Hoàn tác: ${reason}` : "Hoàn tác",
         reversedAt,
         reversalReason: reason
       }
@@ -490,7 +477,7 @@ export async function resolveUnmatchedTransaction(
   input: TransactionReasonInput
 ): Promise<LedgerMutationResult> {
   assertActor(input.actor);
-  const reason = requiredReason(input.reason, "REASON_REQUIRED");
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const transaction = await tx.transaction.findUnique({

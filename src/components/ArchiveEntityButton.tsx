@@ -91,10 +91,9 @@ export function ArchiveEntityButton({
               )}
             </p>
             <input type="hidden" name="id" value={entityId} />
-            <Field label="Lý do">
+            <Field label="Lý do" hint="Không bắt buộc">
               <Textarea
                 name="reason"
-                required
                 maxLength={500}
                 disabled={pending}
                 autoFocus

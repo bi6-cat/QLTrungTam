@@ -287,17 +287,17 @@ export const assignTransactionSchema = z.object({
 
 export const resolveTransactionSchema = z.object({
   transactionId: id,
-  reason: requiredText("Vui lòng nhập lý do xử lý giao dịch", 500)
+  reason: looseText(500)
 });
 
 export const unassignTransactionSchema = z.object({
   transactionId: id,
-  reason: requiredText("Vui lòng nhập lý do bỏ gán", 500)
+  reason: looseText(500)
 });
 
 export const reverseTransactionSchema = z.object({
   transactionId: id,
-  reason: requiredText("Vui lòng nhập lý do hoàn tác", 500)
+  reason: looseText(500)
 });
 
 // ---------------------------------------------------------------------------

@@ -12,7 +12,8 @@ export type ChangeInvoiceLifecycleInput = {
   invoiceId: string;
   targetStatus: InvoiceLifecycleStatus;
   actor: InvoiceLifecycleActor;
-  reason: string;
+  /** Không bắt buộc; hủy/miễn mà để trống thì lưu lý do mặc định (DB yêu cầu có lý do). */
+  reason?: string;
 };
 
 export type ChangeInvoiceLifecycleResult = {
@@ -24,7 +25,6 @@ export type ChangeInvoiceLifecycleResult = {
 
 export type InvoiceLifecycleErrorCode =
   | "INVALID_ACTOR"
-  | "REASON_REQUIRED"
   | "INVOICE_NOT_FOUND"
   | "INVOICE_PAID"
   | "NO_OP"
@@ -53,15 +53,15 @@ function assertActor(actor: InvoiceLifecycleActor) {
   }
 }
 
-function requireReason(reason: string) {
-  const normalized = reason.trim();
-  if (!normalized) {
-    throw new InvoiceLifecycleError(
-      "REASON_REQUIRED",
-      "Cần nhập lý do thay đổi trạng thái hóa đơn."
-    );
-  }
-  return normalized.slice(0, MAX_REASON_LENGTH);
+const DEFAULT_STATUS_REASON: Record<InvoiceLifecycleStatus, string | null> = {
+  unpaid: null,
+  void: "Hủy hóa đơn",
+  waived: "Miễn học phí"
+};
+
+function optionalReason(reason: string | undefined) {
+  const normalized = reason?.trim();
+  return normalized ? normalized.slice(0, MAX_REASON_LENGTH) : null;
 }
 
 function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
@@ -127,7 +127,7 @@ export async function changeInvoiceLifecycle(
   input: ChangeInvoiceLifecycleInput
 ): Promise<ChangeInvoiceLifecycleResult> {
   assertActor(input.actor);
-  const reason = requireReason(input.reason);
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const invoice = await tx.monthlyInvoice.findUnique({
@@ -176,7 +176,7 @@ export async function changeInvoiceLifecycle(
       },
       data: {
         status: input.targetStatus,
-        statusReason: reason,
+        statusReason: reason ?? DEFAULT_STATUS_REASON[input.targetStatus],
         statusChangedAt: changedAt
       }
     });

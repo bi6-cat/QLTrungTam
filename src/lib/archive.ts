@@ -8,18 +8,16 @@ export function parseArchiveInput(formData: FormData) {
   const { id } = parseForm(idSchema, formData);
   const rawReason = formData.get("reason");
   const reason = typeof rawReason === "string" ? rawReason.trim() : "";
-  if (!reason || reason.length > 500) {
-    throw new Error("Lý do phải có từ 1 đến 500 ký tự.");
-  }
-  return { id, reason };
+  if (reason.length > 500) throw new Error("Lý do tối đa 500 ký tự.");
+  return { id, reason: reason || null };
 }
 
-/** Lưu trữ/khôi phục lớp hoặc học sinh: không xóa dữ liệu, ghi audit kèm lý do. */
+/** Lưu trữ/khôi phục lớp hoặc học sinh: không xóa dữ liệu, ghi audit (lý do không bắt buộc). */
 export async function changeArchiveState(input: {
   entity: ArchiveEntity;
   mode: ArchiveMode;
   id: string;
-  reason: string;
+  reason: string | null;
   actor: { userId: string; username: string };
 }) {
   return runSerializableAction(async (tx) => {

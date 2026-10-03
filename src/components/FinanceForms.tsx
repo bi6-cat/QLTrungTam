@@ -78,7 +78,7 @@ export function AddExpenseForm({
         )}
       </div>
       <div className="lg:col-span-6">
-        <Field label="Ghi chú">
+        <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea name="note" className="min-h-16" />
         </Field>
       </div>

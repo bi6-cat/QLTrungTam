@@ -125,7 +125,8 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
   ) {
     return errorState("Tháng nghỉ không hợp lệ.");
   }
-  if (!reason || reason.length > 500) return errorState("Nhập lý do nghỉ từ 1 đến 500 ký tự.");
+  if (reason.length > 500) return errorState("Lý do nghỉ tối đa 500 ký tự.");
+  const voidReason = reason ? `Nghỉ học: ${reason}` : "Nghỉ học";
 
   try {
     const names = await runSerializableAction(async (tx) => {
@@ -170,7 +171,7 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
         }
         const voided = await tx.monthlyInvoice.updateMany({
           where: { id: invoice.id, status: "unpaid", transactionId: null, updatedAt: invoice.updatedAt },
-          data: { status: "void", statusReason: `Nghỉ học: ${reason}`, statusChangedAt: changedAt }
+          data: { status: "void", statusReason: voidReason, statusChangedAt: changedAt }
         });
         if (voided.count !== 1) {
           throw new Error(`Hóa đơn tháng ${invoice.month}/${invoice.year} vừa thay đổi. Vui lòng tải lại.`);
@@ -182,7 +183,7 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
             action: "invoice.voided",
             entityType: "MonthlyInvoice",
             entityId: invoice.id,
-            reason: `Nghỉ học: ${reason}`,
+            reason: voidReason,
             metadata: { previousStatus: "unpaid", targetStatus: "void", month: invoice.month, year: invoice.year }
           }
         });
@@ -205,7 +206,7 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
           action: "enrollment.left",
           entityType: "Enrollment",
           entityId: enrollment.id,
-          reason,
+          reason: reason || null,
           metadata: {
             className: enrollment.classRoom.name,
             studentName: enrollment.student.fullName,

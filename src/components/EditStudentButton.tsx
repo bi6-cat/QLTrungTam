@@ -62,7 +62,7 @@ function EditStudentDialog({ student, onClose }: { student: Student; onClose: ()
         <Field label="Địa chỉ">
           <Input name="address" defaultValue={student.address} />
         </Field>
-        <Field label="Ghi chú">
+        <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea name="note" defaultValue={student.note ?? ""} />
         </Field>
         {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}

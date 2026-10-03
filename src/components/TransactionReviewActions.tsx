@@ -60,10 +60,9 @@ function UnassignDialog({ transactionId, onClose }: { transactionId: string; onC
         <p className="text-sm text-stone-600">
           Hóa đơn sẽ trở lại trạng thái chưa đóng và giao dịch sẽ được đưa về danh sách chờ xử lý.
         </p>
-        <Field label="Lý do bỏ gán">
+        <Field label="Lý do bỏ gán" hint="Không bắt buộc">
           <Textarea
             name="reason"
-            required
             disabled={pending}
             placeholder="Mô tả ngắn lý do cần bỏ liên kết này..."
             autoFocus
@@ -107,10 +106,9 @@ function ReverseDialog({ transactionId, onClose }: { transactionId: string; onCl
           Giao dịch sẽ được đánh dấu đã hoàn tác và không còn được tính là khoản thanh toán hợp lệ. Lịch sử vẫn
           được giữ lại để đối soát.
         </p>
-        <Field label="Lý do hoàn tác">
+        <Field label="Lý do hoàn tác" hint="Không bắt buộc">
           <Textarea
             name="reason"
-            required
             disabled={pending}
             placeholder="Ví dụ: Ngân hàng hoàn tiền, ghi nhận nhầm giao dịch..."
             autoFocus

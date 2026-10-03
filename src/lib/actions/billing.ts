@@ -199,9 +199,8 @@ export async function changeInvoiceStatusAction(
 ): Promise<ResultState> {
   const session = await requireAdmin();
   const trimmedReason = String(reason ?? "").trim();
-  if (!LIFECYCLE_TARGETS.has(targetStatus) || !trimmedReason || trimmedReason.length > 500) {
-    return errorState("Chọn trạng thái và nhập lý do từ 1 đến 500 ký tự.");
-  }
+  if (!LIFECYCLE_TARGETS.has(targetStatus)) return errorState("Trạng thái hóa đơn không hợp lệ.");
+  if (trimmedReason.length > 500) return errorState("Lý do tối đa 500 ký tự.");
 
   try {
     await changeInvoiceLifecycle({

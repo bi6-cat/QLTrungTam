@@ -307,13 +307,12 @@ export function TransactionMatchForm({
           <div className="grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
             <p className="text-sm font-medium text-amber-800">
               Giao dịch {difference > 0 ? "thừa" : "thiếu"} {formatCurrency(Math.abs(difference))} so với hóa
-              đơn. Bạn cần nhập lý do để tiếp tục gán.
+              đơn. Vẫn gán được; có thể ghi lý do để đối soát sau.
             </p>
             <input type="hidden" name="allowAmountMismatch" value="true" />
-            <Field label="Lý do gán lệch tiền">
+            <Field label="Lý do gán lệch tiền" hint="Không bắt buộc">
               <Textarea
                 name="reason"
-                required
                 disabled={assigning}
                 maxLength={500}
                 placeholder="Ví dụ: Phụ huynh chuyển gộp và trung tâm đã đối soát..."
@@ -342,10 +341,9 @@ export function TransactionMatchForm({
       <div className="border-t border-stone-200 pt-4">
         <form action={resolveAction} className="grid gap-3">
           <input type="hidden" name="transactionId" value={transactionId} />
-          <Field label="Lý do xử lý không gán hóa đơn">
+          <Field label="Lý do xử lý không gán hóa đơn" hint="Không bắt buộc">
             <Textarea
               name="reason"
-              required
               disabled={resolving}
               maxLength={500}
               placeholder="Ví dụ: Giao dịch thử, khoản thu không thuộc học phí..."

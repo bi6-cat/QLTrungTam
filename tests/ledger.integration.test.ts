@@ -99,7 +99,7 @@ describe("financial ledger integration", { concurrency: false }, () => {
     assert.equal(metadata.paymentMethod, "bank_transfer");
   });
 
-  test("blocks a mismatch and requires a reason before a forced match", async () => {
+  test("blocks a mismatch until forced and keeps the override reason", async () => {
     const fixture = await harness.createFixture();
     const invoice = await harness.createInvoice(fixture, { amount: 800_000 });
     const transaction = await harness.createBankTransaction({ amount: 750_000 });
@@ -112,17 +112,6 @@ describe("financial ledger integration", { concurrency: false }, () => {
           actor: harness.actor
         }),
       "AMOUNT_MISMATCH"
-    );
-    await expectLedgerError(
-      () =>
-        assignTransactionToInvoice({
-          transactionId: transaction.id,
-          invoiceId: invoice.id,
-          actor: harness.actor,
-          force: true,
-          reason: "   "
-        }),
-      "FORCE_REASON_REQUIRED"
     );
 
     const unchangedTransaction = await prisma.transaction.findUniqueOrThrow({
@@ -164,6 +153,31 @@ describe("financial ledger integration", { concurrency: false }, () => {
     assert.equal(metadata.invoiceAmount, 800_000);
     assert.equal(metadata.amountDifference, -50_000);
     assert.equal(metadata.forced, true);
+  });
+
+  test("forces a mismatch without a reason using a default override reason", async () => {
+    const fixture = await harness.createFixture();
+    const invoice = await harness.createInvoice(fixture, { amount: 800_000 });
+    const transaction = await harness.createBankTransaction({ amount: 750_000 });
+
+    await assignTransactionToInvoice({
+      transactionId: transaction.id,
+      invoiceId: invoice.id,
+      actor: harness.actor,
+      force: true,
+      reason: "   "
+    });
+
+    const [storedTransaction, audit] = await Promise.all([
+      prisma.transaction.findUniqueOrThrow({ where: { id: transaction.id } }),
+      prisma.auditLog.findFirstOrThrow({
+        where: { action: "transaction.assigned", entityId: transaction.id }
+      })
+    ]);
+    assert.equal(storedTransaction.matchedInvoiceId, invoice.id);
+    assert.equal(storedTransaction.matchOverrideReason, "Không ghi lý do");
+    assert.equal(audit.reason, null);
+    assert.equal(jsonObject(audit.metadata).forced, true);
   });
 
   test("prevents reusing either a matched transaction or a paid invoice", async () => {
@@ -389,6 +403,32 @@ describe("financial ledger integration", { concurrency: false }, () => {
         }),
       "TRANSACTION_ALREADY_RESOLVED"
     );
+  });
+
+  test("reverses and resolves without a reason", async () => {
+    const fixture = await harness.createFixture();
+    const invoice = await harness.createInvoice(fixture);
+    const matched = await harness.createBankTransaction();
+    const unmatched = await harness.createBankTransaction({ amount: 123_000 });
+
+    await assignTransactionToInvoice({ transactionId: matched.id, invoiceId: invoice.id, actor: harness.actor });
+    await reverseTransaction({ transactionId: matched.id, actor: harness.actor });
+    await resolveUnmatchedTransaction({ transactionId: unmatched.id, actor: harness.actor, reason: "  " });
+
+    const [reversed, resolved, audits] = await Promise.all([
+      prisma.transaction.findUniqueOrThrow({ where: { id: matched.id } }),
+      prisma.transaction.findUniqueOrThrow({ where: { id: unmatched.id } }),
+      prisma.auditLog.findMany({
+        where: { entityId: { in: [matched.id, unmatched.id] }, action: { in: ["transaction.reversed", "transaction.resolved"] } }
+      })
+    ]);
+    assert.ok(reversed.reversedAt instanceof Date);
+    assert.equal(reversed.reversalReason, null);
+    assert.equal(reversed.resolvedNote, "Hoàn tác");
+    assert.ok(resolved.resolvedAt instanceof Date);
+    assert.equal(resolved.resolvedNote, null);
+    assert.equal(audits.length, 2);
+    assert.ok(audits.every((audit) => audit.reason === null));
   });
 
   test("keeps legacy cash classification and reversed-state guards at the database boundary", async () => {

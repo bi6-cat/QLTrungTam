@@ -32,7 +32,7 @@ export function AddStudentForm() {
         <Input name="address" />
       </Field>
       <div className="lg:col-span-4">
-        <Field label="Ghi chú">
+        <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea name="note" />
         </Field>
       </div>

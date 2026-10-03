@@ -130,11 +130,10 @@ export function LeaveClassButton({
                 </span>
               </label>
             </div>
-            <Field label="Lý do">
+            <Field label="Lý do" hint="Không bắt buộc">
               <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                required
                 maxLength={500}
                 disabled={pending}
                 placeholder="Ví dụ: chuyển trường, phụ huynh báo nghỉ..."
@@ -145,7 +144,7 @@ export function LeaveClassButton({
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
                 Đóng
               </Button>
-              <Button type="submit" variant="danger" disabled={pending || !reason.trim()}>
+              <Button type="submit" variant="danger" disabled={pending}>
                 {pending ? "Đang lưu..." : "Xác nhận cho nghỉ"}
               </Button>
             </div>

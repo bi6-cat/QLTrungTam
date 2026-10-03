@@ -107,7 +107,7 @@ export function InvoiceLifecycleActions({
         <Modal title="Thao tác hóa đơn" onClose={() => setChooserOpen(false)}>
           <div className="grid gap-3">
             <p className="text-sm text-stone-600">
-              Chọn cách xử lý hóa đơn. Mỗi thao tác đều yêu cầu nhập lý do để lưu vào lịch sử đối soát.
+              Chọn cách xử lý hóa đơn. Có thể ghi thêm lý do để lưu vào lịch sử đối soát.
             </p>
             <Button
               type="button"
@@ -150,15 +150,14 @@ export function InvoiceLifecycleActions({
         >
           <form onSubmit={submit} className="grid gap-4">
             <p className="text-sm text-stone-600">{COPY[target].description}</p>
-            <Field label="Lý do">
+            <Field label="Lý do" hint="Không bắt buộc">
               <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                required
                 maxLength={500}
                 disabled={pending || disabled}
                 autoFocus
-                placeholder="Nhập lý do để lưu vào lịch sử đối soát..."
+                placeholder="Ghi lý do để lưu vào lịch sử đối soát..."
               />
             </Field>
             {error ? <p className="text-sm font-medium text-warning" role="alert">{error}</p> : null}
@@ -169,7 +168,7 @@ export function InvoiceLifecycleActions({
               <Button
                 type="submit"
                 variant={target === "void" ? "danger" : "primary"}
-                disabled={pending || disabled || !reason.trim()}
+                disabled={pending || disabled}
               >
                 {pending ? "Đang lưu..." : COPY[target].label}
               </Button>
