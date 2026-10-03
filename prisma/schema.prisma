@@ -37,17 +37,26 @@ model ClassRoom {
   id                      String          @id @default(cuid())
   name                    String
   shortCode               String          @unique
+  /// Mã ngẫu nhiên của link nộp tiền phụ huynh: /pay/<MÃ LỚP>-<publicToken>.
   publicToken             String          @unique @default(cuid())
+  /// Mã ngẫu nhiên riêng của link giáo viên: /teacher/classes/<MÃ LỚP>-<teacherToken>.
+  teacherToken            String          @unique
+  /// Mã 4 ký tự cũ (dùng chung cho phụ huynh và giáo viên); chỉ còn để chuyển hướng tạm.
+  legacyToken             String?         @unique
   teacherName             String          @default("")
   pricePerSession         Int
   sessionsPerMonthDefault Int
   /// Phần trăm học phí đã thu của lớp được trả cho giáo viên (0–100).
   teacherSharePercent     Int             @default(0)
+  /// Ngày chốt lương riêng của lớp ("same:31" = cuối tháng, "next:5" = ngày 5 tháng sau);
+  /// null = theo cài đặt chung. HS nộp sau ngày chốt được tính vào lương tháng sau.
+  salaryCutoff            String?
   archivedAt              DateTime?
   createdAt               DateTime        @default(now())
   enrollments             Enrollment[]
   schedules               ClassSchedule[]
   expenses                Expense[]
+  salaryWriteOffs         SalaryWriteOff[]
 
   @@index([shortCode])
   @@index([publicToken])
@@ -83,9 +92,15 @@ model Expense {
   classId        String?
   description    String
   amount         Int
-  /// Chỉ dùng khi category = teacher_salary: % chia và số tiền gốc đã dùng để tính.
+  /// Chỉ dùng khi category = teacher_salary: mỗi bản ghi là MỘT lần chuyển lương cho kỳ học
+  /// phí (month/year); một kỳ có thể chuyển nhiều lần (trả trước, chuyển bù khi HS nộp muộn).
+  /// sharePercent/baseAmount: % chia và học phí kỳ đã thu tại lúc ghi.
   sharePercent   Int?
   baseAmount     Int?
+  /// Ngày chuyển tiền thực tế (lương giáo viên); có thể khác ngày ghi vào hệ thống.
+  paidAt         DateTime?
+  /// Hình thức trả lương: chuyển khoản hoặc tiền mặt đưa thêm (chỉ dùng cho teacher_salary).
+  paymentMethod  PaymentMethod?
   note           String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -117,6 +132,10 @@ model Enrollment {
   classId          String
   sessionsOverride Int?
   status           EnrollmentStatus  @default(active)
+  /// Ngày học sinh bắt đầu học lớp (admin nhập khi thêm vào lớp hoặc khi quay lại học).
+  startDate        DateTime          @default(now())
+  /// Ngày đầu của tháng đầu tiên học sinh không còn học lớp này; null = đang học.
+  leftAt           DateTime?
   createdAt        DateTime          @default(now())
   classRoom        ClassRoom         @relation(fields: [classId], references: [id], onDelete: Restrict)
   student          Student           @relation(fields: [studentId], references: [id], onDelete: Restrict)
@@ -157,6 +176,8 @@ model MonthlyInvoice {
   statusChangedAt        DateTime?
   paidAt                 DateTime?
   transactionId          String?       @unique
+  /// Số tiền thực nhận khi hóa đơn được thanh toán (có thể khác amount khi gán lệch tiền).
+  paidAmount             Int?
   studentNameSnapshot    String?
   studentPhoneSnapshot   String?
   classNameSnapshot      String?
@@ -222,6 +243,32 @@ model AuditLog {
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
+}
+
+/// Bỏ qua dư nợ lương của một lớp-tháng (vd tháng trả lệch đã thỏa thuận xong với giáo viên):
+/// phần chưa trả coi như xong và các khoản nộp muộn của tháng đó, đã nộp trước lúc bỏ qua, không
+/// cộng sang lương tháng sau. Khoản nộp sau thời điểm bỏ qua vẫn tính lương bình thường.
+model SalaryWriteOff {
+  classId   String
+  year      Int
+  month     Int
+  note      String?
+  createdAt DateTime  @default(now())
+  classRoom ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([classId, year, month])
+}
+
+/// Ngày chốt lương đặt riêng cho một tháng lương (tháng đó trả lương khác ngày thường lệ).
+/// Áp dụng cho các lớp theo ngày chốt chung; lớp có ngày chốt riêng giữ quy tắc của lớp.
+model SalaryMonthCutoff {
+  year       Int
+  month      Int
+  /// 0h (giờ máy chủ) của ngày chốt: tiền nộp đến hết ngày này tính vào lương tháng đó.
+  cutoffDate DateTime
+  updatedAt  DateTime @updatedAt
+
+  @@id([year, month])
 }
 
 model AppSetting {

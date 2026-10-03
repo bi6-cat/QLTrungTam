@@ -1,5 +1,5 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
 
 export type InvoiceLifecycleStatus = "unpaid" | "void" | "waived";
 
@@ -12,7 +12,8 @@ export type ChangeInvoiceLifecycleInput = {
   invoiceId: string;
   targetStatus: InvoiceLifecycleStatus;
   actor: InvoiceLifecycleActor;
-  reason: string;
+  /** Không bắt buộc; hủy/miễn mà để trống thì lưu lý do mặc định (DB yêu cầu có lý do). */
+  reason?: string;
 };
 
 export type ChangeInvoiceLifecycleResult = {
@@ -24,7 +25,6 @@ export type ChangeInvoiceLifecycleResult = {
 
 export type InvoiceLifecycleErrorCode =
   | "INVALID_ACTOR"
-  | "REASON_REQUIRED"
   | "INVOICE_NOT_FOUND"
   | "INVOICE_PAID"
   | "NO_OP"
@@ -42,7 +42,6 @@ export class InvoiceLifecycleError extends Error {
   }
 }
 
-const MAX_SERIALIZABLE_ATTEMPTS = 3;
 const MAX_REASON_LENGTH = 1_000;
 
 function assertActor(actor: InvoiceLifecycleActor) {
@@ -54,48 +53,25 @@ function assertActor(actor: InvoiceLifecycleActor) {
   }
 }
 
-function requireReason(reason: string) {
-  const normalized = reason.trim();
-  if (!normalized) {
-    throw new InvoiceLifecycleError(
-      "REASON_REQUIRED",
-      "Cần nhập lý do thay đổi trạng thái hóa đơn."
-    );
-  }
-  return normalized.slice(0, MAX_REASON_LENGTH);
+const DEFAULT_STATUS_REASON: Record<InvoiceLifecycleStatus, string | null> = {
+  unpaid: null,
+  void: "Hủy hóa đơn",
+  waived: "Miễn học phí"
+};
+
+function optionalReason(reason: string | undefined) {
+  const normalized = reason?.trim();
+  return normalized ? normalized.slice(0, MAX_REASON_LENGTH) : null;
 }
 
-function isKnownPrismaError(error: unknown, code: string) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
-}
-
-async function runSerializable<T>(
-  work: (tx: Prisma.TransactionClient) => Promise<T>
-): Promise<T> {
-  for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
-    try {
-      return await prisma.$transaction(work, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      });
-    } catch (error) {
-      if (error instanceof InvoiceLifecycleError) throw error;
-
-      if (isKnownPrismaError(error, "P2034")) {
-        if (attempt < MAX_SERIALIZABLE_ATTEMPTS) continue;
-        throw new InvoiceLifecycleError(
-          "CONCURRENT_MODIFICATION",
-          "Hóa đơn vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  throw new InvoiceLifecycleError(
-    "CONCURRENT_MODIFICATION",
-    "Không thể hoàn tất thay đổi do xung đột dữ liệu."
-  );
+function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return runSerializableTransaction(work, {
+    onConflict: () =>
+      new InvoiceLifecycleError(
+        "CONCURRENT_MODIFICATION",
+        "Hóa đơn vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
+      )
+  });
 }
 
 function assertTransition(input: {
@@ -151,7 +127,7 @@ export async function changeInvoiceLifecycle(
   input: ChangeInvoiceLifecycleInput
 ): Promise<ChangeInvoiceLifecycleResult> {
   assertActor(input.actor);
-  const reason = requireReason(input.reason);
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const invoice = await tx.monthlyInvoice.findUnique({
@@ -164,6 +140,8 @@ export async function changeInvoiceLifecycle(
         amount: true,
         month: true,
         year: true,
+        sessions: true,
+        enrollmentId: true,
         matchedTransaction: { select: { id: true } }
       }
     });
@@ -198,7 +176,7 @@ export async function changeInvoiceLifecycle(
       },
       data: {
         status: input.targetStatus,
-        statusReason: reason,
+        statusReason: reason ?? DEFAULT_STATUS_REASON[input.targetStatus],
         statusChangedAt: changedAt
       }
     });
@@ -208,6 +186,19 @@ export async function changeInvoiceLifecycle(
         "CONCURRENT_MODIFICATION",
         "Hóa đơn vừa được thanh toán hoặc thay đổi bởi thao tác khác."
       );
+    }
+
+    if (input.targetStatus === "unpaid") {
+      // Khôi phục hóa đơn đã hủy do Bảo lưu: kế hoạch tháng quay về "Đang học" theo hóa đơn.
+      await tx.enrollmentMonth.updateMany({
+        where: {
+          enrollmentId: invoice.enrollmentId,
+          month: invoice.month,
+          year: invoice.year,
+          status: "on_leave"
+        },
+        data: { status: "active", sessions: invoice.sessions }
+      });
     }
 
     const action =

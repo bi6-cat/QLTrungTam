@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
-import { createEnrollmentAction } from "@/lib/actions";
+import { createEnrollmentAction } from "@/lib/actions/enrollments";
+import { toast } from "@/components/Toaster";
 import { Button, Field, Input, Select } from "@/components/ui";
 
 type StudentOption = {
@@ -12,6 +13,12 @@ type StudentOption = {
 };
 
 const PAGE_SIZE = 12;
+
+function todayInputValue() {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 export function StudentEnrollmentPicker({
   classId,
@@ -26,6 +33,7 @@ export function StudentEnrollmentPicker({
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => {
@@ -42,23 +50,43 @@ export function StudentEnrollmentPicker({
   async function handleSubmit(formData: FormData) {
     if (selectedIds.size === 0) return;
     setPending(true);
-    try {
-      const sessionsOverride = formData.get("sessionsOverride");
-      const status = formData.get("status");
-      await Promise.all(
-        [...selectedIds].map((studentId) => {
-          const data = new FormData();
-          data.set("classId", classId);
-          data.set("studentId", studentId);
-          if (sessionsOverride) data.set("sessionsOverride", sessionsOverride);
-          if (status) data.set("status", status);
-          return createEnrollmentAction(data);
-        })
-      );
-      onSuccess?.();
-    } finally {
-      setPending(false);
+    setError("");
+    const sessionsOverride = formData.get("sessionsOverride");
+    const status = formData.get("status");
+    const startDate = String(formData.get("startDate") ?? "");
+    const failed: Array<{ id: string; message: string }> = [];
+    const succeeded: string[] = [];
+    // Thêm lần lượt từng em: một em lỗi không làm hỏng cả lượt, và biết rõ em nào chưa vào lớp.
+    for (const studentId of selectedIds) {
+      const data = new FormData();
+      data.set("classId", classId);
+      data.set("studentId", studentId);
+      if (sessionsOverride) data.set("sessionsOverride", sessionsOverride);
+      if (status) data.set("status", status);
+      data.set("startDate", startDate);
+      try {
+        const result = await createEnrollmentAction(data);
+        if (result.error) failed.push({ id: studentId, message: result.error });
+        else succeeded.push(result.success);
+      } catch {
+        failed.push({ id: studentId, message: "Không kết nối được máy chủ." });
+      }
     }
+    setPending(false);
+
+    if (succeeded.length === 1) toast.success(succeeded[0]);
+    else if (succeeded.length > 1) toast.success(`Đã thêm ${succeeded.length} học sinh vào lớp.`);
+    if (failed.length === 0) {
+      onSuccess?.();
+      return;
+    }
+    const nameById = new Map(students.map((student) => [student.id, student.fullName]));
+    const added = selectedIds.size - failed.length;
+    setSelectedIds(new Set(failed.map((item) => item.id)));
+    setError(
+      `${added > 0 ? `Đã thêm ${added} học sinh. ` : ""}Chưa thêm được: ` +
+        failed.map((item) => `${nameById.get(item.id) ?? "học sinh"} (${item.message})`).join("; ")
+    );
   }
 
   const filtered = useMemo(() => {
@@ -155,7 +183,16 @@ export function StudentEnrollmentPicker({
         ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[160px_160px_auto]">
+      {error ? (
+        <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 md:grid-cols-[170px_140px_150px_auto]">
+        <Field label="Ngày bắt đầu học">
+          <Input name="startDate" type="date" defaultValue={todayInputValue()} required />
+        </Field>
         <Field label="Buổi riêng">
           <Input name="sessionsOverride" type="number" min="1" placeholder="Trống" />
         </Field>

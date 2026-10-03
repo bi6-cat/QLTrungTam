@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -11,6 +10,8 @@ import {
   Trash2,
   Upload
 } from "lucide-react";
+import { refreshAfterStudentImportAction } from "@/lib/actions/students";
+import { toast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Badge, Button, Input, Select, Textarea } from "@/components/ui";
 import type {
@@ -62,7 +63,6 @@ function draftRows(rows: StudentImportPreviewRow[]): StudentImportDraftRow[] {
 }
 
 export function StudentExcelImportButton() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sourceFileName, setSourceFileName] = useState("");
@@ -206,7 +206,11 @@ export function StudentExcelImportButton() {
         return;
       }
       setResult(payload);
-      router.refresh();
+      toast.success(
+        `Đã nhập Excel: tạo ${payload.createdStudents} học sinh, ${payload.createdEnrollments} ghi danh.`
+      );
+      // Dữ liệu đã lưu; nếu bước làm mới danh sách lỗi thì kết quả import vẫn đúng.
+      await refreshAfterStudentImportAction().catch(() => undefined);
     } catch {
       setError("Không thể kết nối máy chủ để lưu dữ liệu.");
     } finally {

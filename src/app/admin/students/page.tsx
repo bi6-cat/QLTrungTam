@@ -7,6 +7,7 @@ import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditStudentButton } from "@/components/EditStudentButton";
 import { StudentExcelImportButton } from "@/components/StudentExcelImportButton";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 15;
@@ -16,6 +17,7 @@ export default async function StudentsPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string; classId?: string; archived?: string }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const q = (params.q || "").trim();
   const classId = (params.classId || "").trim();

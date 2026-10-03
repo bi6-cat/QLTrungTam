@@ -1,73 +1,33 @@
-import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { PaymentFlow } from "@/components/PaymentFlow";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
-import { buildVietQrImageUrl } from "@/lib/payment";
-import { prisma } from "@/lib/prisma";
-import { getAppSettings } from "@/lib/settings";
+import { resolveClassLink } from "@/lib/class-link-resolver";
+import { getPayableStudents } from "@/lib/pay-portal";
 
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = {
+  robots: { index: false, follow: false }
+};
+
 export default async function PayPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ short_code: string }>;
+  searchParams: Promise<{ hs?: string }>;
 }) {
   const { short_code } = await params;
-  const classRoom = await prisma.classRoom.findUnique({
-    where: { publicToken: short_code },
-    include: {
-      enrollments: {
-        where: {
-          OR: [
-            { status: "active", student: { archivedAt: null } },
-            { invoices: { some: { status: "unpaid" } } }
-          ]
-        },
-        orderBy: { student: { fullName: "asc" } },
-        include: {
-          student: true,
-          invoices: {
-            where: { status: { in: ["unpaid", "paid", "waived", "void"] } },
-            orderBy: [{ year: "desc" }, { month: "desc" }]
-          }
-        }
-      }
-    }
-  });
+  const { hs } = await searchParams;
+  const resolved = await resolveClassLink(short_code, "pay");
+  if (!resolved) notFound();
+  if (resolved.kind === "redirect") redirect(resolved.redirectTo);
 
-  if (!classRoom) {
-    notFound();
-  }
-
-  const settings = await getAppSettings();
-  const bankBin = settings.bankBin;
-  const accountNumber = settings.bankAccountNumber;
-  const accountName = settings.bankAccountName;
-  const payableEnrollments = classRoom.enrollments.filter(
-    (enrollment) =>
-      enrollment.invoices.some((invoice) => invoice.status === "unpaid") ||
-      (!classRoom.archivedAt && !enrollment.student.archivedAt)
-  );
-  const students = payableEnrollments.map((enrollment) => ({
-    id: enrollment.student.id,
-    fullName: enrollment.student.fullName,
-    invoices: enrollment.invoices.map((invoice) => ({
-      id: invoice.id,
-      month: invoice.month,
-      year: invoice.year,
-      amount: invoice.amount,
-      memoContent: invoice.memoContent,
-      status: invoice.status,
-      qrImageUrl: buildVietQrImageUrl({
-        bankBin,
-        accountNumber,
-        accountName,
-        amount: invoice.amount,
-        memo: invoice.memoContent
-      })
-    }))
-  }));
+  const classRoom = await getPayableStudents(resolved.classId);
+  if (!classRoom) notFound();
+  const { students } = classRoom;
 
   return (
     <main className="min-h-screen">
@@ -80,7 +40,7 @@ export default async function PayPage({
               Nộp học phí
             </span>
             <h1 className="mt-3 text-2xl font-bold tracking-tight">{classRoom.name}</h1>
-            <p className="mt-2 text-sm text-white/85">Chọn tên học sinh, kiểm tra số tiền rồi quét mã QR để chuyển khoản.</p>
+            <p className="mt-2 text-sm text-white/85">Tìm tên học sinh, kiểm tra số tiền rồi quét mã QR để chuyển khoản.</p>
           </div>
         </header>
 
@@ -93,7 +53,12 @@ export default async function PayPage({
             <p className="mt-2 text-stone-600">Lớp chưa có học sinh đang học hoặc mọi khoản đã được xử lý.</p>
           </section>
         ) : (
-          <PaymentFlow students={students} />
+          <PaymentFlow
+            classSlug={short_code}
+            students={students}
+            // Link nhắc nợ có ?hs=<mã học sinh>: mở thẳng học phí của em đó nếu em có trong lớp.
+            initialStudentId={students.some((student) => student.id === hs) ? hs : undefined}
+          />
         )}
       </div>
     </main>

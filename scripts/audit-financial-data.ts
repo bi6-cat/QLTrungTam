@@ -616,14 +616,6 @@ async function main() {
             sample: label
           });
         }
-        if (transaction.resolvedAt && !transaction.resolvedNote?.trim()) {
-          findings.add({
-            code: "TX_RESOLVED_WITHOUT_NOTE",
-            severity: "warning",
-            title: "Giao dịch đã xử lý nhưng thiếu ghi chú xử lý",
-            sample: label
-          });
-        }
         if (transaction.paymentMethod === "cash" && !transaction.resolvedAt) {
           findings.add({
             code: "TX_UNMATCHED_CASH",

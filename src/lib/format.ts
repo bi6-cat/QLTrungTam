@@ -6,6 +6,18 @@ export function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+// vi-VN với chỉ ngày/tháng in ra "01-10"; en-GB cho đúng dạng "01/10" quen thuộc.
+const dayMonthFormat = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "Asia/Ho_Chi_Minh"
+});
+
+/** Ngày/tháng ngắn theo giờ Việt Nam, vd "05/10". */
+export function formatDayMonth(date: Date) {
+  return dayMonthFormat.format(date);
+}
+
 export function formatMonth(month: number, year: number) {
   return `Tháng ${month}/${year}`;
 }

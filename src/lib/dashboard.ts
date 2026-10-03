@@ -1,4 +1,10 @@
+import {
+  isEnrollmentActiveInPeriod,
+  latestMonthUpToPeriodArgs,
+  resolveMonthPlan
+} from "@/lib/enrollment-period";
 import { prisma } from "@/lib/prisma";
+import { getPendingSalaryLines } from "@/lib/salary";
 
 export type DashboardClassRow = {
   id: string;
@@ -54,7 +60,8 @@ export type DashboardData = {
     unmatchedTransactions: number;
     classesWithoutSchedule: number;
     classesWithoutTeacherRate: number;
-    salaryNotGenerated: boolean;
+    /** Số lớp-kỳ đã qua còn lệch lương (chưa chuyển đủ, HS nộp muộn sau khi chuyển, hoặc học phí bị hoàn). */
+    salaryPending: number;
   };
   trend: TrendPoint[];
 };
@@ -85,7 +92,7 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
   // 6 tháng gần nhất tính lùi từ tháng đang xem, dùng cho biểu đồ xu hướng.
   const trendPeriods = Array.from({ length: 6 }, (_, offset) => shiftMonth(month, year, offset - 5));
 
-  const [classes, unpaidAll, unmatchedTransactions, trendGroups, salaryCount] = await Promise.all([
+  const [classes, unpaidAll, unmatchedTransactions, trendGroups, pendingSalary] = await Promise.all([
     prisma.classRoom.findMany({
       orderBy: { createdAt: "asc" },
       select: {
@@ -101,20 +108,23 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
         enrollments: {
           where: {
             OR: [
-              { createdAt: { lt: periodEnd } },
+              { startDate: { lt: periodEnd } },
               { months: { some: { month, year } } },
               { invoices: { some: { month, year } } }
             ]
           },
           select: {
             status: true,
+            leftAt: true,
             sessionsOverride: true,
             student: { select: { archivedAt: true } },
-            invoices: { where: { month, year }, select: { status: true, amount: true } },
-            months: {
+            invoices: {
               where: { month, year },
-              take: 1,
-              select: { status: true, sessions: true, pricePerSession: true }
+              select: { status: true, amount: true, paidAmount: true, sessions: true, pricePerSession: true }
+            },
+            months: {
+              ...latestMonthUpToPeriodArgs(month, year),
+              select: { month: true, year: true, status: true, sessions: true, pricePerSession: true }
             }
           }
         }
@@ -133,26 +143,37 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
         OR: trendPeriods.map((period) => ({ month: period.month, year: period.year })),
         status: { in: ["paid", "unpaid"] }
       },
-      _sum: { amount: true }
+      _sum: { amount: true, paidAmount: true }
     }),
-    prisma.expense.count({ where: { month, year, category: "teacher_salary" } })
+    getPendingSalaryLines(now)
   ]);
 
   const rows: DashboardClassRow[] = classes
     .map((classRoom) => {
+      const plans = new Map(
+        classRoom.enrollments.map((enrollment) => [
+          enrollment,
+          resolveMonthPlan({
+            month,
+            year,
+            latestMonth: enrollment.months[0],
+            invoice: enrollment.invoices[0],
+            enrollment,
+            classRoom
+          })
+        ])
+      );
       const active = classRoom.enrollments.filter((enrollment) => {
         if (classRoom.archivedAt || enrollment.student.archivedAt) return false;
-        const invoice = enrollment.invoices[0];
-        return (
-          (enrollment.months[0]?.status ?? (invoice ? "active" : enrollment.status)) === "active"
-        );
+        if (!isEnrollmentActiveInPeriod(enrollment.leftAt, month, year)) return false;
+        return plans.get(enrollment)?.status === "active";
       });
       const invoices = classRoom.enrollments.flatMap((enrollment) => enrollment.invoices);
       const paid = invoices.filter((invoice) => invoice.status === "paid");
       const unpaid = invoices.filter((invoice) => invoice.status === "unpaid");
       const waived = invoices.filter((invoice) => invoice.status === "waived");
       const voided = invoices.filter((invoice) => invoice.status === "void");
-      const paidAmount = paid.reduce((sum, invoice) => sum + invoice.amount, 0);
+      const paidAmount = paid.reduce((sum, invoice) => sum + (invoice.paidAmount ?? invoice.amount), 0);
       const unpaidAmount = unpaid.reduce((sum, invoice) => sum + invoice.amount, 0);
       const expectedAmount = paidAmount + unpaidAmount;
 
@@ -171,10 +192,8 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
         unissuedCount: active.filter((enrollment) => enrollment.invoices.length === 0).length,
         expectedAmount,
         plannedAmount: active.reduce((sum, enrollment) => {
-          const period = enrollment.months[0];
-          const sessions =
-            period?.sessions ?? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
-          return sum + sessions * (period?.pricePerSession ?? classRoom.pricePerSession);
+          const plan = plans.get(enrollment);
+          return sum + (plan ? plan.sessions * plan.pricePerSession : 0);
         }, 0),
         paidAmount,
         waivedAmount: waived.reduce((sum, invoice) => sum + invoice.amount, 0),
@@ -200,7 +219,7 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
   for (const group of trendGroups) {
     const point = trendMap.get(`${group.year}-${group.month}`);
     if (!point) continue;
-    if (group.status === "paid") point.collected += group._sum.amount ?? 0;
+    if (group.status === "paid") point.collected += group._sum.paidAmount ?? group._sum.amount ?? 0;
     else point.outstanding += group._sum.amount ?? 0;
   }
 
@@ -232,7 +251,7 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
       unmatchedTransactions,
       classesWithoutSchedule: activeClasses.filter((c) => c.schedules.length === 0).length,
       classesWithoutTeacherRate: activeClasses.filter((c) => c.teacherSharePercent <= 0).length,
-      salaryNotGenerated: salaryCount === 0 && activeClasses.length > 0
+      salaryPending: pendingSalary.length
     },
     trend: [...trendMap.values()]
   };

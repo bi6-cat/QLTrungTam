@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { LogOut } from "lucide-react";
-import { logoutAction } from "@/lib/actions";
+import { logoutAction } from "@/lib/actions/auth";
 import { requireAdmin } from "@/lib/auth";
 import { Button } from "@/components/ui";
 import { AdminNav } from "@/components/AdminNav";
+import { Toaster } from "@/components/Toaster";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireAdmin();
@@ -38,6 +39,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </aside>
         <main className="min-w-0 animate-fade-up">{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }

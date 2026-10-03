@@ -1,0 +1,70 @@
+"use client";
+
+import { useActionState, useEffect, useRef, useState } from "react";
+import { AlertTriangle, Plus } from "lucide-react";
+import { createClassAction } from "@/lib/actions/classes";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { MoneyInput } from "@/components/MoneyInput";
+import { SalaryCutoffSelect } from "@/components/SalaryCutoffSelect";
+import { useResultToast } from "@/components/Toaster";
+import { Button, Field, Input } from "@/components/ui";
+
+export function CreateClassForm({ defaultCutoffLabel }: { defaultCutoffLabel: string }) {
+  const [state, action, pending] = useActionState(createClassAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [resetKey, setResetKey] = useState(0);
+
+  // Tạo xong thì dọn form; lỗi thì giữ nguyên những gì đã gõ để sửa tiếp.
+  useEffect(() => {
+    if (!state.success) return;
+    formRef.current?.reset();
+    setResetKey((value) => value + 1);
+  }, [state]);
+
+  return (
+    <form ref={formRef} action={action} className="mt-4 grid gap-3">
+      <Field label="Tên lớp">
+        <Input name="name" required placeholder="Lớp 10A - Toán" />
+      </Field>
+      <Field label="Mã lớp">
+        <Input
+          name="shortCode"
+          required
+          maxLength={20}
+          pattern="[A-Za-z0-9]+"
+          title="Chỉ gồm chữ không dấu và số, không dấu cách"
+          placeholder="L10A"
+          className="uppercase"
+        />
+      </Field>
+      <Field label="Tên giáo viên">
+        <Input name="teacherName" placeholder="Cô Hạnh" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Giá / buổi">
+          <MoneyInput key={resetKey} name="pricePerSession" required placeholder="0" />
+        </Field>
+        <Field label="Buổi / tháng">
+          <Input name="sessionsPerMonthDefault" type="number" min="1" defaultValue="8" required />
+        </Field>
+      </div>
+      <Field label="% lương GV" hint="% học phí đã thu, nhập sau cũng được">
+        <Input name="teacherSharePercent" type="number" min="0" max="100" defaultValue="0" required />
+      </Field>
+      <Field label="Ngày chốt lương">
+        <SalaryCutoffSelect name="salaryCutoff" defaultValue="" inheritLabel={defaultCutoffLabel} />
+      </Field>
+      {state.error ? (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{state.error}</span>
+        </div>
+      ) : null}
+      <Button type="submit" disabled={pending}>
+        <Plus className="h-4 w-4" />
+        {pending ? "Đang tạo..." : "Tạo lớp"}
+      </Button>
+    </form>
+  );
+}

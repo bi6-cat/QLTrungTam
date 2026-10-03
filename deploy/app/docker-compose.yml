@@ -33,7 +33,7 @@ services:
     command:
       - postgres
       - -c
-      - archive_mode=on
+      - "archive_mode=${PG_ARCHIVE_MODE:-on}"
       - -c
       - "archive_command=pgbackrest --stanza=qltrungtam archive-push %p"
       - -c

@@ -2,9 +2,9 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { matchInvoiceFromTransaction } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
+import { isKnownPrismaError, runSerializable } from "@/lib/serializable";
 import { getAppSettings } from "@/lib/settings";
 
-const MAX_SERIALIZABLE_ATTEMPTS = 3;
 const MAX_INT32 = 2_147_483_647;
 const MIN_INT32 = -2_147_483_648;
 const AUTO_MATCH_REASON = "automatic_memo_match";
@@ -46,10 +46,6 @@ function normalizeAccountNumber(value: string) {
 
 function getAuthorizationSecret(value: string | null) {
   return value?.replace(/^(Bearer|Apikey|ApiKey)\s+/i, "").trim() || "";
-}
-
-function isKnownPrismaError(error: unknown, code: string) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
 }
 
 function isGatewayRefUniqueViolation(error: unknown) {
@@ -176,125 +172,110 @@ export async function POST(request: Request) {
   const match = await matchInvoiceFromTransaction({ content: rawContent, amount, transferredAt });
 
   try {
-    let result: { matched: boolean; reason: string | null } | null = null;
-
-    for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
-      try {
-        result = await prisma.$transaction(
-          async (tx) => {
-            // Tạo giao dịch chưa gán trước; chỉ liên kết sau khi claim hóa đơn thành công.
-            const transaction = await tx.transaction.create({
-              data: {
-                gatewayRef,
-                amount,
-                rawContent,
-                transferredAt,
-                paymentMethod: "bank_transfer",
-                matchedInvoiceId: null,
-                matchedAt: null,
-                matchReason: match.invoice ? null : match.reason,
-                matchOverrideReason: null,
-                reversedAt: null,
-                reversalReason: null,
-                resolvedAt: null,
-                resolvedNote: null,
-                rawPayload: payload as Prisma.InputJsonValue
-              },
-              select: { id: true }
-            });
-
-            if (!match.invoice) {
-              return { matched: false, reason: match.reason };
-            }
-
-            const claimedInvoice = await tx.monthlyInvoice.updateMany({
-              where: {
-                id: match.invoice.id,
-                status: "unpaid",
-                transactionId: null,
-                amount
-              },
-              data: {
-                status: "paid",
-                paidAt: transferredAt,
-                transactionId: transaction.id
-              }
-            });
-
-            if (claimedInvoice.count !== 1) {
-              const currentInvoice = await tx.monthlyInvoice.findUnique({
-                where: { id: match.invoice.id },
-                select: { amount: true }
-              });
-              const unmatchedReason =
-                currentInvoice && currentInvoice.amount !== amount
-                  ? INVOICE_AMOUNT_CHANGED_REASON
-                  : INVOICE_ALREADY_CLAIMED_REASON;
-
-              await tx.transaction.updateMany({
-                where: {
-                  id: transaction.id,
-                  matchedInvoiceId: null,
-                  resolvedAt: null,
-                  reversedAt: null
-                },
-                data: { matchReason: unmatchedReason }
-              });
-
-              return { matched: false, reason: unmatchedReason };
-            }
-
-            const linkedTransaction = await tx.transaction.updateMany({
-              where: {
-                id: transaction.id,
-                matchedInvoiceId: null,
-                resolvedAt: null,
-                reversedAt: null
-              },
-              data: {
-                matchedInvoiceId: match.invoice.id,
-                matchedAt: new Date(),
-                matchReason: AUTO_MATCH_REASON
-              }
-            });
-
-            if (linkedTransaction.count !== 1) {
-              throw new Error("Không thể hoàn tất liên kết giao dịch SePay với hóa đơn.");
-            }
-
-            await tx.auditLog.create({
-              data: {
-                actorUserId: null,
-                actorUsername: "system:sepay",
-                action: "transaction.auto_assigned",
-                entityType: "Transaction",
-                entityId: transaction.id,
-                metadata: {
-                  invoiceId: match.invoice.id,
-                  amount,
-                  paymentMethod: "bank_transfer",
-                  transferredAt: transferredAt.toISOString(),
-                  source: "sepay_webhook"
-                }
-              }
-            });
-
-            return { matched: true, reason: null };
+    const result = await runSerializable(
+      async (tx): Promise<{ matched: boolean; reason: string | null }> => {
+        // Tạo giao dịch chưa gán trước; chỉ liên kết sau khi claim hóa đơn thành công.
+        const transaction = await tx.transaction.create({
+          data: {
+            gatewayRef,
+            amount,
+            rawContent,
+            transferredAt,
+            paymentMethod: "bank_transfer",
+            matchedInvoiceId: null,
+            matchedAt: null,
+            matchReason: match.invoice ? null : match.reason,
+            matchOverrideReason: null,
+            reversedAt: null,
+            reversalReason: null,
+            resolvedAt: null,
+            resolvedNote: null,
+            rawPayload: payload as Prisma.InputJsonValue
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
-        );
-        break;
-      } catch (error) {
-        if (isKnownPrismaError(error, "P2034") && attempt < MAX_SERIALIZABLE_ATTEMPTS) {
-          continue;
-        }
-        throw error;
-      }
-    }
+          select: { id: true }
+        });
 
-    if (!result) {
-      throw new Error("Không thể lưu giao dịch SePay do xung đột dữ liệu.");
-    }
+        if (!match.invoice) {
+          return { matched: false, reason: match.reason };
+        }
+
+        const claimedInvoice = await tx.monthlyInvoice.updateMany({
+          where: {
+            id: match.invoice.id,
+            status: "unpaid",
+            transactionId: null,
+            amount
+          },
+          data: {
+            status: "paid",
+            paidAt: transferredAt,
+            transactionId: transaction.id,
+            paidAmount: amount
+          }
+        });
+
+        if (claimedInvoice.count !== 1) {
+          const currentInvoice = await tx.monthlyInvoice.findUnique({
+            where: { id: match.invoice.id },
+            select: { amount: true }
+          });
+          const unmatchedReason =
+            currentInvoice && currentInvoice.amount !== amount
+              ? INVOICE_AMOUNT_CHANGED_REASON
+              : INVOICE_ALREADY_CLAIMED_REASON;
+
+          await tx.transaction.updateMany({
+            where: {
+              id: transaction.id,
+              matchedInvoiceId: null,
+              resolvedAt: null,
+              reversedAt: null
+            },
+            data: { matchReason: unmatchedReason }
+          });
+
+          return { matched: false, reason: unmatchedReason };
+        }
+
+        const linkedTransaction = await tx.transaction.updateMany({
+          where: {
+            id: transaction.id,
+            matchedInvoiceId: null,
+            resolvedAt: null,
+            reversedAt: null
+          },
+          data: {
+            matchedInvoiceId: match.invoice.id,
+            matchedAt: new Date(),
+            matchReason: AUTO_MATCH_REASON
+          }
+        });
+
+        if (linkedTransaction.count !== 1) {
+          throw new Error("Không thể hoàn tất liên kết giao dịch SePay với hóa đơn.");
+        }
+
+        await tx.auditLog.create({
+          data: {
+            actorUserId: null,
+            actorUsername: "system:sepay",
+            action: "transaction.auto_assigned",
+            entityType: "Transaction",
+            entityId: transaction.id,
+            metadata: {
+              invoiceId: match.invoice.id,
+              amount,
+              paymentMethod: "bank_transfer",
+              transferredAt: transferredAt.toISOString(),
+              source: "sepay_webhook"
+            }
+          }
+        });
+
+        return { matched: true, reason: null };
+      },
+      { onConflict: () => new Error("Không thể lưu giao dịch SePay do xung đột dữ liệu.") }
+    );
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

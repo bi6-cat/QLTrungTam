@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Ban, Gift, MoreHorizontal, RotateCcw } from "lucide-react";
+import { changeInvoiceStatusAction } from "@/lib/actions/billing";
+import { toast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -35,7 +36,6 @@ export function InvoiceLifecycleActions({
   status: InvoiceStatus;
   disabled?: boolean;
 }) {
-  const router = useRouter();
   const [chooserOpen, setChooserOpen] = useState(false);
   const [target, setTarget] = useState<InvoiceStatus | null>(null);
   const [reason, setReason] = useState("");
@@ -56,18 +56,16 @@ export function InvoiceLifecycleActions({
     setPending(true);
     setError("");
     try {
-      const response = await fetch(`/api/admin/invoices/${invoiceId}/status`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetStatus: target, reason })
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Không thể đổi trạng thái hóa đơn.");
+      // Action trả kèm dữ liệu mới của trang nên không cần router.refresh().
+      const result = await changeInvoiceStatusAction(invoiceId, target, reason);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      toast.success(result.success);
       setTarget(null);
-      router.refresh();
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Không thể đổi trạng thái hóa đơn.");
+    } catch {
+      setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
     } finally {
       setPending(false);
     }
@@ -109,7 +107,7 @@ export function InvoiceLifecycleActions({
         <Modal title="Thao tác hóa đơn" onClose={() => setChooserOpen(false)}>
           <div className="grid gap-3">
             <p className="text-sm text-stone-600">
-              Chọn cách xử lý hóa đơn. Mỗi thao tác đều yêu cầu nhập lý do để lưu vào lịch sử đối soát.
+              Chọn cách xử lý hóa đơn. Có thể ghi thêm lý do để lưu vào lịch sử đối soát.
             </p>
             <Button
               type="button"
@@ -152,15 +150,14 @@ export function InvoiceLifecycleActions({
         >
           <form onSubmit={submit} className="grid gap-4">
             <p className="text-sm text-stone-600">{COPY[target].description}</p>
-            <Field label="Lý do">
+            <Field label="Lý do" hint="Không bắt buộc">
               <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                required
                 maxLength={500}
                 disabled={pending || disabled}
                 autoFocus
-                placeholder="Nhập lý do để lưu vào lịch sử đối soát..."
+                placeholder="Ghi lý do để lưu vào lịch sử đối soát..."
               />
             </Field>
             {error ? <p className="text-sm font-medium text-warning" role="alert">{error}</p> : null}
@@ -171,7 +168,7 @@ export function InvoiceLifecycleActions({
               <Button
                 type="submit"
                 variant={target === "void" ? "danger" : "primary"}
-                disabled={pending || disabled || !reason.trim()}
+                disabled={pending || disabled}
               >
                 {pending ? "Đang lưu..." : COPY[target].label}
               </Button>

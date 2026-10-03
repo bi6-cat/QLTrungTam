@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Copy, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { toast } from "@/components/Toaster";
 
 export function DebtReminderButton({
   studentName,
@@ -57,6 +58,7 @@ function ReminderDialog({
   async function copy() {
     try {
       await navigator.clipboard.writeText(draft);
+      toast.success(`Đã chép tin nhắc nợ của ${studentName}.`);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
