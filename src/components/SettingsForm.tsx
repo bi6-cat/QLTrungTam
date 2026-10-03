@@ -5,6 +5,7 @@ import { AlertTriangle, Save } from "lucide-react";
 import { updateSettingsAction } from "@/lib/actions/settings";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { useResultToast } from "@/components/Toaster";
+import { SalaryCutoffSelect } from "@/components/SalaryCutoffSelect";
 import { Button, Field, Input, Textarea } from "@/components/ui";
 
 export type SettingsFormValues = {
@@ -13,6 +14,7 @@ export type SettingsFormValues = {
   bankBin: string;
   appUrl: string;
   debtReminderTemplate: string;
+  salaryCutoff: string;
   /** Chỉ là gợi ý đã che (vd "••••a1b2"), không bao giờ là secret thật. */
   sepayApiKeyHint: string;
   sepayWebhookSecretHint: string;
@@ -37,6 +39,16 @@ export function SettingsForm({ values }: { values: SettingsFormValues }) {
         <Field label="Địa chỉ app">
           <Input name="appUrl" defaultValue={values.appUrl} placeholder="http://localhost:3001" />
         </Field>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Field label="Ngày chốt lương giáo viên" hint="Lớp nào khác thì đặt riêng ở Sửa lớp">
+          <SalaryCutoffSelect name="salaryCutoff" defaultValue={values.salaryCutoff} />
+        </Field>
+        <p className="self-end rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs text-indigo-900">
+          Học phí nộp đến hết ngày chốt tính vào lương tháng đó; nộp sau ngày chốt tự chuyển sang lương tháng
+          sau và có ghi chú tên học sinh ở trang Lương GV. Đổi ngày chốt sẽ tính lại cả các tháng cũ.
+        </p>
       </div>
 
       <Field

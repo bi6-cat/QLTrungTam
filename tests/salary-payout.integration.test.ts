@@ -39,25 +39,14 @@ describe("salary payouts", { concurrency: false }, () => {
     await harness.stop();
   });
 
-  test("partial transfer, late payment, then a top-up recorded against the same month", async () => {
+  test("a payment after the cutoff moves to next month's salary, unless the class cuts off later", async () => {
     const fixture = await harness.createFixture();
     await prisma.classRoom.update({ where: { id: fixture.classId }, data: { teacherSharePercent: 75 } });
     const first = await paidInvoice(fixture, 4_000_000);
-    // Học sinh đầu nộp đúng hạn, trước lần chuyển lương đầu tiên.
-    await prisma.monthlyInvoice.update({ where: { id: first.id }, data: { paidAt: new Date(2019, 11, 20) } });
     const { month, year } = first;
-
-    const [initial] = await recordSalaryPayout({
-      actor: harness.actor,
-      paidAt: transferDay(1),
-      note: "Lần 1",
-      lines: [{ classId: fixture.classId, month, year, amount: 2_500_000 }],
-      now
-    });
-    assert.equal(initial.line.due, 3_000_000);
-
-    // Một học sinh khác của cùng lớp, cùng kỳ, nộp sau khi đã chuyển lương. Id mang tiền tố của
-    // fixture nên harness tự dọn.
+    const index = periodIndex(month, year);
+    // Học sinh đầu nộp đúng hạn trong tháng; học sinh thứ hai nộp ngày 3 tháng sau (sau ngày chốt cuối tháng).
+    await prisma.monthlyInvoice.update({ where: { id: first.id }, data: { paidAt: new Date(year, month - 1, 10) } });
     const lateStudent = await prisma.student.create({
       data: { id: `${fixture.studentId}_late`, fullName: "HS nộp muộn", phone: "0911111111", address: "" }
     });
@@ -77,37 +66,51 @@ describe("salary payouts", { concurrency: false }, () => {
     });
     const lateTx = await harness.createBankTransaction({ amount: 480_000 });
     await assignTransactionToInvoice({ transactionId: lateTx.id, invoiceId: late.id, actor: harness.actor });
+    await prisma.monthlyInvoice.update({ where: { id: late.id }, data: { paidAt: new Date(year, month, 3) } });
 
-    const index = periodIndex(month, year);
-    let ledger = await loadSalaryLedger({ fromIndex: index, toIndex: index });
-    let period = ledger.flatMap((teacher) => teacher.classes).find((item) => item.classId === fixture.classId)!.periods[0];
-    assert.equal(period.due, 3_360_000);
-    assert.equal(period.paidOut, 2_500_000);
-    assert.equal(period.difference, 860_000);
-    assert.deepEqual(period.latePayers.map((item) => item.studentName), ["HS nộp muộn"]);
+    await recordSalaryPayout({
+      actor: harness.actor,
+      paidAt: transferDay(1),
+      note: "Lương tháng",
+      lines: [{ classId: fixture.classId, month, year, amount: 3_000_000 }],
+      now
+    });
 
+    const classPeriods = async () => {
+      const ledger = await loadSalaryLedger({ fromIndex: index, toIndex: index + 1, now });
+      return ledger.flatMap((teacher) => teacher.classes).find((item) => item.classId === fixture.classId)!.periods;
+    };
+    let [thisMonth, nextMonth] = await classPeriods();
+    assert.equal(thisMonth.due, 3_000_000);
+    assert.equal(thisMonth.difference, 0);
+    assert.deepEqual(thisMonth.carriedOut.map((item) => item.studentName), ["HS nộp muộn"]);
+    assert.equal(nextMonth.due, 360_000);
+    assert.deepEqual(nextMonth.carriedIn.map((item) => [item.studentName, item.month]), [["HS nộp muộn", month]]);
+
+    // Trả phần nộp muộn vào lương tháng sau.
+    const next = { month: (index + 1) % 12 + 1, year: Math.floor((index + 1) / 12) };
     await recordSalaryPayout({
       actor: harness.actor,
       paidAt: transferDay(10),
       note: null,
-      lines: [{ classId: fixture.classId, month, year, amount: 860_000 }],
+      lines: [{ classId: fixture.classId, ...next, amount: 360_000 }],
       now
     });
-    ledger = await loadSalaryLedger({ fromIndex: index, toIndex: index });
-    period = ledger.flatMap((teacher) => teacher.classes).find((item) => item.classId === fixture.classId)!.periods[0];
-    assert.equal(period.difference, 0);
-    assert.equal(period.status.key, "done");
-    assert.deepEqual(
-      period.payouts.map((payout) => [payout.amount, payout.sharePercent, payout.note]),
-      [
-        [2_500_000, 75, "Lần 1"],
-        [860_000, 75, null]
-      ]
+    [thisMonth, nextMonth] = await classPeriods();
+    assert.equal(nextMonth.difference, 0);
+    assert.equal(nextMonth.status.key, "done");
+    assert.equal(
+      await prisma.auditLog.count({ where: { action: "salary.paid", actorUserId: harness.actor.userId } }),
+      2
     );
-    assert.match(period.payouts[1].description, /Chuyển thêm lương .* \(lần 2\)/);
 
-    const audits = await prisma.auditLog.count({ where: { action: "salary.paid", actorUserId: harness.actor.userId } });
-    assert.equal(audits, 2);
+    // Lớp chốt ngày 5 tháng sau: khoản nộp ngày 3 vẫn thuộc tháng cũ.
+    await prisma.classRoom.update({ where: { id: fixture.classId }, data: { salaryCutoff: "next:5" } });
+    [thisMonth, nextMonth] = await classPeriods();
+    assert.equal(thisMonth.due, 3_360_000);
+    assert.equal(thisMonth.difference, 360_000);
+    assert.equal(thisMonth.carriedOut.length, 0);
+    assert.equal(nextMonth.difference, -360_000);
   });
 
   test("rejects future months, duplicates and future transfer dates without writing anything", async () => {

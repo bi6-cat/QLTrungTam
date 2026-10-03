@@ -8,6 +8,7 @@ import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { MoneyInput } from "@/components/MoneyInput";
+import { SalaryCutoffSelect } from "@/components/SalaryCutoffSelect";
 
 type ClassInfo = {
   id: string;
@@ -17,9 +18,10 @@ type ClassInfo = {
   pricePerSession: number;
   sessionsPerMonthDefault: number;
   teacherSharePercent: number;
+  salaryCutoff: string | null;
 };
 
-export function EditClassButton({ classRoom }: { classRoom: ClassInfo }) {
+export function EditClassButton({ classRoom, defaultCutoffLabel }: { classRoom: ClassInfo; defaultCutoffLabel: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -28,12 +30,26 @@ export function EditClassButton({ classRoom }: { classRoom: ClassInfo }) {
         <Pencil className="h-4 w-4" />
         Sửa lớp
       </Button>
-      {open ? <EditClassDialog classRoom={classRoom} onClose={() => setOpen(false)} /> : null}
+      {open ? (
+        <EditClassDialog
+          classRoom={classRoom}
+          defaultCutoffLabel={defaultCutoffLabel}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
 
-function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose: () => void }) {
+function EditClassDialog({
+  classRoom,
+  defaultCutoffLabel,
+  onClose
+}: {
+  classRoom: ClassInfo;
+  defaultCutoffLabel: string;
+  onClose: () => void;
+}) {
   const [state, action, pending] = useActionState(updateClassAction, EMPTY_RESULT_STATE);
   useResultToast(state);
 
@@ -84,6 +100,13 @@ function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose
             step="1"
             defaultValue={classRoom.teacherSharePercent}
             required
+          />
+        </Field>
+        <Field label="Ngày chốt lương" hint="HS nộp sau ngày này tính vào lương tháng sau">
+          <SalaryCutoffSelect
+            name="salaryCutoff"
+            defaultValue={classRoom.salaryCutoff ?? ""}
+            inheritLabel={defaultCutoffLabel}
           />
         </Field>
         {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}

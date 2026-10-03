@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_SALARY_CUTOFF_CODE, SALARY_CUTOFF_SETTING_KEY } from "@/lib/salary-cutoff";
 
 export const DEFAULT_DEBT_REMINDER_TEMPLATE = `Kính gửi phụ huynh em {{studentName}},
 
@@ -19,6 +20,8 @@ export type AppSettings = {
   bankBin: string;
   appUrl: string;
   debtReminderTemplate: string;
+  /** Ngày chốt lương chung, xem salary-cutoff.ts. */
+  salaryCutoff: string;
 };
 
 const settingKeys: Record<keyof AppSettings, string> = {
@@ -28,7 +31,8 @@ const settingKeys: Record<keyof AppSettings, string> = {
   bankAccountName: "BANK_ACCOUNT_NAME",
   bankBin: "BANK_BIN",
   appUrl: "NEXT_PUBLIC_APP_URL",
-  debtReminderTemplate: "DEBT_REMINDER_TEMPLATE"
+  debtReminderTemplate: "DEBT_REMINDER_TEMPLATE",
+  salaryCutoff: SALARY_CUTOFF_SETTING_KEY
 };
 
 const defaults: AppSettings = {
@@ -38,7 +42,8 @@ const defaults: AppSettings = {
   bankAccountName: process.env.BANK_ACCOUNT_NAME || "APLUS ACADEMY",
   bankBin: process.env.BANK_BIN || "970407",
   appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001",
-  debtReminderTemplate: process.env.DEBT_REMINDER_TEMPLATE || DEFAULT_DEBT_REMINDER_TEMPLATE
+  debtReminderTemplate: process.env.DEBT_REMINDER_TEMPLATE || DEFAULT_DEBT_REMINDER_TEMPLATE,
+  salaryCutoff: DEFAULT_SALARY_CUTOFF_CODE
 };
 
 export async function getAppSettings(): Promise<AppSettings> {
@@ -53,7 +58,8 @@ export async function getAppSettings(): Promise<AppSettings> {
     bankBin: byKey.get(settingKeys.bankBin) ?? defaults.bankBin,
     appUrl: byKey.get(settingKeys.appUrl) ?? defaults.appUrl,
     debtReminderTemplate:
-      byKey.get(settingKeys.debtReminderTemplate) ?? defaults.debtReminderTemplate
+      byKey.get(settingKeys.debtReminderTemplate) ?? defaults.debtReminderTemplate,
+    salaryCutoff: byKey.get(settingKeys.salaryCutoff) ?? defaults.salaryCutoff
   };
 }
 

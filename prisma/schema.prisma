@@ -48,6 +48,9 @@ model ClassRoom {
   sessionsPerMonthDefault Int
   /// Phần trăm học phí đã thu của lớp được trả cho giáo viên (0–100).
   teacherSharePercent     Int             @default(0)
+  /// Ngày chốt lương riêng của lớp ("same:31" = cuối tháng, "next:5" = ngày 5 tháng sau);
+  /// null = theo cài đặt chung. HS nộp sau ngày chốt được tính vào lương tháng sau.
+  salaryCutoff            String?
   archivedAt              DateTime?
   createdAt               DateTime        @default(now())
   enrollments             Enrollment[]

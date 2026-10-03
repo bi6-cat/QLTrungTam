@@ -12,17 +12,19 @@ import {
   buildTeacherSalaryMessage,
   getPendingSalaryLines,
   loadSalaryLedger,
+  salaryLineNotes,
   type LedgerClass,
-  type LedgerPeriod,
+  type SalaryLine,
   type TeacherLedger
 } from "@/lib/salary";
+import { describeSalaryCutoff } from "@/lib/salary-cutoff";
 
 export const dynamic = "force-dynamic";
 
 const RANGES = [3, 6, 12] as const;
 const NO_TEACHER = "__none";
 
-function periodKey(classId: string, period: Pick<LedgerPeriod, "month" | "year">) {
+function periodKey(classId: string, period: Pick<SalaryLine, "month" | "year">) {
   return `${classId}:${period.year}:${period.month}`;
 }
 
@@ -40,7 +42,7 @@ function payoutOptions(teacher: TeacherLedger): PayoutOption[] {
         due: period.due,
         paidOut: period.paidOut,
         remaining: period.difference,
-        waitingCount: period.waiting.length
+        waitingCount: period.cutoffPassed ? 0 : period.waiting.length
       }))
   );
 }
@@ -99,7 +101,7 @@ export default async function SalaryPage({
     <div className="grid gap-6">
       <PageHeader
         title="Lương giáo viên"
-        description="Phải trả = % của lớp × học phí đã thu của đúng tháng đó. Ghi lại từng lần chuyển tiền; học sinh nộp muộn sẽ tự hiện thành “cần chuyển thêm” ở tháng của khoản học phí."
+        description="Lương tháng = % của lớp × học phí nộp đến hết ngày chốt (cộng tiền nộp muộn của tháng trước). Học sinh nộp sau ngày chốt tự chuyển sang lương tháng sau, có ghi chú tên. Ghi lại từng lần chuyển tiền cho giáo viên."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -118,14 +120,14 @@ export default async function SalaryPage({
           label="Chờ học sinh nộp"
           tone="primary"
           value={formatCurrency(waitingTotal)}
-          hint="Phần lương sẽ phát sinh khi HS nộp nốt học phí"
+          hint="Phần lương thêm nếu HS chưa nộp kịp nộp trước ngày chốt"
           icon={<Hourglass className="h-5 w-5" />}
         />
         <StatCard
           label={`Phải trả ${formatMonth(now.getMonth() + 1, now.getFullYear())}`}
           tone="neutral"
           value={formatCurrency(currentDue)}
-          hint="Tính theo học phí kỳ này đã thu đến hôm nay"
+          hint="Theo học phí đã nộp tính đến hôm nay"
           icon={<Users className="h-5 w-5" />}
         />
         <StatCard
@@ -288,15 +290,23 @@ function ClassLedger({
       <div className="flex flex-wrap items-center gap-2 px-5 pb-2 pt-4">
         <h3 className="font-bold">{classRoom.className}</h3>
         <span className="text-xs text-stone-500">
-          {classRoom.shortCode} · {classRoom.classSharePercent}% học phí đã thu
+          {classRoom.shortCode} · {classRoom.classSharePercent}% học phí · chốt lương{" "}
+          {describeSalaryCutoff(classRoom.cutoff)}
+          {classRoom.customCutoff ? " (riêng lớp này)" : ""}
         </span>
+        <Link
+          href={`/admin/classes?classId=${classRoom.classId}`}
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          Đổi ngày chốt
+        </Link>
         {classRoom.archived ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1020px] text-left text-sm">
           <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
-              <th className="px-4 py-2.5">Kỳ</th>
+              <th className="px-4 py-2.5">Tháng lương</th>
               <th className="px-4 py-2.5 text-right">Phải trả</th>
               <th className="px-4 py-2.5">Đã chuyển</th>
               <th className="px-4 py-2.5 text-right">Còn nợ</th>
@@ -309,14 +319,19 @@ function ClassLedger({
             {classRoom.periods.map((period) => {
               const isCurrent = periodIndex(period.month, period.year) === currentIndex;
               const key = periodKey(classRoom.classId, period);
+              const notes = salaryLineNotes(period);
               return (
                 <tr key={key} className={`align-top ${isCurrent ? "bg-indigo-50/30" : "hover:bg-stone-50/60"}`}>
                   <td className="whitespace-nowrap px-4 py-3">
                     <div className="font-semibold">
                       T{period.month}/{period.year}
+                      {isCurrent ? <span className="ml-1.5 text-xs font-medium text-primary">tháng này</span> : null}
                     </div>
                     <div className="text-xs text-stone-500">
-                      {isCurrent ? "kỳ này · " : ""}
+                      chốt {formatDayMonth(period.cutoffDate)}
+                      {period.cutoffPassed ? "" : " (chưa tới)"}
+                    </div>
+                    <div className="text-xs text-stone-500">
                       {period.mode === "percent" ? `${period.sharePercent}% × ${formatCurrency(period.collected)}` : "nhập tay"}
                     </div>
                   </td>
@@ -364,25 +379,29 @@ function ClassLedger({
                   >
                     {period.difference === 0 ? "—" : formatCurrency(period.difference)}
                   </td>
-                  <td className="max-w-[300px] px-4 py-3 text-xs leading-relaxed text-stone-600">
-                    {period.latePayers.length > 0 ? (
-                      <div>
-                        <span className="font-semibold text-amber-700">Nộp sau khi chuyển lương:</span>{" "}
-                        {period.latePayers
-                          .map((item) => `${item.studentName}${item.paidAt ? ` (${formatDayMonth(item.paidAt)})` : ""}`)
-                          .join(", ")}
-                      </div>
-                    ) : null}
-                    {period.waiting.length > 0 ? (
-                      <div>
-                        <span className="font-semibold text-primary">Chưa nộp ({period.waiting.length}):</span>{" "}
-                        {period.waiting.map((item) => item.studentName).join(", ")}
-                        {period.waitingShare > 0 ? ` · +${formatCurrency(period.waitingShare)} khi nộp` : ""}
-                      </div>
-                    ) : null}
-                    {period.latePayers.length === 0 && period.waiting.length === 0 ? (
+                  <td className="max-w-[320px] px-4 py-3 text-xs leading-relaxed text-stone-600">
+                    {notes.length === 0 ? (
                       <span className="text-stone-400">—</span>
-                    ) : null}
+                    ) : (
+                      <div className="grid gap-1">
+                        {notes.map((note) => (
+                          <div key={note.tone}>
+                            <span
+                              className={`font-semibold ${
+                                note.tone === "in"
+                                  ? "text-emerald-700"
+                                  : note.tone === "out"
+                                    ? "text-amber-700"
+                                    : "text-primary"
+                              }`}
+                            >
+                              {note.label}:
+                            </span>{" "}
+                            {note.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={period.status.tone} dot>
@@ -421,7 +440,7 @@ function ClassLedger({
               </td>
               <td colSpan={3} className="px-4 py-2.5 text-xs text-stone-500">
                 {classRoom.waitingShare > 0
-                  ? `Chờ HS nộp: +${formatCurrency(classRoom.waitingShare)} lương khi thu đủ`
+                  ? `Chờ HS nộp trước ngày chốt: +${formatCurrency(classRoom.waitingShare)}`
                   : ""}
               </td>
             </tr>

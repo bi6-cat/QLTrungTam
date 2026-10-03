@@ -5,10 +5,11 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { createClassAction } from "@/lib/actions/classes";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { MoneyInput } from "@/components/MoneyInput";
+import { SalaryCutoffSelect } from "@/components/SalaryCutoffSelect";
 import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 
-export function CreateClassForm() {
+export function CreateClassForm({ defaultCutoffLabel }: { defaultCutoffLabel: string }) {
   const [state, action, pending] = useActionState(createClassAction, EMPTY_RESULT_STATE);
   useResultToast(state);
   const formRef = useRef<HTMLFormElement>(null);
@@ -50,6 +51,9 @@ export function CreateClassForm() {
       </div>
       <Field label="% lương GV" hint="% học phí đã thu, nhập sau cũng được">
         <Input name="teacherSharePercent" type="number" min="0" max="100" defaultValue="0" required />
+      </Field>
+      <Field label="Ngày chốt lương">
+        <SalaryCutoffSelect name="salaryCutoff" defaultValue="" inheritLabel={defaultCutoffLabel} />
       </Field>
       {state.error ? (
         <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">

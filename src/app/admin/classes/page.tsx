@@ -10,6 +10,7 @@ import { CopyTeacherLinkButton } from "@/components/CopyTeacherLinkButton";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
+import { DEFAULT_SALARY_CUTOFF, describeSalaryCutoff, parseSalaryCutoff } from "@/lib/salary-cutoff";
 import { absoluteUrl, payPath, teacherPath } from "@/lib/class-links";
 import {
   enrollmentVisibleInPeriodWhere,
@@ -71,6 +72,7 @@ export default async function ClassesPage({
     prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } }),
     getAppSettings()
   ]);
+  const defaultCutoffLabel = describeSalaryCutoff(parseSalaryCutoff(settings.salaryCutoff) ?? DEFAULT_SALARY_CUTOFF);
 
   const selectedClass =
     classes.find((classRoom) => classRoom.id === params.classId) ?? classes[0] ?? null;
@@ -133,8 +135,10 @@ export default async function ClassesPage({
                     teacherName: selectedClass.teacherName,
                     pricePerSession: selectedClass.pricePerSession,
                     sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault,
-                    teacherSharePercent: selectedClass.teacherSharePercent
+                    teacherSharePercent: selectedClass.teacherSharePercent,
+                    salaryCutoff: selectedClass.salaryCutoff
                   }}
+                  defaultCutoffLabel={defaultCutoffLabel}
                 />
               ) : null}
               {!selectedClass.archivedAt ? (
@@ -235,7 +239,7 @@ export default async function ClassesPage({
 
           {!showArchived ? <Panel>
             <h2 className="font-bold">Tạo lớp mới</h2>
-            <CreateClassForm />
+            <CreateClassForm defaultCutoffLabel={defaultCutoffLabel} />
           </Panel> : null}
         </div>
 

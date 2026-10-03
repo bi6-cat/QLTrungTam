@@ -20,6 +20,12 @@ describe("class validation", () => {
     assert.equal(ok.success, true);
   });
 
+  test("a class salary cutoff is optional but must be a known code", () => {
+    assert.equal(createClassSchema.safeParse({ ...classInput, salaryCutoff: "" }).data?.salaryCutoff, null);
+    assert.equal(createClassSchema.safeParse({ ...classInput, salaryCutoff: "next:5" }).data?.salaryCutoff, "next:5");
+    assert.equal(createClassSchema.safeParse({ ...classInput, salaryCutoff: "next:45" }).success, false);
+  });
+
   test("class codes only allow letters and digits because they go into bank memos", () => {
     assert.equal(createClassSchema.safeParse(classInput).data?.shortCode, "T12A");
     assert.equal(createClassSchema.safeParse({ ...classInput, shortCode: "T12-A" }).success, false);

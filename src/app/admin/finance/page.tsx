@@ -16,9 +16,9 @@ import { MonthSwitcher } from "@/components/MonthSwitcher";
 import { SalaryPendingAlert } from "@/components/SalaryPendingAlert";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { getFinanceTrend, getMonthlyFinance } from "@/lib/finance";
-import { formatCurrency, formatMonth } from "@/lib/format";
+import { formatCurrency, formatDayMonth, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { getPendingSalaryLines, groupSalaryByTeacher, salaryStatus } from "@/lib/salary";
+import { getPendingSalaryLines, groupSalaryByTeacher } from "@/lib/salary";
 import { expenseCategoryLabel } from "@/lib/schedule";
 import { requireAdmin } from "@/lib/auth";
 
@@ -77,7 +77,7 @@ export default async function FinancePage({
     <div className="grid gap-6">
       <PageHeader
         title="Thu chi"
-        description="Lãi/lỗ tính theo kỳ học phí: học phí của tháng nào (dù nộp muộn) và lương giáo viên tương ứng đều nằm ở đúng tháng đó."
+        description="Doanh thu tính theo kỳ học phí (tiền tháng nào nằm ở tháng đó dù nộp muộn). Lương giáo viên tính theo ngày chốt lương: HS nộp sau ngày chốt được tính vào lương tháng sau."
         actions={<MonthSwitcher basePath="/admin/finance" month={month} year={year} />}
       />
 
@@ -136,7 +136,7 @@ export default async function FinancePage({
             <h2 className="font-bold">Lương giáo viên kỳ {formatMonth(month, year)}</h2>
           </div>
           <p className="text-xs text-stone-500">
-            Lương = % của lớp × học phí kỳ này đã thu, tự cập nhật khi có tiền về. Ghi các lần chuyển tiền ở{" "}
+            Lương = % của lớp × học phí nộp đến ngày chốt (gồm nộp muộn tháng trước). Ghi các lần chuyển tiền ở{" "}
             <Link href="/admin/salary" className="font-semibold text-primary hover:underline">
               Lương GV
             </Link>
@@ -155,7 +155,7 @@ export default async function FinancePage({
               <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Giáo viên / Lớp</th>
-                  <th className="px-4 py-3 text-right">Học phí đã thu</th>
+                  <th className="px-4 py-3 text-right">Học phí tính lương</th>
                   <th className="px-4 py-3 text-right">Phải trả</th>
                   <th className="px-4 py-3 text-right">Đã chuyển</th>
                   <th className="px-4 py-3 text-right">Còn nợ GV</th>
@@ -204,19 +204,30 @@ export default async function FinancePage({
                       </td>
                     </tr>
                     {group.lines.map((line) => {
-                      const status = salaryStatus({ ...line, waitingCount: 0, waitingShare: 0 });
+                      const status = line.status;
                       return (
                         <tr key={line.classId} className="transition-colors hover:bg-stone-50">
                           <td className="px-4 py-2.5 pl-8">
                             <div className="font-medium">{line.className}</div>
                             <div className="text-xs text-stone-500">
                               {line.shortCode}
-                              {line.mode === "percent" ? ` · ${line.sharePercent}% đã thu` : ""}
+                              {line.mode === "percent" ? ` · ${line.sharePercent}%` : ""} · chốt{" "}
+                              {formatDayMonth(line.cutoffDate)}
                               {line.archived ? " · đã lưu trữ" : ""}
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-right text-success">
                             {formatCurrency(line.collected)}
+                            {line.carriedIn.length > 0 ? (
+                              <div className="text-[11px] font-medium text-emerald-700">
+                                gồm {line.carriedIn.length} HS nộp muộn tháng trước
+                              </div>
+                            ) : null}
+                            {line.carriedOut.length > 0 ? (
+                              <div className="text-[11px] font-medium text-amber-700">
+                                {line.carriedOut.length} HS nộp sau chốt → tháng sau
+                              </div>
+                            ) : null}
                           </td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-right">{formatCurrency(line.due)}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-right text-stone-600">

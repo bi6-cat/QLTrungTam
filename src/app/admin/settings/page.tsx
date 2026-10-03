@@ -26,6 +26,7 @@ export default async function SettingsPage() {
             bankBin: settings.bankBin,
             appUrl: settings.appUrl,
             debtReminderTemplate: settings.debtReminderTemplate,
+            salaryCutoff: settings.salaryCutoff,
             sepayApiKeyHint: maskSecret(settings.sepayApiKey),
             sepayWebhookSecretHint: maskSecret(settings.sepayWebhookSecret)
           }}

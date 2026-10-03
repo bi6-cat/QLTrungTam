@@ -26,6 +26,7 @@ export async function createClassAction(_prevState: ResultState, formData: FormD
           pricePerSession: data.pricePerSession,
           sessionsPerMonthDefault: data.sessionsPerMonthDefault,
           teacherSharePercent: data.teacherSharePercent,
+          salaryCutoff: data.salaryCutoff,
           publicToken: generatePublicToken(),
           teacherToken: generatePublicToken(TEACHER_TOKEN_LENGTH)
         }
@@ -58,7 +59,8 @@ export async function updateClassAction(_prevState: ResultState, formData: FormD
       teacherName: data.teacherName,
       pricePerSession: data.pricePerSession,
       sessionsPerMonthDefault: data.sessionsPerMonthDefault,
-      teacherSharePercent: data.teacherSharePercent
+      teacherSharePercent: data.teacherSharePercent,
+      salaryCutoff: data.salaryCutoff
     }
   });
   if (updated.count !== 1) {
@@ -67,6 +69,7 @@ export async function updateClassAction(_prevState: ResultState, formData: FormD
   revalidatePath("/admin/classes");
   revalidatePath("/admin");
   revalidatePath("/admin/finance");
+  revalidatePath("/admin/salary");
   return successState(`Đã lưu thông tin lớp ${data.name}.`);
 }
 

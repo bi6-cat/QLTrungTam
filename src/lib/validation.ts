@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SALARY_CUTOFF_PATTERN } from "@/lib/salary-cutoff";
 
 // ---------------------------------------------------------------------------
 // Các schema trường dùng lại.
@@ -31,6 +32,19 @@ const sharePercent = z
       .min(0, "Phần trăm không được âm")
       .max(100, "Phần trăm tối đa là 100")
   );
+
+const salaryCutoffCode = z
+  .string()
+  .trim()
+  .regex(SALARY_CUTOFF_PATTERN, "Ngày chốt lương không hợp lệ");
+
+/** Ngày chốt riêng của lớp: để trống = theo cài đặt chung. */
+const classSalaryCutoff = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v ? v : null))
+  .refine((v) => v === null || SALARY_CUTOFF_PATTERN.test(v), "Ngày chốt lương không hợp lệ");
 
 const dateInput = (message: string) =>
   z.string({ message }).trim().regex(/^\d{4}-\d{2}-\d{2}$/, message);
@@ -108,7 +122,8 @@ export const createClassSchema = z.object({
   teacherName: looseText(120),
   pricePerSession: money,
   sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60),
-  teacherSharePercent: sharePercent
+  teacherSharePercent: sharePercent,
+  salaryCutoff: classSalaryCutoff
 });
 
 export const updateClassSchema = z.object({
@@ -117,7 +132,8 @@ export const updateClassSchema = z.object({
   teacherName: looseText(120),
   pricePerSession: money,
   sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60),
-  teacherSharePercent: sharePercent
+  teacherSharePercent: sharePercent,
+  salaryCutoff: classSalaryCutoff
 });
 
 export const idSchema = z.object({ id });
@@ -238,7 +254,8 @@ export const updateSettingsSchema = z.object({
   bankAccountName: requiredText("Thiếu tên tài khoản", 120),
   bankBin: requiredText("Thiếu mã ngân hàng", 20),
   appUrl: looseText(200),
-  debtReminderTemplate: requiredText("Thiếu mẫu tin nhắn nhắc nợ", 5000)
+  debtReminderTemplate: requiredText("Thiếu mẫu tin nhắn nhắc nợ", 5000),
+  salaryCutoff: salaryCutoffCode
 });
 
 export const assignTransactionSchema = z.object({

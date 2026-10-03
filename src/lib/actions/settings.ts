@@ -26,6 +26,9 @@ export async function updateSettingsAction(_prevState: ResultState, formData: Fo
 
   revalidatePath("/admin/settings");
   revalidatePath("/admin/debts");
+  revalidatePath("/admin/salary");
+  revalidatePath("/admin/finance");
+  revalidatePath("/admin");
   revalidatePath("/pay/[short_code]", "page");
   return successState("Đã lưu cài đặt.");
 }
