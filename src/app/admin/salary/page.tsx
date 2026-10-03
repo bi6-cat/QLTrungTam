@@ -363,7 +363,11 @@ function ClassLedger({
                       {period.cutoffPassed ? "" : " (chưa tới)"}
                     </div>
                     <div className="text-xs text-stone-500">
-                      {period.mode === "percent" ? `${period.sharePercent}% × ${formatCurrency(period.collected)}` : "nhập tay"}
+                      {period.mode === "percent"
+                        ? `${period.sharePercent}% × ${formatCurrency(period.ownCollected)}${
+                            period.carriedInShare > 0 ? ` + nộp muộn ${formatCurrency(period.carriedInShare)}` : ""
+                          }`
+                        : "nhập tay"}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatCurrency(period.due)}</td>

@@ -55,6 +55,8 @@ export function computeSalary(input: {
   collected: number;
   classSharePercent: number;
   records: Array<Pick<SalaryRecord, "amount" | "sharePercent" | "createdAt">>;
+  /** Phần lương đã tính sẵn cộng thêm (nộp muộn tháng trước, tính theo % của tháng gốc). */
+  extraShare?: number;
 }): SalaryComputation {
   const records = [...input.records].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const paidOut = records.reduce((sum, record) => sum + record.amount, 0);
@@ -62,7 +64,7 @@ export function computeSalary(input: {
     return { mode: "manual", sharePercent: 0, due: paidOut, paidOut, difference: 0 };
   }
   const sharePercent = records[0]?.sharePercent ?? input.classSharePercent;
-  const due = Math.round((input.collected * sharePercent) / 100);
+  const due = Math.round((input.collected * sharePercent) / 100) + (input.extraShare ?? 0);
   return { mode: "percent", sharePercent, due, paidOut, difference: due - paidOut };
 }
 
@@ -132,6 +134,8 @@ export type SalaryLine = SalaryComputation & {
   year: number;
   /** Học phí tính vào lương tháng này: nộp trong hạn + nộp muộn từ các tháng trước. */
   collected: number;
+  /** Phần học phí của chính tháng này nộp trong hạn (nhân với sharePercent). */
+  ownCollected: number;
   cutoffDate: Date;
   /** Ngày chốt của tháng này được đặt riêng (không theo quy tắc chung). */
   cutoffOverridden: boolean;
@@ -243,10 +247,17 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         bucket(tuitionIndex).carriedOut.push({ ...invoice, salaryIndex });
       }
     }
+    const recordsByIndex = new Map<number, SalaryRecord[]>();
     for (const record of recordsByClass.get(classRoom.id) ?? []) {
       const index = periodIndex(record.month, record.year);
+      recordsByIndex.set(index, [...(recordsByIndex.get(index) ?? []), record]);
       if (inRange(index)) bucket(index).records.push(record);
     }
+    // % của một tháng: khóa theo lần chuyển đầu tiên, chưa chuyển thì theo % hiện tại của lớp.
+    // Khoản nộp muộn mang theo % của tháng học phí gốc sang tháng lương mới.
+    const percentOf = (index: number) =>
+      [...(recordsByIndex.get(index) ?? [])].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]
+        ?.sharePercent ?? classRoom.teacherSharePercent;
 
     for (let index = input.fromIndex; index <= input.toIndex; index += 1) {
       const current = buckets.get(index) ?? { onTime: 0, carriedIn: [], carriedOut: [], waiting: [], records: [] };
@@ -262,21 +273,28 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
       if (!active && !(options.keepIdle && !classRoom.archivedAt)) continue;
 
       const received = (invoice: SalaryInput["invoices"][number]) => invoice.paidAmount ?? invoice.amount;
-      const collected = current.onTime + current.carriedIn.reduce((sum, invoice) => sum + received(invoice), 0);
-      const computation = computeSalary({ collected, classSharePercent: classRoom.teacherSharePercent, records });
-      const shareOf = (amount: number) =>
-        computation.mode === "percent" ? Math.round((amount * computation.sharePercent) / 100) : 0;
-      const toStudent = (invoice: SalaryInput["invoices"][number]): LedgerStudent => ({
-        invoiceId: invoice.id,
-        studentName: invoice.studentName,
-        month: invoice.month,
-        year: invoice.year,
-        amount: invoice.status === "paid" ? received(invoice) : invoice.amount,
-        share: shareOf(invoice.status === "paid" ? received(invoice) : invoice.amount),
-        paidAt: invoice.paidAt
+      const toStudent = (invoice: SalaryInput["invoices"][number]): LedgerStudent => {
+        const amount = invoice.status === "paid" ? received(invoice) : invoice.amount;
+        return {
+          invoiceId: invoice.id,
+          studentName: invoice.studentName,
+          month: invoice.month,
+          year: invoice.year,
+          amount,
+          share: Math.round((amount * percentOf(periodIndex(invoice.month, invoice.year))) / 100),
+          paidAt: invoice.paidAt
+        };
+      };
+      const carriedIn = current.carriedIn.map(toStudent).sort(byPaidAt);
+      const carriedInShare = carriedIn.reduce((sum, item) => sum + item.share, 0);
+      const collected = current.onTime + carriedIn.reduce((sum, item) => sum + item.amount, 0);
+      const computation = computeSalary({
+        collected: current.onTime,
+        classSharePercent: classRoom.teacherSharePercent,
+        records,
+        extraShare: carriedInShare
       });
 
-      const carriedIn = current.carriedIn.map(toStudent).sort(byPaidAt);
       const carriedOut = current.carriedOut
         .map((invoice) => ({
           ...toStudent(invoice),
@@ -300,13 +318,14 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         month: (index % 12) + 1,
         year: Math.floor(index / 12),
         collected,
+        ownCollected: current.onTime,
         cutoffDate: resolver.date(index),
         cutoffOverridden: resolver.overridden(index),
         cutoffPassed,
         ...computation,
         payouts: records,
         carriedIn,
-        carriedInShare: carriedIn.reduce((sum, item) => sum + item.share, 0),
+        carriedInShare,
         carriedOut,
         carriedOutShare: carriedOut.reduce((sum, item) => sum + item.share, 0),
         waiting,
@@ -704,7 +723,11 @@ export function buildTeacherSalaryMessage(teacher: TeacherLedger, now = new Date
     lines.push("", `▸ ${classRoom.className} (${classRoom.shortCode})`);
     for (const period of classRoom.periods) {
       const base =
-        period.mode === "percent" ? ` (${period.sharePercent}% × ${formatCurrency(period.collected)})` : "";
+        period.mode === "percent"
+          ? ` (${period.sharePercent}% × ${formatCurrency(period.ownCollected)}${
+              period.carriedInShare > 0 ? ` + nộp muộn ${formatCurrency(period.carriedInShare)}` : ""
+            })`
+          : "";
       lines.push(
         `• Lương T${period.month}/${period.year}, chốt ${formatDayMonth(period.cutoffDate)}: ${formatCurrency(period.due)}${base}`
       );

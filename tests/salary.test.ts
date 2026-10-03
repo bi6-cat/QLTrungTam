@@ -191,6 +191,25 @@ describe("computeSalaryLines", () => {
     assert.deepEqual(notes, ["in"]);
   });
 
+  test("late money keeps the percentage of its own tuition month", () => {
+    const [, october] = computeSalaryLines(
+      salaryInput({
+        invoices: [
+          invoice("a", "paid", 4_000_000, new Date(2026, 8, 5)),
+          invoice("b", "paid", 480_000, new Date(2026, 9, 2)),
+          invoice("c", "paid", 1_000_000, new Date(2026, 9, 3), 10)
+        ],
+        // Tháng 9 đã chuyển lương với 80%; lớp nay chia 75%.
+        records: [{ ...payout("p1", 3_200_000, new Date(2026, 8, 30)), sharePercent: 80 }]
+      })
+    );
+    assert.equal(october.sharePercent, 75);
+    assert.equal(october.carriedInShare, 384_000);
+    assert.equal(october.due, 750_000 + 384_000);
+    assert.equal(october.ownCollected, 1_000_000);
+    assert.equal(october.collected, 1_480_000);
+  });
+
   test("a class can use its own cutoff instead of the centre default", () => {
     const [september] = computeSalaryLines(
       salaryInput({
