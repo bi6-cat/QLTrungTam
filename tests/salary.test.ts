@@ -356,6 +356,62 @@ describe("payout date as cutoff", () => {
   });
 });
 
+describe("debt column and write-off", () => {
+  // Văn 9 T7 theo sổ tay: Tổng 3.744.000, chuyển 3.360.000, 1 bạn nộp T7 ngày 01/08.
+  const july = index(7);
+  const base = () =>
+    salaryInput({
+      fromIndex: july,
+      toIndex: index(8),
+      invoices: [
+        invoice("a", "paid", 4_680_000, new Date(2026, 6, 15), 7),
+        invoice("late", "paid", 320_000, new Date(2026, 7, 1, 22), 7),
+        invoice("b", "paid", 6_880_000, new Date(2026, 7, 20), 8)
+      ],
+      records: [
+        { ...payout("p7", 3_360_000, new Date(2026, 6, 31), 7), sharePercent: 80 },
+        payout("p8", 5_160_000, new Date(2026, 7, 31), 8)
+      ]
+    });
+
+  test("debt is the late share moving on plus what is still unpaid", () => {
+    const [t7, t8] = computeSalaryLines(base());
+    assert.equal(t7.grossDue, 3_744_000);
+    assert.equal(t7.carriedOutShare, 256_000);
+    assert.equal(t7.difference, 384_000);
+    assert.equal(t7.debt, 640_000);
+    assert.equal(t8.due, 5_416_000);
+  });
+
+  test("writing a month off settles it and stops its late payments moving on", () => {
+    const [t7, t8] = computeSalaryLines({
+      ...base(),
+      writeOffs: [{ classId: "c1", month: 7, year: 2026, note: "chuyển lệch", createdAt: new Date(2026, 9, 3) }]
+    });
+    assert.equal(t7.status.key, "writtenOff");
+    assert.equal(t7.grossDue, 3_744_000);
+    assert.equal(t7.difference, 0);
+    assert.equal(t7.debt, 640_000);
+    assert.equal(t7.carriedOut[0].writtenOff, true);
+    assert.equal(t8.due, 5_160_000);
+    assert.equal(t8.difference, 0);
+    assert.equal(t8.carriedIn.length, 0);
+  });
+
+  test("a late payment made after the write-off is still paid to the teacher", () => {
+    const input = base();
+    input.invoices.push(invoice("later", "paid", 400_000, new Date(2026, 9, 10), 7));
+    const lines = computeSalaryLines({
+      ...input,
+      toIndex: OCT,
+      writeOffs: [{ classId: "c1", month: 7, year: 2026, note: null, createdAt: new Date(2026, 9, 3) }]
+    });
+    const october = lines.find((line) => line.month === 10)!;
+    assert.deepEqual(october.carriedIn.map((item) => item.invoiceId), ["later"]);
+    assert.equal(october.due, 320_000);
+  });
+});
+
 describe("buildSalaryLedger", () => {
   test("groups months per class and teacher, and the message lists transfers and late payers", () => {
     const [teacher] = buildSalaryLedger(

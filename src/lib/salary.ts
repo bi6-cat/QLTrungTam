@@ -72,7 +72,7 @@ export function computeSalary(input: {
 }
 
 export type SalaryStatus = {
-  key: "manual" | "unpaid" | "partial" | "advance" | "over" | "waiting" | "done" | "empty";
+  key: "manual" | "unpaid" | "partial" | "advance" | "over" | "waiting" | "done" | "empty" | "writtenOff";
   label: string;
   tone: "success" | "warning" | "primary" | "neutral";
 };
@@ -120,7 +120,12 @@ export type LedgerStudent = {
   paidAt: Date | null;
 };
 
-export type CarriedOutStudent = LedgerStudent & { salaryMonth: number; salaryYear: number };
+export type CarriedOutStudent = LedgerStudent & {
+  salaryMonth: number;
+  salaryYear: number;
+  /** Đã bỏ qua cùng dư nợ của tháng gốc nên không cộng sang lương tháng sau. */
+  writtenOff: boolean;
+};
 
 export type SalaryLine = SalaryComputation & {
   classId: string;
@@ -159,6 +164,15 @@ export type SalaryLine = SalaryComputation & {
   /** HS chưa nộp học phí kỳ này. */
   waiting: LedgerStudent[];
   waitingShare: number;
+  /**
+   * Dư nợ của tháng (cột "Dư nợ" của sổ tay) = phần nộp muộn sang tháng sau + phần chưa trả
+   * (âm = trả dư). Tháng đã bỏ qua dư nợ thì đây là số đã bỏ qua.
+   */
+  debt: number;
+  /** Tháng này đã bỏ qua dư nợ (chênh lệch đã thỏa thuận xong với giáo viên). */
+  writeOff: { note: string | null; createdAt: Date } | null;
+  /** Tổng tháng trước khi bỏ qua phần chưa trả (để hiển thị đúng "Tổng tháng" của sổ tay). */
+  grossDue: number;
   status: SalaryStatus;
 };
 
@@ -191,6 +205,7 @@ export type SalaryInput = {
     studentName: string;
   }>;
   records: Array<SalaryRecord & { classId: string; month: number; year: number }>;
+  writeOffs?: Array<{ classId: string; month: number; year: number; note: string | null; createdAt: Date }>;
 };
 
 const nameCollator = new Intl.Collator("vi");
@@ -208,7 +223,7 @@ const byPaidAt = (a: { paidAt: Date | null }, b: { paidAt: Date | null }) =>
 type Bucket = {
   onTime: number;
   carriedIn: SalaryInput["invoices"];
-  carriedOut: Array<SalaryInput["invoices"][number] & { salaryIndex: number }>;
+  carriedOut: Array<SalaryInput["invoices"][number] & { salaryIndex: number; writtenOff: boolean }>;
   waiting: SalaryInput["invoices"];
   records: SalaryRecord[];
 };
@@ -228,6 +243,9 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
     recordsByClass.set(record.classId, [...(recordsByClass.get(record.classId) ?? []), record]);
   }
 
+  const writeOffs = new Map(
+    (input.writeOffs ?? []).map((item) => [`${item.classId}:${periodIndex(item.month, item.year)}`, item])
+  );
   const monthOverrides = new Map(
     (input.monthCutoffs ?? []).map((item) => [periodIndex(item.month, item.year), item.cutoffDate])
   );
@@ -269,13 +287,15 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         continue;
       }
       const salaryIndex = invoice.paidAt ? salaryIndexForPayment(tuitionIndex, invoice.paidAt, resolver) : tuitionIndex;
-      if (inRange(salaryIndex)) {
-        if (salaryIndex === tuitionIndex) bucket(salaryIndex).onTime += invoice.paidAmount ?? invoice.amount;
-        else bucket(salaryIndex).carriedIn.push(invoice);
+      if (salaryIndex === tuitionIndex) {
+        if (inRange(salaryIndex)) bucket(salaryIndex).onTime += invoice.paidAmount ?? invoice.amount;
+        continue;
       }
-      if (salaryIndex !== tuitionIndex && inRange(tuitionIndex)) {
-        bucket(tuitionIndex).carriedOut.push({ ...invoice, salaryIndex });
-      }
+      // Nộp muộn của tháng đã bỏ qua dư nợ (nộp trước lúc bỏ qua) không cộng sang tháng sau.
+      const writeOff = writeOffs.get(`${classRoom.id}:${tuitionIndex}`);
+      const writtenOff = Boolean(writeOff && invoice.paidAt && invoice.paidAt <= writeOff.createdAt);
+      if (inRange(salaryIndex) && !writtenOff) bucket(salaryIndex).carriedIn.push(invoice);
+      if (inRange(tuitionIndex)) bucket(tuitionIndex).carriedOut.push({ ...invoice, salaryIndex, writtenOff });
     }
 
     for (let index = input.fromIndex; index <= input.toIndex; index += 1) {
@@ -307,7 +327,7 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
       const carriedIn = current.carriedIn.map(toStudent).sort(byPaidAt);
       const carriedInShare = carriedIn.reduce((sum, item) => sum + item.share, 0);
       const collected = current.onTime + carriedIn.reduce((sum, item) => sum + item.amount, 0);
-      const computation = computeSalary({
+      const computed = computeSalary({
         collected: current.onTime,
         classSharePercent: classRoom.teacherSharePercent,
         records,
@@ -318,12 +338,20 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         .map((invoice) => ({
           ...toStudent(invoice),
           salaryMonth: (invoice.salaryIndex % 12) + 1,
-          salaryYear: Math.floor(invoice.salaryIndex / 12)
+          salaryYear: Math.floor(invoice.salaryIndex / 12),
+          writtenOff: invoice.writtenOff
         }))
         .sort(byPaidAt);
+      const carriedOutShare = carriedOut.reduce((sum, item) => sum + item.share, 0);
       const waiting = current.waiting.map(toStudent).sort(byName);
       const waitingShare = waiting.reduce((sum, item) => sum + item.share, 0);
       const cutoffPassed = input.now.getTime() >= resolver.end(index).getTime();
+      // Bỏ qua dư nợ: phần chưa trả coi như xong (phải trả = đã trả), giữ "Tổng tháng" để đối chiếu.
+      const writeOff = writeOffs.get(`${classRoom.id}:${index}`) ?? null;
+      const computation =
+        writeOff && computed.mode === "percent"
+          ? { ...computed, due: computed.paidOut, difference: 0 }
+          : computed;
 
       lines.push({
         classId: classRoom.id,
@@ -349,16 +377,21 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         carriedIn,
         carriedInShare,
         carriedOut,
-        carriedOutShare: carriedOut.reduce((sum, item) => sum + item.share, 0),
+        carriedOutShare,
         waiting,
         waitingShare,
-        status: salaryStatus({
-          mode: computation.mode,
-          paidOut: computation.paidOut,
-          difference: computation.difference,
-          waitingCount: cutoffPassed ? 0 : waiting.length,
-          waitingShare: cutoffPassed ? 0 : waitingShare
-        })
+        debt: carriedOutShare + computed.difference,
+        writeOff: writeOff ? { note: writeOff.note, createdAt: writeOff.createdAt } : null,
+        grossDue: computed.due,
+        status: writeOff
+          ? { key: "writtenOff", label: "Đã bỏ qua dư nợ", tone: "neutral" }
+          : salaryStatus({
+              mode: computation.mode,
+              paidOut: computation.paidOut,
+              difference: computation.difference,
+              waitingCount: cutoffPassed ? 0 : waiting.length,
+              waitingShare: cutoffPassed ? 0 : waitingShare
+            })
       });
     }
   }
@@ -410,9 +443,13 @@ async function loadSalaryInput(options: {
     year: { gte: Math.floor(options.fromIndex / 12), lte: Math.floor(options.toIndex / 12) }
   };
   const classFilter = options.classIds ? { in: options.classIds } : undefined;
-  const [defaultCutoff, monthCutoffs, classes, invoices, records] = await Promise.all([
+  const [defaultCutoff, monthCutoffs, writeOffs, classes, invoices, records] = await Promise.all([
     loadDefaultSalaryCutoff(db),
     loadSalaryMonthCutoffs(db),
+    db.salaryWriteOff.findMany({
+      where: classFilter ? { classId: classFilter } : {},
+      select: { classId: true, month: true, year: true, note: true, createdAt: true }
+    }),
     db.classRoom.findMany({
       where: classFilter ? { id: classFilter } : {},
       orderBy: [{ teacherName: "asc" }, { name: "asc" }],
@@ -457,6 +494,7 @@ async function loadSalaryInput(options: {
     now: options.now ?? new Date(),
     defaultCutoff,
     monthCutoffs,
+    writeOffs,
     classes,
     invoices: invoices.map((invoice) => ({
       id: invoice.id,
@@ -710,7 +748,14 @@ export async function loadSalaryLedger(options: { fromIndex: number; toIndex: nu
 
 /** Ghi chú ngắn về HS nộp muộn/chưa nộp của một tháng lương (dùng chung cho trang và tin nhắn). */
 export function salaryLineNotes(line: SalaryLine) {
-  const notes: Array<{ tone: "in" | "out" | "waiting"; label: string; text: string }> = [];
+  const notes: Array<{ tone: "in" | "out" | "waiting" | "writeOff"; label: string; text: string }> = [];
+  if (line.writeOff) {
+    notes.push({
+      tone: "writeOff",
+      label: "Đã bỏ qua dư nợ",
+      text: `${formatCurrency(line.debt)}${line.writeOff.note ? ` · ${line.writeOff.note}` : ""}`
+    });
+  }
   if (line.carriedIn.length > 0) {
     notes.push({
       tone: "in",
@@ -727,7 +772,9 @@ export function salaryLineNotes(line: SalaryLine) {
       text: line.carriedOut
         .map(
           (item) =>
-            `${item.studentName} (${item.paidAt ? `nộp ${formatDayMonth(item.paidAt)} → ` : ""}T${item.salaryMonth})`
+            `${item.studentName} (${item.paidAt ? `nộp ${formatDayMonth(item.paidAt)} → ` : ""}${
+              item.writtenOff ? "đã bỏ qua" : `T${item.salaryMonth}`
+            })`
         )
         .join(", ")
     });
@@ -761,7 +808,7 @@ export function buildTeacherSalaryMessage(teacher: TeacherLedger, now = new Date
             })`
           : "";
       lines.push(
-        `• Lương T${period.month}/${period.year}, chốt ${formatDayMonth(period.cutoffDate)}: ${formatCurrency(period.due)}${base}`
+        `• Lương T${period.month}/${period.year}, chốt ${formatDayMonth(period.cutoffDate)}: ${formatCurrency(period.grossDue)}${base}`
       );
       for (const note of salaryLineNotes(period)) lines.push(`   ${note.label}: ${note.text}`);
       if (period.payouts.length > 0) {
@@ -773,8 +820,14 @@ export function buildTeacherSalaryMessage(teacher: TeacherLedger, now = new Date
           .join(" + ");
         lines.push(`   Đã chuyển: ${transfers}`);
       }
-      if (period.difference > 0) lines.push(`   Còn lại: ${formatCurrency(period.difference)}`);
-      else if (period.difference < 0) lines.push(`   Chuyển dư: ${formatCurrency(-period.difference)}`);
+      if (!period.writeOff && period.debt !== 0) {
+        const parts = [
+          period.carriedOutShare > 0 ? `muộn ${formatCurrency(period.carriedOutShare)} sang tháng sau` : "",
+          period.difference > 0 ? `chưa trả ${formatCurrency(period.difference)}` : "",
+          period.difference < 0 ? `trả dư ${formatCurrency(-period.difference)}` : ""
+        ].filter(Boolean);
+        lines.push(`   Dư nợ: ${formatCurrency(period.debt)} (${parts.join(" + ")})`);
+      }
     }
   }
   lines.push("", teacher.owed > 0 ? `Tổng còn lại: ${formatCurrency(teacher.owed)}` : "Đã thanh toán đủ.");

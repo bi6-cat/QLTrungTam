@@ -56,6 +56,7 @@ model ClassRoom {
   enrollments             Enrollment[]
   schedules               ClassSchedule[]
   expenses                Expense[]
+  salaryWriteOffs         SalaryWriteOff[]
 
   @@index([shortCode])
   @@index([publicToken])
@@ -242,6 +243,20 @@ model AuditLog {
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
+}
+
+/// Bỏ qua dư nợ lương của một lớp-tháng (vd tháng trả lệch đã thỏa thuận xong với giáo viên):
+/// phần chưa trả coi như xong và các khoản nộp muộn của tháng đó, đã nộp trước lúc bỏ qua, không
+/// cộng sang lương tháng sau. Khoản nộp sau thời điểm bỏ qua vẫn tính lương bình thường.
+model SalaryWriteOff {
+  classId   String
+  year      Int
+  month     Int
+  note      String?
+  createdAt DateTime  @default(now())
+  classRoom ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([classId, year, month])
 }
 
 /// Ngày chốt lương đặt riêng cho một tháng lương (tháng đó trả lương khác ngày thường lệ).

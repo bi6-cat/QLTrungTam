@@ -2,7 +2,12 @@ import Link from "next/link";
 import { Banknote, CalendarCheck, Hourglass, Users } from "lucide-react";
 import { deleteExpenseAction } from "@/lib/actions/finance";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
-import { CopyTextButton, SalaryPayoutButton, type PayoutOption } from "@/components/SalaryForms";
+import {
+  CopyTextButton,
+  SalaryPayoutButton,
+  SalaryWriteOffButton,
+  type PayoutOption
+} from "@/components/SalaryForms";
 import { SalaryMonthCutoffs, type MonthCutoffRow } from "@/components/SalaryMonthCutoffs";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
@@ -382,17 +387,16 @@ function ClassLedger({
         {classRoom.archived ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] text-left text-sm">
+        <table className="w-full min-w-[1120px] text-left text-sm">
           <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
               <th className="px-4 py-2.5">Tháng lương</th>
               <th className="px-4 py-2.5 text-right">Tổng tháng</th>
               <th className="px-4 py-2.5 text-right">Chuyển khoản</th>
               <th className="px-4 py-2.5 text-right">Tiền mặt</th>
-              <th className="px-4 py-2.5 text-right" title="Lương của HS nộp sau ngày chốt, tính vào tháng sau">
-                Dư nợ → tháng sau
+              <th className="px-4 py-2.5 text-right" title="Phần nộp muộn (tính sang lương tháng sau) + phần chưa trả">
+                Dư nợ
               </th>
-              <th className="px-4 py-2.5 text-right">Còn thiếu</th>
               <th className="px-4 py-2.5">Ghi chú tự động</th>
               <th className="px-4 py-2.5">Tình trạng</th>
               <th className="px-4 py-2.5"></th>
@@ -423,7 +427,9 @@ function ClassLedger({
                         : "nhập tay"}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatCurrency(period.due)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">
+                    {formatCurrency(period.grossDue)}
+                  </td>
                   <td className="px-4 py-3">
                     <PayoutList
                       payouts={period.payouts.filter((payout) => payout.paymentMethod !== "cash")}
@@ -441,21 +447,34 @@ function ClassLedger({
                     />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {period.carriedOutShare > 0 ? (
-                      <>
-                        <div className="font-semibold text-amber-700">{formatCurrency(period.carriedOutShare)}</div>
-                        <div className="text-xs text-stone-500">{period.carriedOut.length} HS · sang lương sau</div>
-                      </>
-                    ) : (
+                    {period.debt === 0 ? (
                       <span className="text-stone-400">—</span>
+                    ) : (
+                      <>
+                        <div
+                          className={`font-bold ${
+                            period.writeOff
+                              ? "text-stone-400 line-through"
+                              : period.debt > 0
+                                ? "text-warning"
+                                : "text-primary"
+                          }`}
+                        >
+                          {formatCurrency(period.debt)}
+                        </div>
+                        <div className="text-xs text-stone-500">
+                          {period.writeOff
+                            ? "đã bỏ qua"
+                            : [
+                                period.carriedOutShare > 0 ? `muộn ${formatCurrency(period.carriedOutShare)} → tháng sau` : "",
+                                period.difference > 0 ? `chưa trả ${formatCurrency(period.difference)}` : "",
+                                period.difference < 0 ? `trả dư ${formatCurrency(-period.difference)}` : ""
+                              ]
+                                .filter(Boolean)
+                                .join(" + ")}
+                        </div>
+                      </>
                     )}
-                  </td>
-                  <td
-                    className={`whitespace-nowrap px-4 py-3 text-right font-bold ${
-                      period.difference > 0 ? "text-warning" : period.difference < 0 ? "text-primary" : "text-stone-400"
-                    }`}
-                  >
-                    {period.difference === 0 ? "—" : formatCurrency(period.difference)}
                   </td>
                   <td className="max-w-[320px] px-4 py-3 text-xs leading-relaxed text-stone-600">
                     {notes.length === 0 ? (
@@ -470,7 +489,9 @@ function ClassLedger({
                                   ? "text-emerald-700"
                                   : note.tone === "out"
                                     ? "text-amber-700"
-                                    : "text-primary"
+                                    : note.tone === "writeOff"
+                                      ? "text-stone-500"
+                                      : "text-primary"
                               }`}
                             >
                               {note.label}:
@@ -487,16 +508,28 @@ function ClassLedger({
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {period.mode === "percent" && period.difference !== 0 ? (
-                      <SalaryPayoutButton
-                        teacherName={teacherName}
-                        options={options}
-                        initialKeys={[key]}
-                        label={period.difference > 0 ? "Trả" : "Trừ lại"}
-                        variant={period.difference > 0 ? "accent" : "secondary"}
-                        compact
-                      />
-                    ) : null}
+                    <div className="flex flex-col items-end gap-1">
+                      {period.mode === "percent" && period.difference !== 0 ? (
+                        <SalaryPayoutButton
+                          teacherName={teacherName}
+                          options={options}
+                          initialKeys={[key]}
+                          label={period.difference > 0 ? "Trả" : "Trừ lại"}
+                          variant={period.difference > 0 ? "accent" : "secondary"}
+                          compact
+                        />
+                      ) : null}
+                      {period.writeOff || (period.mode === "percent" && period.cutoffPassed && period.debt !== 0) ? (
+                        <SalaryWriteOffButton
+                          classId={classRoom.classId}
+                          className={classRoom.className}
+                          month={period.month}
+                          year={period.year}
+                          debt={period.debt}
+                          undo={Boolean(period.writeOff)}
+                        />
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );
@@ -505,7 +538,9 @@ function ClassLedger({
           <tfoot className="border-t border-stone-200 bg-stone-50/60 text-sm">
             <tr>
               <td className="px-4 py-2.5 font-semibold text-stone-600">Cộng</td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold">{formatCurrency(classRoom.due)}</td>
+              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold">
+                {formatCurrency(classRoom.periods.reduce((sum, period) => sum + period.grossDue, 0))}
+              </td>
               <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-success">
                 {formatCurrency(
                   classRoom.periods.reduce((sum, period) => sum + period.paidBank, 0)
@@ -516,13 +551,13 @@ function ClassLedger({
                   classRoom.periods.reduce((sum, period) => sum + period.paidCash, 0)
                 )}
               </td>
-              <td />
               <td
                 className={`whitespace-nowrap px-4 py-2.5 text-right font-bold ${
                   classRoom.owed > 0 ? "text-warning" : "text-stone-400"
                 }`}
+                title="Tổng phần chưa trả của các tháng (phần nộp muộn đã nằm trong tháng sau)"
               >
-                {classRoom.owed > 0 ? formatCurrency(classRoom.owed) : "—"}
+                {classRoom.owed > 0 ? `chưa trả ${formatCurrency(classRoom.owed)}` : "—"}
               </td>
               <td colSpan={3} className="px-4 py-2.5 text-xs text-stone-500">
                 {classRoom.waitingShare > 0

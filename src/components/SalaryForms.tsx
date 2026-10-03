@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { AlertTriangle, Check, Copy, Send } from "lucide-react";
-import { recordSalaryPayoutAction } from "@/lib/actions/finance";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { AlertTriangle, Ban, Check, Copy, RotateCcw, Send } from "lucide-react";
+import { recordSalaryPayoutAction, setSalaryWriteOffAction } from "@/lib/actions/finance";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { Modal } from "@/components/Modal";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -278,5 +278,99 @@ export function CopyTextButton({ text, label, successMessage }: { text: string; 
       {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
       {label}
     </Button>
+  );
+}
+
+/**
+ * Bỏ qua dư nợ của một lớp-tháng (chênh lệch đã thỏa thuận xong với giáo viên) hoặc hoàn tác.
+ * Hỏi lại trước khi bỏ qua vì số này sẽ không còn hiện là nợ giáo viên.
+ */
+export function SalaryWriteOffButton({
+  classId,
+  className,
+  month,
+  year,
+  debt,
+  undo = false
+}: {
+  classId: string;
+  className: string;
+  month: number;
+  year: number;
+  debt: number;
+  undo?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    startTransition(async () => {
+      try {
+        const result = await setSalaryWriteOffAction({ classId, month, year, note, undo });
+        if (result.error) toast.error(result.error);
+        else toast.success(result.success);
+      } catch {
+        toast.error("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
+      } finally {
+        setOpen(false);
+      }
+    });
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-8 whitespace-nowrap px-2 text-xs text-stone-500"
+        onClick={() => setOpen(true)}
+        title={undo ? "Tính lại dư nợ của tháng này" : "Bỏ qua dư nợ tháng này (đã thỏa thuận xong với giáo viên)"}
+      >
+        {undo ? <RotateCcw className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+        {undo ? "Hoàn tác" : "Bỏ qua"}
+      </Button>
+      {open ? (
+        <Modal
+          title={undo ? "Tính lại dư nợ" : "Bỏ qua dư nợ"}
+          onClose={() => !pending && setOpen(false)}
+          closeDisabled={pending}
+        >
+          <div className="grid gap-4 text-sm text-stone-600">
+            {undo ? (
+              <p>
+                Tính lại dư nợ <strong>{className}</strong> T{month}/{year}: phần chưa trả hiện lại là nợ và các khoản nộp
+                muộn lại được cộng sang lương tháng sau.
+              </p>
+            ) : (
+              <>
+                <p>
+                  Bỏ qua dư nợ <strong>{formatCurrency(debt)}</strong> của <strong>{className}</strong> T{month}/{year}?
+                  Phần chưa trả coi như xong, các khoản nộp muộn đã nộp của tháng này không cộng sang lương tháng sau.
+                  Khoản nộp sau thời điểm này vẫn tính lương bình thường.
+                </p>
+                <Field label="Lý do" hint="Không bắt buộc">
+                  <Input
+                    value={note}
+                    maxLength={300}
+                    onChange={(event) => setNote(event.target.value)}
+                    placeholder="VD: T7 chuyển lệch, đã thỏa thuận với cô"
+                  />
+                </Field>
+              </>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
+                Đóng
+              </Button>
+              <Button type="button" disabled={pending} onClick={submit}>
+                <Check className="h-4 w-4" />
+                {pending ? "Đang lưu..." : undo ? "Tính lại" : "Bỏ qua dư nợ"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }

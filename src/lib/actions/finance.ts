@@ -164,3 +164,52 @@ export async function setSalaryMonthCutoffAction(_prevState: ResultState, formDa
     `Đã đặt ngày chốt lương T${month}/${year} là ${formatDayMonth(cutoffDate)}: HS nộp sau ngày này tính sang lương tháng sau.`
   );
 }
+
+/**
+ * Bỏ qua dư nợ lương của một lớp-tháng (chênh lệch đã thỏa thuận xong với giáo viên), hoặc hoàn
+ * tác. Khi bỏ qua, phần chưa trả coi như xong và các khoản nộp muộn đã nộp của tháng đó không
+ * cộng sang lương tháng sau.
+ */
+export async function setSalaryWriteOffAction(input: {
+  classId: string;
+  month: number;
+  year: number;
+  note?: string;
+  undo?: boolean;
+}): Promise<ResultState> {
+  const actor = await requireAdmin();
+  const { classId, month, year } = input;
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2000 || year > 2100) {
+    return errorState("Tháng không hợp lệ.");
+  }
+  const classRoom = await prisma.classRoom.findUnique({ where: { id: String(classId) }, select: { id: true, name: true } });
+  if (!classRoom) return errorState("Không tìm thấy lớp.");
+  const note = String(input.note ?? "").trim().slice(0, 300) || null;
+  const where = { classId_year_month: { classId: classRoom.id, year, month } };
+
+  await prisma.$transaction([
+    input.undo
+      ? prisma.salaryWriteOff.deleteMany({ where: { classId: classRoom.id, year, month } })
+      : prisma.salaryWriteOff.upsert({
+          where,
+          update: { note },
+          create: { classId: classRoom.id, year, month, note }
+        }),
+    prisma.auditLog.create({
+      data: {
+        actorUserId: actor.userId,
+        actorUsername: actor.username.trim(),
+        action: input.undo ? "salary.write_off_undone" : "salary.written_off",
+        entityType: "ClassRoom",
+        entityId: classRoom.id,
+        metadata: { month, year, note }
+      }
+    })
+  ]);
+  revalidateFinancialPaths();
+  return successState(
+    input.undo
+      ? `Đã hoàn tác: dư nợ ${classRoom.name} T${month}/${year} được tính lại.`
+      : `Đã bỏ qua dư nợ ${classRoom.name} T${month}/${year}.`
+  );
+}
