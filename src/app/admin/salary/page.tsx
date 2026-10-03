@@ -80,7 +80,8 @@ export default async function SalaryPage({
 
   const [ledger, paidThisMonth, defaultCutoff, monthCutoffs] = await Promise.all([
     loadSalaryLedger({ fromIndex, toIndex: currentIndex }),
-    prisma.expense.aggregate({
+    prisma.expense.groupBy({
+      by: ["paymentMethod"],
       where: { category: "teacher_salary", classId: { not: null }, paidAt: { gte: monthStart } },
       _sum: { amount: true },
       _count: { _all: true }
@@ -134,7 +135,7 @@ export default async function SalaryPage({
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Còn nợ giáo viên"
+          label="Còn thiếu lương GV"
           tone={owedTotal > 0 ? "warning" : "success"}
           value={formatCurrency(owedTotal)}
           hint={
@@ -159,10 +160,14 @@ export default async function SalaryPage({
           icon={<Users className="h-5 w-5" />}
         />
         <StatCard
-          label="Đã chuyển trong tháng này"
+          label="Đã trả trong tháng này"
           tone="success"
-          value={formatCurrency(paidThisMonth._sum.amount ?? 0)}
-          hint={`${paidThisMonth._count._all} lần chuyển (mọi kỳ) · đối chiếu sao kê`}
+          value={formatCurrency(paidThisMonth.reduce((sum, row) => sum + (row._sum.amount ?? 0), 0))}
+          hint={`CK ${formatCurrency(
+            paidThisMonth.filter((row) => row.paymentMethod !== "cash").reduce((sum, row) => sum + (row._sum.amount ?? 0), 0)
+          )} · TM ${formatCurrency(
+            paidThisMonth.filter((row) => row.paymentMethod === "cash").reduce((sum, row) => sum + (row._sum.amount ?? 0), 0)
+          )} (mọi tháng lương)`}
           icon={<CalendarCheck className="h-5 w-5" />}
         />
       </div>
@@ -255,11 +260,11 @@ function TeacherPanel({ teacher, currentIndex, now }: { teacher: TeacherLedger; 
               <dd className="font-semibold">{formatCurrency(teacher.due)}</dd>
             </div>
             <div className="flex gap-1.5">
-              <dt className="text-stone-500">Đã chuyển</dt>
+              <dt className="text-stone-500">Đã trả</dt>
               <dd className="font-semibold text-success">{formatCurrency(teacher.paidOut)}</dd>
             </div>
             <div className="flex gap-1.5">
-              <dt className="text-stone-500">Còn nợ</dt>
+              <dt className="text-stone-500">Còn thiếu</dt>
               <dd className={`font-bold ${teacher.owed > 0 ? "text-warning" : "text-stone-400"}`}>
                 {formatCurrency(teacher.owed)}
               </dd>
@@ -283,7 +288,7 @@ function TeacherPanel({ teacher, currentIndex, now }: { teacher: TeacherLedger; 
               teacherName={teacher.teacherName}
               options={options}
               initialKeys={owedKeys}
-              label="Ghi chuyển lương"
+              label="Ghi trả lương"
             />
           ) : null}
         </div>
@@ -301,6 +306,50 @@ function TeacherPanel({ teacher, currentIndex, now }: { teacher: TeacherLedger; 
         ))}
       </div>
     </Panel>
+  );
+}
+
+function PayoutList({
+  payouts,
+  className,
+  month,
+  year
+}: {
+  payouts: SalaryLine["payouts"];
+  className: string;
+  month: number;
+  year: number;
+}) {
+  if (payouts.length === 0) return <span className="text-stone-400">—</span>;
+  return (
+    <ul className="grid gap-1">
+      {payouts.map((payout) => (
+        <li key={payout.id} className="flex items-start justify-end gap-1">
+          <div className="min-w-0 text-right">
+            <div className="whitespace-nowrap">
+              <span className={`font-semibold ${payout.amount < 0 ? "text-primary" : "text-success"}`}>
+                {formatCurrency(payout.amount)}
+              </span>
+              <span className="ml-1.5 text-xs text-stone-500">{formatDayMonth(payout.paidAt ?? payout.createdAt)}</span>
+            </div>
+            {payout.note ? <div className="text-xs text-stone-500">{payout.note}</div> : null}
+          </div>
+          <ConfirmDeleteButton
+            id={payout.id}
+            action={deleteExpenseAction}
+            title="Xóa lần trả này"
+            description={
+              <>
+                Xóa khoản <strong>{formatCurrency(payout.amount)}</strong> (
+                {payout.paymentMethod === "cash" ? "tiền mặt" : "chuyển khoản"}) ngày{" "}
+                {formatDayMonth(payout.paidAt ?? payout.createdAt)} của {className} T{month}/{year}? Số này sẽ quay lại
+                phần còn thiếu của giáo viên.
+              </>
+            }
+          />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -333,13 +382,17 @@ function ClassLedger({
         {classRoom.archived ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1020px] text-left text-sm">
+        <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
               <th className="px-4 py-2.5">Tháng lương</th>
-              <th className="px-4 py-2.5 text-right">Phải trả</th>
-              <th className="px-4 py-2.5">Đã chuyển</th>
-              <th className="px-4 py-2.5 text-right">Còn nợ</th>
+              <th className="px-4 py-2.5 text-right">Tổng tháng</th>
+              <th className="px-4 py-2.5 text-right">Chuyển khoản</th>
+              <th className="px-4 py-2.5 text-right">Tiền mặt</th>
+              <th className="px-4 py-2.5 text-right" title="Lương của HS nộp sau ngày chốt, tính vào tháng sau">
+                Dư nợ → tháng sau
+              </th>
+              <th className="px-4 py-2.5 text-right">Còn thiếu</th>
               <th className="px-4 py-2.5">Ghi chú tự động</th>
               <th className="px-4 py-2.5">Tình trạng</th>
               <th className="px-4 py-2.5"></th>
@@ -359,7 +412,7 @@ function ClassLedger({
                     </div>
                     <div className="text-xs text-stone-500">
                       chốt {formatDayMonth(period.cutoffDate)}
-                      {period.cutoffOverridden ? " (đặt riêng)" : ""}
+                      {period.cutoffFromPayout ? " (theo ngày trả lương)" : period.cutoffOverridden ? " (đặt riêng)" : ""}
                       {period.cutoffPassed ? "" : " (chưa tới)"}
                     </div>
                     <div className="text-xs text-stone-500">
@@ -372,39 +425,29 @@ function ClassLedger({
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatCurrency(period.due)}</td>
                   <td className="px-4 py-3">
-                    {period.payouts.length === 0 ? (
-                      <span className="text-stone-400">—</span>
+                    <PayoutList
+                      payouts={period.payouts.filter((payout) => payout.paymentMethod !== "cash")}
+                      className={classRoom.className}
+                      month={period.month}
+                      year={period.year}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <PayoutList
+                      payouts={period.payouts.filter((payout) => payout.paymentMethod === "cash")}
+                      className={classRoom.className}
+                      month={period.month}
+                      year={period.year}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {period.carriedOutShare > 0 ? (
+                      <>
+                        <div className="font-semibold text-amber-700">{formatCurrency(period.carriedOutShare)}</div>
+                        <div className="text-xs text-stone-500">{period.carriedOut.length} HS · sang lương sau</div>
+                      </>
                     ) : (
-                      <ul className="grid gap-1">
-                        {period.payouts.map((payout, index) => (
-                          <li key={payout.id} className="flex items-start gap-1.5">
-                            <div className="min-w-0">
-                              <div className="whitespace-nowrap">
-                                <span className={`font-semibold ${payout.amount < 0 ? "text-primary" : "text-success"}`}>
-                                  {formatCurrency(payout.amount)}
-                                </span>
-                                <span className="ml-1.5 text-xs text-stone-500">
-                                  {index === 0 ? "" : payout.amount < 0 ? "trừ · " : "thêm · "}
-                                  {formatDayMonth(payout.paidAt ?? payout.createdAt)}
-                                </span>
-                              </div>
-                              {payout.note ? <div className="text-xs text-stone-500">{payout.note}</div> : null}
-                            </div>
-                            <ConfirmDeleteButton
-                              id={payout.id}
-                              action={deleteExpenseAction}
-                              title="Xóa lần chuyển này"
-                              description={
-                                <>
-                                  Xóa lần chuyển <strong>{formatCurrency(payout.amount)}</strong> ngày{" "}
-                                  {formatDayMonth(payout.paidAt ?? payout.createdAt)} cho {classRoom.className} T
-                                  {period.month}/{period.year}? Số này sẽ quay lại phần còn nợ giáo viên.
-                                </>
-                              }
-                            />
-                          </li>
-                        ))}
-                      </ul>
+                      <span className="text-stone-400">—</span>
                     )}
                   </td>
                   <td
@@ -449,7 +492,7 @@ function ClassLedger({
                         teacherName={teacherName}
                         options={options}
                         initialKeys={[key]}
-                        label={period.difference > 0 ? "Chuyển" : "Trừ lại"}
+                        label={period.difference > 0 ? "Trả" : "Trừ lại"}
                         variant={period.difference > 0 ? "accent" : "secondary"}
                         compact
                       />
@@ -463,9 +506,17 @@ function ClassLedger({
             <tr>
               <td className="px-4 py-2.5 font-semibold text-stone-600">Cộng</td>
               <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold">{formatCurrency(classRoom.due)}</td>
-              <td className="whitespace-nowrap px-4 py-2.5 font-bold text-success">
-                {formatCurrency(classRoom.paidOut)}
+              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-success">
+                {formatCurrency(
+                  classRoom.periods.reduce((sum, period) => sum + period.paidBank, 0)
+                )}
               </td>
+              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-success">
+                {formatCurrency(
+                  classRoom.periods.reduce((sum, period) => sum + period.paidCash, 0)
+                )}
+              </td>
+              <td />
               <td
                 className={`whitespace-nowrap px-4 py-2.5 text-right font-bold ${
                   classRoom.owed > 0 ? "text-warning" : "text-stone-400"

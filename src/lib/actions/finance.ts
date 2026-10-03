@@ -93,8 +93,13 @@ export async function recordSalaryPayoutAction(_prevState: ResultState, formData
     const recorded = await recordSalaryPayout({ actor, paidAt, note: data.note, lines: data.lines });
     revalidateFinancialPaths();
     const total = recorded.reduce((sum, item) => sum + item.amount, 0);
-    const remaining = recorded.reduce((sum, item) => sum + item.line.difference - item.amount, 0);
+    const bank = recorded.filter((item) => item.method === "bank_transfer").reduce((sum, item) => sum + item.amount, 0);
+    const cash = total - bank;
+    // Một tháng có thể có cả dòng chuyển khoản và tiền mặt: còn nợ tính theo từng tháng, không cộng lặp.
+    const owedBefore = new Map(recorded.map((item) => [`${item.line.classId}:${item.line.year}:${item.line.month}`, item.line.difference]));
+    const remaining = [...owedBefore.values()].reduce((sum, value) => sum + value, 0) - total;
     const teacher = recorded[0]?.line.teacherName || "giáo viên";
+    const split = cash !== 0 ? ` (CK ${formatCurrency(bank)} + TM ${formatCurrency(cash)})` : " (chuyển khoản)";
     const tail =
       remaining > 0
         ? ` Còn nợ ${formatCurrency(remaining)}.`
@@ -102,7 +107,7 @@ export async function recordSalaryPayoutAction(_prevState: ResultState, formData
           ? ` Chuyển dư ${formatCurrency(-remaining)} so với học phí đã thu.`
           : " Đã đủ phần học phí đã thu.";
     return successState(
-      `Đã ghi ${total >= 0 ? "chuyển" : "trừ"} ${formatCurrency(Math.abs(total))} cho ${teacher} (${recorded.length} dòng).${tail}`
+      `Đã ghi ${total >= 0 ? "trả" : "trừ"} ${formatCurrency(Math.abs(total))} cho ${teacher}${split}.${tail}`
     );
   } catch (payoutError) {
     return actionFailure(payoutError, "Không ghi được lần chuyển lương.");

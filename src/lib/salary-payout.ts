@@ -2,9 +2,16 @@ import { periodIndex } from "@/lib/enrollment-period";
 import { loadSalaryLines, salaryPayoutDescription, type SalaryLine } from "@/lib/salary";
 import { runSerializable } from "@/lib/serializable";
 
-export type SalaryPayoutLine = { classId: string; month: number; year: number; amount: number };
+export type SalaryPayoutLine = {
+  classId: string;
+  month: number;
+  year: number;
+  amount: number;
+  /** Chuyển khoản hoặc tiền mặt; mặc định chuyển khoản. */
+  method?: "bank_transfer" | "cash";
+};
 
-export type SalaryPayoutResult = Array<{ line: SalaryLine; amount: number }>;
+export type SalaryPayoutResult = Array<{ line: SalaryLine; amount: number; method: "bank_transfer" | "cash" }>;
 
 /**
  * Ghi một lần chuyển lương cho giáo viên: mỗi dòng (lớp, kỳ học phí, số tiền) thành một bản ghi
@@ -30,8 +37,10 @@ export async function recordSalaryPayout(input: {
     if (periodIndex(line.month, line.year) > currentIndex) {
       throw new Error(`Chưa tới kỳ T${line.month}/${line.year}, chưa ghi lương được.`);
     }
-    const key = `${line.classId}:${line.year}:${line.month}`;
-    if (seen.has(key)) throw new Error("Một lớp chỉ ghi một dòng cho mỗi kỳ trong cùng lần chuyển.");
+    const key = `${line.classId}:${line.year}:${line.month}:${line.method ?? "bank_transfer"}`;
+    if (seen.has(key)) {
+      throw new Error("Mỗi lớp, mỗi tháng chỉ ghi một dòng chuyển khoản và một dòng tiền mặt trong cùng lần ghi.");
+    }
     seen.add(key);
     const periodKey = `${line.year}-${line.month}`;
     periods.set(periodKey, [...(periods.get(periodKey) ?? []), line]);
@@ -47,6 +56,7 @@ export async function recordSalaryPayout(input: {
           classIds: lines.map((line) => line.classId)
         });
         for (const payout of lines) {
+          const method = payout.method ?? "bank_transfer";
           const line = salaryLines.find((item) => item.classId === payout.classId);
           if (!line) throw new Error(`Không tìm thấy lớp cần ghi lương kỳ T${month}/${year}. Vui lòng tải lại trang.`);
           if (line.mode === "manual") {
@@ -60,8 +70,9 @@ export async function recordSalaryPayout(input: {
               year,
               category: "teacher_salary",
               classId: line.classId,
-              description: salaryPayoutDescription(line, payout.amount),
+              description: salaryPayoutDescription(line, payout.amount, method),
               amount: payout.amount,
+              paymentMethod: method,
               sharePercent: line.sharePercent,
               baseAmount: line.collected,
               paidAt: input.paidAt,
@@ -81,6 +92,7 @@ export async function recordSalaryPayout(input: {
                 month,
                 year,
                 amount: payout.amount,
+                method,
                 paidAt: input.paidAt.toISOString(),
                 sharePercent: line.sharePercent,
                 collected: line.collected,
@@ -89,7 +101,7 @@ export async function recordSalaryPayout(input: {
               }
             }
           });
-          results.push({ line, amount: payout.amount });
+          results.push({ line, amount: payout.amount, method });
         }
       }
       return results;

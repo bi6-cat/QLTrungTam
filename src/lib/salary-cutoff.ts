@@ -59,6 +59,35 @@ export function cutoffResolver(rule: SalaryCutoff, overrides?: ReadonlyMap<numbe
   };
 }
 
+/**
+ * "Dư nợ" là tiền học sinh đóng sau ngày tính lương. Tháng nào chuyển lương MUỘN hơn ngày chốt
+ * (vd lớp mới thu học phí tháng 8 vào tháng 9 rồi mới trả lương ngày 30/9) thì ngày chốt lùi tới
+ * ngày chuyển lương đầu tiên của tháng đó; chuyển sớm hơn thì vẫn giữ ngày chốt.
+ */
+export function withPayoutDates(
+  base: CutoffResolver,
+  firstPayoutAt: (index: number) => Date | null
+): CutoffResolver & { fromPayout(index: number): boolean } {
+  const payoutDay = (index: number) => {
+    const at = firstPayoutAt(index);
+    return at ? new Date(at.getFullYear(), at.getMonth(), at.getDate()) : null;
+  };
+  const fromPayout = (index: number) => {
+    const day = payoutDay(index);
+    return day !== null && day.getTime() > base.date(index).getTime();
+  };
+  return {
+    date: (index) => (fromPayout(index) ? (payoutDay(index) as Date) : base.date(index)),
+    end: (index) => {
+      if (!fromPayout(index)) return base.end(index);
+      const day = payoutDay(index) as Date;
+      return new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    },
+    overridden: base.overridden,
+    fromPayout
+  };
+}
+
 /** Tháng lương (periodIndex) mà khoản học phí của kỳ `tuitionIndex`, nộp lúc `paidAt`, được tính vào. */
 export function salaryIndexForPayment(tuitionIndex: number, paidAt: Date, cutoff: SalaryCutoff | CutoffResolver) {
   const resolver = "end" in cutoff ? cutoff : cutoffResolver(cutoff);

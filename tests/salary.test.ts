@@ -12,6 +12,7 @@ import {
 } from "../src/lib/salary";
 import {
   cutoffResolver,
+  withPayoutDates,
   DEFAULT_SALARY_CUTOFF,
   describeSalaryCutoff,
   parseSalaryCutoff,
@@ -160,6 +161,7 @@ const payout = (id: string, amount: number, paidAt: Date, month = 9): SalaryInpu
   description: "",
   note: null,
   paidAt,
+  paymentMethod: "bank_transfer",
   createdAt: paidAt
 });
 
@@ -309,6 +311,51 @@ describe("month-specific cutoffs", () => {
   });
 });
 
+describe("payout date as cutoff", () => {
+  test("a month paid later than its cutoff keeps the tuition collected before that payment", () => {
+    // Lớp mới: học phí T8 thu từ 02/09 đến 12/09, lương T8 trả ngày 30/09.
+    const lines = computeSalaryLines(
+      salaryInput({
+        fromIndex: index(8),
+        toIndex: SEP,
+        monthCutoffs: [{ month: 8, year: 2026, cutoffDate: new Date(2026, 7, 30) }],
+        invoices: [
+          invoice("a", "paid", 1_000_000, new Date(2026, 8, 2), 8),
+          invoice("b", "paid", 950_000, new Date(2026, 8, 12), 8)
+        ],
+        records: [{ ...payout("p1", 1_462_500, new Date(2026, 8, 30), 8) }]
+      })
+    );
+    const august = lines.find((line) => line.month === 8)!;
+    assert.equal(august.cutoffFromPayout, true);
+    assert.equal(august.due, 1_462_500);
+    assert.equal(august.difference, 0);
+    assert.equal(lines.some((line) => line.month === 9), false);
+  });
+
+  test("paying earlier than the cutoff does not move it", () => {
+    const resolver = withPayoutDates(cutoffResolver(DEFAULT_SALARY_CUTOFF), () => new Date(2026, 8, 25, 10));
+    assert.equal(resolver.fromPayout(SEP), false);
+    assert.deepEqual(resolver.date(SEP), new Date(2026, 8, 30));
+  });
+
+  test("bank and cash parts are totalled separately", () => {
+    const [september] = computeSalaryLines(
+      salaryInput({
+        toIndex: SEP,
+        invoices: [invoice("a", "paid", 6_880_000, new Date(2026, 8, 5))],
+        records: [
+          payout("p1", 4_500_000, new Date(2026, 8, 30)),
+          { ...payout("p2", 660_000, new Date(2026, 8, 30)), paymentMethod: "cash" }
+        ]
+      })
+    );
+    assert.equal(september.paidBank, 4_500_000);
+    assert.equal(september.paidCash, 660_000);
+    assert.equal(september.difference, 0);
+  });
+});
+
 describe("buildSalaryLedger", () => {
   test("groups months per class and teacher, and the message lists transfers and late payers", () => {
     const [teacher] = buildSalaryLedger(
@@ -324,7 +371,7 @@ describe("buildSalaryLedger", () => {
     assert.equal(teacher.owed, 360_000);
     assert.equal(teacher.openPeriods, 1);
     const message = buildTeacherSalaryMessage(teacher, new Date(2026, 9, 20));
-    assert.match(message, /Đã chuyển: 2\.500\.000\s₫ \(30\/09\) \+ 500\.000\s₫ \(10\/10\)/);
+    assert.match(message, /Đã chuyển: CK 2\.500\.000\s₫ \(30\/09\) \+ CK 500\.000\s₫ \(10\/10\)/);
     assert.match(message, /Nộp sau ngày chốt 30\/09, tính sang lương sau: HS b \(nộp 02\/10 → T10\)/);
     assert.match(message, /Nộp muộn tháng trước, tính vào đây: HS b \(T9 · nộp 02\/10\)/);
   });

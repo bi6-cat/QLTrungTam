@@ -57,6 +57,7 @@ export default async function FinancePage({
         baseAmount: true,
         note: true,
         paidAt: true,
+        paymentMethod: true,
         createdAt: true,
         classRoom: { select: { name: true, shortCode: true } }
       }
@@ -478,7 +479,7 @@ export default async function FinancePage({
                     <td className="px-4 py-3 text-stone-600">{expense.classRoom?.shortCode ?? "Chung"}</td>
                     <td className="px-4 py-3 text-xs text-stone-500">
                       {expense.sharePercent !== null && expense.baseAmount !== null
-                        ? `${expense.sharePercent}% · lúc ghi kỳ đã thu ${formatCurrency(expense.baseAmount)}`
+                        ? `${expense.paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản"} · ${expense.sharePercent}%`
                         : "Nhập tay"}
                     </td>
                     <td

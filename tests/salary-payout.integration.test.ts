@@ -87,21 +87,26 @@ describe("salary payouts", { concurrency: false }, () => {
     assert.equal(nextMonth.due, 360_000);
     assert.deepEqual(nextMonth.carriedIn.map((item) => [item.studentName, item.month]), [["HS nộp muộn", month]]);
 
-    // Trả phần nộp muộn vào lương tháng sau.
+    // Trả phần nộp muộn vào lương tháng sau: một phần chuyển khoản, một phần tiền mặt.
     const next = { month: (index + 1) % 12 + 1, year: Math.floor((index + 1) / 12) };
     await recordSalaryPayout({
       actor: harness.actor,
       paidAt: transferDay(10),
       note: null,
-      lines: [{ classId: fixture.classId, ...next, amount: 360_000 }],
+      lines: [
+        { classId: fixture.classId, ...next, amount: 300_000 },
+        { classId: fixture.classId, ...next, amount: 60_000, method: "cash" }
+      ],
       now
     });
     [thisMonth, nextMonth] = await classPeriods();
     assert.equal(nextMonth.difference, 0);
     assert.equal(nextMonth.status.key, "done");
+    assert.equal(nextMonth.paidBank, 300_000);
+    assert.equal(nextMonth.paidCash, 60_000);
     assert.equal(
       await prisma.auditLog.count({ where: { action: "salary.paid", actorUserId: harness.actor.userId } }),
-      2
+      3
     );
 
     // Lớp chốt ngày 5 tháng sau: khoản nộp ngày 3 vẫn thuộc tháng cũ.

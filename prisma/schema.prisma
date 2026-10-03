@@ -98,6 +98,8 @@ model Expense {
   baseAmount     Int?
   /// Ngày chuyển tiền thực tế (lương giáo viên); có thể khác ngày ghi vào hệ thống.
   paidAt         DateTime?
+  /// Hình thức trả lương: chuyển khoản hoặc tiền mặt đưa thêm (chỉ dùng cho teacher_salary).
+  paymentMethod  PaymentMethod?
   note           String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt

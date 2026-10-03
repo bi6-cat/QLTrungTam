@@ -4,6 +4,7 @@ import { periodIndex } from "@/lib/enrollment-period";
 import { prisma } from "@/lib/prisma";
 import {
   cutoffResolver,
+  withPayoutDates,
   DEFAULT_SALARY_CUTOFF,
   parseSalaryCutoff,
   SALARY_CUTOFF_SETTING_KEY,
@@ -33,6 +34,8 @@ export type SalaryRecord = {
   note: string | null;
   /** Ngày chuyển tiền thực tế (bản ghi cũ: ngày ghi). */
   paidAt: Date | null;
+  /** Chuyển khoản hoặc tiền mặt (cột "Chuyển thêm" trong sổ tay); null = bản ghi cũ. */
+  paymentMethod: "bank_transfer" | "cash" | null;
   createdAt: Date;
 };
 
@@ -139,9 +142,14 @@ export type SalaryLine = SalaryComputation & {
   cutoffDate: Date;
   /** Ngày chốt của tháng này được đặt riêng (không theo quy tắc chung). */
   cutoffOverridden: boolean;
+  /** Ngày chốt lùi tới ngày chuyển lương đầu tiên vì tháng này trả lương muộn hơn ngày chốt. */
+  cutoffFromPayout: boolean;
   cutoffPassed: boolean;
   /** Các lần chuyển lương của tháng, theo thứ tự ghi. */
   payouts: SalaryRecord[];
+  /** Tổng trả bằng chuyển khoản / tiền mặt (hai cột "Đã chuyển" / "Chuyển thêm" của sổ tay). */
+  paidBank: number;
+  paidCash: number;
   /** HS các tháng trước nộp sau ngày chốt của tháng đó → tính vào lương tháng này. */
   carriedIn: LedgerStudent[];
   carriedInShare: number;
@@ -186,6 +194,12 @@ export type SalaryInput = {
 };
 
 const nameCollator = new Intl.Collator("vi");
+
+/** Lúc chuyển lương đầu tiên (khoản dương) của một tháng, null nếu chưa chuyển. */
+function firstPayoutAt(records: Array<Pick<SalaryRecord, "amount" | "paidAt" | "createdAt">>) {
+  const times = records.filter((record) => record.amount > 0).map((record) => (record.paidAt ?? record.createdAt).getTime());
+  return times.length > 0 ? new Date(Math.min(...times)) : null;
+}
 const byName = (a: { studentName: string }, b: { studentName: string }) =>
   nameCollator.compare(a.studentName, b.studentName);
 const byPaidAt = (a: { paidAt: Date | null }, b: { paidAt: Date | null }) =>
@@ -221,8 +235,6 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
   for (const classRoom of input.classes) {
     const custom = parseSalaryCutoff(classRoom.salaryCutoff);
     const cutoff = custom ?? input.defaultCutoff;
-    // Lớp có ngày chốt riêng giữ quy tắc của lớp; các lớp còn lại theo ngày chốt chung của tháng.
-    const resolver = custom ? cutoffResolver(custom) : cutoffResolver(input.defaultCutoff, monthOverrides);
     const buckets = new Map<number, Bucket>();
     const bucket = (index: number) => {
       const existing = buckets.get(index);
@@ -231,6 +243,24 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
       buckets.set(index, created);
       return created;
     };
+
+    const recordsByIndex = new Map<number, SalaryRecord[]>();
+    for (const record of recordsByClass.get(classRoom.id) ?? []) {
+      const index = periodIndex(record.month, record.year);
+      recordsByIndex.set(index, [...(recordsByIndex.get(index) ?? []), record]);
+      if (inRange(index)) bucket(index).records.push(record);
+    }
+    // % của một tháng: khóa theo lần chuyển đầu tiên, chưa chuyển thì theo % hiện tại của lớp.
+    // Khoản nộp muộn mang theo % của tháng học phí gốc sang tháng lương mới.
+    const percentOf = (index: number) =>
+      [...(recordsByIndex.get(index) ?? [])].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]
+        ?.sharePercent ?? classRoom.teacherSharePercent;
+    // Lớp có ngày chốt riêng giữ quy tắc của lớp; các lớp còn lại theo ngày chốt chung của tháng.
+    // Tháng nào chuyển lương muộn hơn ngày chốt thì ngày chốt lùi tới ngày chuyển đó.
+    const resolver = withPayoutDates(
+      custom ? cutoffResolver(custom) : cutoffResolver(input.defaultCutoff, monthOverrides),
+      (index) => firstPayoutAt(recordsByIndex.get(index) ?? [])
+    );
 
     for (const invoice of invoicesByClass.get(classRoom.id) ?? []) {
       const tuitionIndex = periodIndex(invoice.month, invoice.year);
@@ -247,17 +277,6 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         bucket(tuitionIndex).carriedOut.push({ ...invoice, salaryIndex });
       }
     }
-    const recordsByIndex = new Map<number, SalaryRecord[]>();
-    for (const record of recordsByClass.get(classRoom.id) ?? []) {
-      const index = periodIndex(record.month, record.year);
-      recordsByIndex.set(index, [...(recordsByIndex.get(index) ?? []), record]);
-      if (inRange(index)) bucket(index).records.push(record);
-    }
-    // % của một tháng: khóa theo lần chuyển đầu tiên, chưa chuyển thì theo % hiện tại của lớp.
-    // Khoản nộp muộn mang theo % của tháng học phí gốc sang tháng lương mới.
-    const percentOf = (index: number) =>
-      [...(recordsByIndex.get(index) ?? [])].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]
-        ?.sharePercent ?? classRoom.teacherSharePercent;
 
     for (let index = input.fromIndex; index <= input.toIndex; index += 1) {
       const current = buckets.get(index) ?? { onTime: 0, carriedIn: [], carriedOut: [], waiting: [], records: [] };
@@ -321,9 +340,12 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         ownCollected: current.onTime,
         cutoffDate: resolver.date(index),
         cutoffOverridden: resolver.overridden(index),
+        cutoffFromPayout: resolver.fromPayout(index),
         cutoffPassed,
         ...computation,
         payouts: records,
+        paidBank: records.filter((record) => record.paymentMethod !== "cash").reduce((sum, record) => sum + record.amount, 0),
+        paidCash: records.filter((record) => record.paymentMethod === "cash").reduce((sum, record) => sum + record.amount, 0),
         carriedIn,
         carriedInShare,
         carriedOut,
@@ -354,6 +376,7 @@ const salaryRecordSelect = {
   description: true,
   note: true,
   paidAt: true,
+  paymentMethod: true,
   createdAt: true
 } as const;
 
@@ -513,15 +536,17 @@ export async function getPendingSalaryLines(now = new Date()): Promise<SalaryLin
 /** Mô tả bản ghi chi phí cho một lần chuyển lương. */
 export function salaryPayoutDescription(
   line: Pick<SalaryLine, "teacherName" | "className" | "month" | "year" | "payouts">,
-  amount: number
+  amount: number,
+  method: "bank_transfer" | "cash" = "bank_transfer"
 ) {
   const teacher = line.teacherName || "giáo viên";
   const period = `T${line.month}/${line.year}`;
-  if (amount < 0) return `Trừ lương ${teacher} · ${line.className} ${period} (chuyển dư/học phí bị hoàn)`;
+  const how = method === "cash" ? " · tiền mặt" : " · chuyển khoản";
+  if (amount < 0) return `Trừ lương ${teacher} · ${line.className} ${period}${how} (chuyển dư/học phí bị hoàn)`;
   const previous = line.payouts.filter((record) => record.amount > 0).length;
   return previous === 0
-    ? `Lương ${teacher} · ${line.className} ${period}`
-    : `Chuyển thêm lương ${teacher} · ${line.className} ${period} (lần ${previous + 1})`;
+    ? `Lương ${teacher} · ${line.className} ${period}${how}`
+    : `Chuyển thêm lương ${teacher} · ${line.className} ${period}${how} (lần ${previous + 1})`;
 }
 
 /**
@@ -546,12 +571,19 @@ export async function settledSalaryNote(invoiceId: string | null) {
 
   if (invoice.status === "paid" && invoice.paidAt) {
     const custom = parseSalaryCutoff(classRoom.salaryCutoff);
-    const resolver = custom
-      ? cutoffResolver(custom)
-      : cutoffResolver(
-          await loadDefaultSalaryCutoff(),
-          new Map((await loadSalaryMonthCutoffs()).map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
-        );
+    const classRecords = await prisma.expense.findMany({
+      where: { category: "teacher_salary", classId },
+      select: { month: true, year: true, amount: true, paidAt: true, createdAt: true }
+    });
+    const resolver = withPayoutDates(
+      custom
+        ? cutoffResolver(custom)
+        : cutoffResolver(
+            await loadDefaultSalaryCutoff(),
+            new Map((await loadSalaryMonthCutoffs()).map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
+          ),
+      (index) => firstPayoutAt(classRecords.filter((record) => periodIndex(record.month, record.year) === index))
+    );
     const salaryIndex = salaryIndexForPayment(tuitionIndex, invoice.paidAt, resolver);
     const month = (salaryIndex % 12) + 1;
     const year = Math.floor(salaryIndex / 12);
@@ -734,7 +766,10 @@ export function buildTeacherSalaryMessage(teacher: TeacherLedger, now = new Date
       for (const note of salaryLineNotes(period)) lines.push(`   ${note.label}: ${note.text}`);
       if (period.payouts.length > 0) {
         const transfers = period.payouts
-          .map((payout) => `${formatCurrency(payout.amount)} (${formatDayMonth(payout.paidAt ?? payout.createdAt)})`)
+          .map(
+            (payout) =>
+              `${payout.paymentMethod === "cash" ? "TM" : "CK"} ${formatCurrency(payout.amount)} (${formatDayMonth(payout.paidAt ?? payout.createdAt)})`
+          )
           .join(" + ");
         lines.push(`   Đã chuyển: ${transfers}`);
       }

@@ -42,11 +42,12 @@ describe("salary payout validation", () => {
       note: "",
       lines: lines([
         { classId: "c1", month: 9, year: 2026, amount: 360_000 },
-        { classId: "c2", month: 9, year: 2026, amount: -120_000 }
+        { classId: "c2", month: 9, year: 2026, amount: -120_000, method: "cash" }
       ])
     });
     assert.equal(result.success, true);
     assert.equal(result.data?.note, null);
+    assert.deepEqual(result.data?.lines.map((line) => line.method), ["bank_transfer", "cash"]);
   });
 
   test("rejects zero amounts, empty selections and broken payloads", () => {

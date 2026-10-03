@@ -81,8 +81,9 @@ function PayoutDialog({
 }) {
   const [state, action, pending] = useActionState(recordSalaryPayoutAction, EMPTY_RESULT_STATE);
   const [selected, setSelected] = useState(() => new Set(initialKeys));
-  const [amounts, setAmounts] = useState<Record<string, number | null>>(() =>
-    Object.fromEntries(options.map((option) => [option.key, option.remaining || null]))
+  // Mỗi lớp/tháng có thể trả hai phần: chuyển khoản và tiền mặt đưa thêm (như sổ tay).
+  const [amounts, setAmounts] = useState<Record<string, { bank: number | null; cash: number | null }>>(() =>
+    Object.fromEntries(options.map((option) => [option.key, { bank: option.remaining || null, cash: null }]))
   );
   const [paidAt, setPaidAt] = useState(todayInput);
 
@@ -93,50 +94,65 @@ function PayoutDialog({
     onClose();
   }, [state]);
 
-  const chosen = options.filter((option) => selected.has(option.key) && amounts[option.key]);
-  const total = chosen.reduce((sum, option) => sum + (amounts[option.key] ?? 0), 0);
-  const overpaid = chosen.filter((option) => (amounts[option.key] ?? 0) > Math.max(0, option.remaining));
-  const linesJson = JSON.stringify(
-    chosen.map((option) => ({
-      classId: option.classId,
-      month: option.month,
-      year: option.year,
-      amount: amounts[option.key]
-    }))
+  const amountOf = (key: string) => (amounts[key]?.bank ?? 0) + (amounts[key]?.cash ?? 0);
+  const chosen = options.filter((option) => selected.has(option.key) && amountOf(option.key) !== 0);
+  const lines = chosen.flatMap((option) =>
+    (["bank", "cash"] as const)
+      .filter((part) => amounts[option.key]?.[part])
+      .map((part) => ({
+        classId: option.classId,
+        month: option.month,
+        year: option.year,
+        amount: amounts[option.key][part],
+        method: part === "bank" ? "bank_transfer" : "cash"
+      }))
   );
+  const total = lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
+  const totalCash = lines.filter((line) => line.method === "cash").reduce((sum, line) => sum + (line.amount ?? 0), 0);
+  const overpaid = chosen.filter((option) => amountOf(option.key) > Math.max(0, option.remaining));
+
+  function setPart(key: string, part: "bank" | "cash", value: number | null) {
+    setAmounts((current) => ({ ...current, [key]: { ...current[key], [part]: value } }));
+  }
 
   function toggle(option: PayoutOption) {
     const next = new Set(selected);
     if (next.has(option.key)) next.delete(option.key);
     else {
       next.add(option.key);
-      if (!amounts[option.key]) setAmounts((value) => ({ ...value, [option.key]: option.remaining || null }));
+      if (amountOf(option.key) === 0) setPart(option.key, "bank", option.remaining || null);
     }
     setSelected(next);
   }
 
   return (
     <Modal
-      title={`Ghi chuyển lương · ${teacherName || "giáo viên"}`}
+      title={`Ghi trả lương · ${teacherName || "giáo viên"}`}
       onClose={() => !pending && onClose()}
       closeDisabled={pending}
-      maxWidthClassName="max-w-2xl"
+      maxWidthClassName="max-w-3xl"
     >
       <form action={action} className="grid gap-4">
-        <input type="hidden" name="lines" value={linesJson} />
+        <input type="hidden" name="lines" value={JSON.stringify(lines)} />
         <p className="text-sm text-stone-600">
-          Tick các lớp/kỳ trong lần chuyển này và sửa số tiền nếu chuyển một phần. Số còn thiếu sẽ hiện là
-          <strong> còn nợ</strong> ở đúng tháng đó để chuyển bù sau.
+          Tick các lớp/tháng trả lần này, ghi phần <strong>chuyển khoản</strong> và phần <strong>tiền mặt</strong> (nếu
+          có). Trả thiếu thì phần còn lại hiện là <strong>còn thiếu</strong> ở đúng tháng đó để trả bù sau.
         </p>
 
         <div className="grid gap-2">
+          <div className="hidden px-3 text-xs font-semibold uppercase tracking-wide text-stone-500 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_150px_150px] sm:gap-3">
+            <span className="w-4" />
+            <span>Lớp / tháng</span>
+            <span className="text-right">Chuyển khoản</span>
+            <span className="text-right">Tiền mặt</span>
+          </div>
           {options.map((option) => {
             const checked = selected.has(option.key);
-            const amount = amounts[option.key] ?? 0;
+            const paying = amountOf(option.key);
             return (
               <div
                 key={option.key}
-                className={`grid items-center gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[auto_minmax(0,1fr)_180px] ${
+                className={`grid items-center gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[auto_minmax(0,1fr)_150px_150px] ${
                   checked ? "border-indigo-200 bg-indigo-50/40" : "border-stone-200 bg-white"
                 }`}
               >
@@ -152,23 +168,33 @@ function PayoutDialog({
                       {option.className} · T{option.month}/{option.year}
                     </span>
                     <span className="block text-xs text-stone-500">
-                      Phải trả {formatCurrency(option.due)} · đã chuyển {formatCurrency(option.paidOut)} ·{" "}
+                      Tổng tháng {formatCurrency(option.due)} · đã trả {formatCurrency(option.paidOut)} ·{" "}
                       {option.remaining >= 0 ? (
-                        <span className="font-semibold text-warning">còn nợ {formatCurrency(option.remaining)}</span>
+                        <span className="font-semibold text-warning">còn thiếu {formatCurrency(option.remaining)}</span>
                       ) : (
-                        <span className="font-semibold text-primary">chuyển dư {formatCurrency(-option.remaining)}</span>
+                        <span className="font-semibold text-primary">trả dư {formatCurrency(-option.remaining)}</span>
                       )}
                       {option.waitingCount > 0 ? ` · chờ ${option.waitingCount} HS nộp` : ""}
                     </span>
                   </span>
                 </label>
                 <MoneyInput
-                  aria-label={`Số tiền chuyển ${option.className} T${option.month}/${option.year}`}
-                  value={amounts[option.key] ?? null}
-                  onValueChange={(value) => setAmounts((current) => ({ ...current, [option.key]: value }))}
+                  aria-label={`Chuyển khoản ${option.className} T${option.month}/${option.year}`}
+                  placeholder="Chuyển khoản"
+                  value={amounts[option.key]?.bank ?? null}
+                  onValueChange={(value) => setPart(option.key, "bank", value)}
                   allowNegative
                   disabled={!checked || pending}
-                  className={checked && amount !== option.remaining ? "border-amber-300" : ""}
+                  className={checked && paying !== option.remaining ? "border-amber-300" : ""}
+                />
+                <MoneyInput
+                  aria-label={`Tiền mặt ${option.className} T${option.month}/${option.year}`}
+                  placeholder="Tiền mặt"
+                  value={amounts[option.key]?.cash ?? null}
+                  onValueChange={(value) => setPart(option.key, "cash", value)}
+                  allowNegative
+                  disabled={!checked || pending}
+                  className={checked && paying !== option.remaining ? "border-amber-300" : ""}
                 />
               </div>
             );
@@ -176,7 +202,7 @@ function PayoutDialog({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
-          <Field label="Ngày chuyển">
+          <Field label="Ngày trả">
             <Input
               type="date"
               name="paidAt"
@@ -193,7 +219,7 @@ function PayoutDialog({
 
         {overpaid.length > 0 ? (
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            {overpaid.map((option) => `${option.className} T${option.month}`).join(", ")}: chuyển nhiều hơn số còn nợ —
+            {overpaid.map((option) => `${option.className} T${option.month}`).join(", ")}: trả nhiều hơn số còn thiếu —
             phần dư sẽ hiện là <strong>ứng trước</strong> và tự cân lại khi học sinh nộp thêm.
           </p>
         ) : null}
@@ -211,14 +237,19 @@ function PayoutDialog({
             <strong className={`text-lg ${total < 0 ? "text-primary" : "text-neutralText"}`}>
               {formatCurrency(total)}
             </strong>
+            {totalCash !== 0 ? (
+              <span className="ml-1.5 text-xs">
+                (CK {formatCurrency(total - totalCash)} + TM {formatCurrency(totalCash)})
+              </span>
+            ) : null}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
               Hủy
             </Button>
-            <Button type="submit" disabled={pending || chosen.length === 0}>
+            <Button type="submit" disabled={pending || lines.length === 0}>
               <Check className="h-4 w-4" />
-              {pending ? "Đang ghi..." : "Ghi đã chuyển"}
+              {pending ? "Đang ghi..." : "Ghi đã trả"}
             </Button>
           </div>
         </div>

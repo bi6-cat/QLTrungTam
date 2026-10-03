@@ -189,7 +189,8 @@ const salaryPayoutLine = z.object({
     .number({ message: "Số tiền phải là số" })
     .int("Số tiền phải là số nguyên")
     .refine((v) => v !== 0, "Số tiền chuyển phải khác 0")
-    .refine((v) => Math.abs(v) <= 1_000_000_000, "Số tiền quá lớn")
+    .refine((v) => Math.abs(v) <= 1_000_000_000, "Số tiền quá lớn"),
+  method: z.enum(["bank_transfer", "cash"]).default("bank_transfer")
 });
 
 export const salaryPayoutSchema = z.object({
