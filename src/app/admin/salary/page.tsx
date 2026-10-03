@@ -2,7 +2,12 @@ import Link from "next/link";
 import { Banknote, CalendarCheck, Hourglass, Users } from "lucide-react";
 import { deleteExpenseAction } from "@/lib/actions/finance";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
-import { CopyTextButton, SalaryPayoutButton, type PayoutOption } from "@/components/SalaryForms";
+import {
+  CopyTextButton,
+  MonthPercentFixButton,
+  SalaryPayoutButton,
+  type PayoutOption
+} from "@/components/SalaryForms";
 import { SalaryMonthCutoffs, type MonthCutoffRow } from "@/components/SalaryMonthCutoffs";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
@@ -369,6 +374,18 @@ function ClassLedger({
                           }`
                         : "nhập tay"}
                     </div>
+                    {period.mode === "percent" &&
+                    period.payouts.length > 0 &&
+                    period.sharePercent !== classRoom.classSharePercent ? (
+                      <MonthPercentFixButton
+                        classId={classRoom.classId}
+                        className={classRoom.className}
+                        month={period.month}
+                        year={period.year}
+                        lockedPercent={period.sharePercent}
+                        classPercent={classRoom.classSharePercent}
+                      />
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatCurrency(period.due)}</td>
                   <td className="px-4 py-3">

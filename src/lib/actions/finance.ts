@@ -159,3 +159,53 @@ export async function setSalaryMonthCutoffAction(_prevState: ResultState, formDa
     `Đã đặt ngày chốt lương T${month}/${year} là ${formatDayMonth(cutoffDate)}: HS nộp sau ngày này tính sang lương tháng sau.`
   );
 }
+
+/**
+ * Sửa % của một tháng lương về đúng % hiện tại của lớp (tháng đó bị khóa % sai theo lần chuyển
+ * đầu tiên, vd bản ghi cũ tạo khi lớp còn để 80%). Lương tháng đó được tính lại ngay.
+ */
+export async function applyClassPercentToMonthAction(
+  classId: string,
+  month: number,
+  year: number
+): Promise<ResultState> {
+  const actor = await requireAdmin();
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return errorState("Tháng không hợp lệ.");
+  }
+  const classRoom = await prisma.classRoom.findUnique({
+    where: { id: String(classId) },
+    select: { id: true, name: true, teacherSharePercent: true }
+  });
+  if (!classRoom) return errorState("Không tìm thấy lớp.");
+  const records = await prisma.expense.findMany({
+    where: { category: "teacher_salary", classId: classRoom.id, month, year, sharePercent: { not: null } },
+    select: { id: true, sharePercent: true }
+  });
+  if (records.length === 0) return errorState("Tháng này chưa có lần chuyển nào nên đang dùng % của lớp.");
+
+  await prisma.$transaction([
+    prisma.expense.updateMany({
+      where: { id: { in: records.map((record) => record.id) } },
+      data: { sharePercent: classRoom.teacherSharePercent }
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorUserId: actor.userId,
+        actorUsername: actor.username.trim(),
+        action: "salary.percent_corrected",
+        entityType: "ClassRoom",
+        entityId: classRoom.id,
+        metadata: {
+          month,
+          year,
+          from: [...new Set(records.map((record) => record.sharePercent))],
+          to: classRoom.teacherSharePercent,
+          expenseIds: records.map((record) => record.id)
+        }
+      }
+    })
+  ]);
+  revalidateFinancialPaths();
+  return successState(`Lương ${classRoom.name} T${month}/${year} giờ tính theo ${classRoom.teacherSharePercent}%.`);
+}

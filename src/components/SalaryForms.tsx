@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { AlertTriangle, Check, Copy, Send } from "lucide-react";
-import { recordSalaryPayoutAction } from "@/lib/actions/finance";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { AlertTriangle, Check, Copy, Percent, Send } from "lucide-react";
+import { applyClassPercentToMonthAction, recordSalaryPayoutAction } from "@/lib/actions/finance";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { Modal } from "@/components/Modal";
 import { MoneyInput } from "@/components/MoneyInput";
@@ -247,5 +247,73 @@ export function CopyTextButton({ text, label, successMessage }: { text: string; 
       {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
       {label}
     </Button>
+  );
+}
+
+/** Tháng bị khóa % khác % của lớp: hỏi lại rồi chuyển tháng đó về % hiện tại của lớp. */
+export function MonthPercentFixButton({
+  classId,
+  className,
+  month,
+  year,
+  lockedPercent,
+  classPercent
+}: {
+  classId: string;
+  className: string;
+  month: number;
+  year: number;
+  lockedPercent: number;
+  classPercent: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    startTransition(async () => {
+      try {
+        const result = await applyClassPercentToMonthAction(classId, month, year);
+        if (result.error) toast.error(result.error);
+        else toast.success(result.success);
+      } catch {
+        toast.error("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
+      } finally {
+        setOpen(false);
+      }
+    });
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="focus-ring mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-200 hover:bg-amber-100"
+        title={`Tháng này đang khóa ${lockedPercent}% theo lần chuyển đầu, lớp hiện để ${classPercent}%`}
+      >
+        <Percent className="h-3 w-3" />
+        Khóa {lockedPercent}% · dùng {classPercent}%
+      </button>
+      {open ? (
+        <Modal title="Sửa % của tháng lương" onClose={() => !pending && setOpen(false)} closeDisabled={pending}>
+          <div className="grid gap-4 text-sm text-stone-600">
+            <p>
+              Lương <strong>{className}</strong> T{month}/{year} đang tính theo <strong>{lockedPercent}%</strong> (khóa
+              theo lần chuyển đầu tiên). Chuyển sang <strong>{classPercent}%</strong> như % hiện tại của lớp? Số phải
+              trả và còn nợ của tháng này sẽ tính lại; các lần chuyển đã ghi giữ nguyên.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
+                Đóng
+              </Button>
+              <Button type="button" disabled={pending} onClick={confirm}>
+                <Check className="h-4 w-4" />
+                {pending ? "Đang lưu..." : `Dùng ${classPercent}%`}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }
