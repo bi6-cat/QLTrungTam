@@ -5,7 +5,11 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Graduatio
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
 import { Badge, Button, EmptyState, Field, Input } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
-import { enrollmentVisibleInPeriodWhere } from "@/lib/enrollment-period";
+import {
+  enrollmentVisibleInPeriodWhere,
+  latestMonthUpToPeriodArgs,
+  resolveMonthPlan
+} from "@/lib/enrollment-period";
 import { resolveClassLink } from "@/lib/class-link-resolver";
 import { teacherPath } from "@/lib/class-links";
 import { buildMemo } from "@/lib/payment";
@@ -55,7 +59,7 @@ export default async function TeacherClassPage({
             where: { month, year },
             orderBy: { createdAt: "desc" }
           },
-          months: { where: { month, year }, take: 1 }
+          months: latestMonthUpToPeriodArgs(month, year)
         }
       }
     }
@@ -65,25 +69,32 @@ export default async function TeacherClassPage({
     notFound();
   }
 
-  const visibleEnrollments = classRoom.archivedAt
-    ? classRoom.enrollments.filter(
-        (enrollment) => enrollment.months.length > 0 || enrollment.invoices.length > 0
-      )
-    : classRoom.enrollments;
-  const rows = visibleEnrollments.map((enrollment) => {
+  const planned = classRoom.enrollments.map((enrollment) => ({
+    enrollment,
+    plan: resolveMonthPlan({
+      month,
+      year,
+      latestMonth: enrollment.months[0],
+      invoice: enrollment.invoices[0],
+      enrollment,
+      classRoom
+    })
+  }));
+  const visible = classRoom.archivedAt ? planned.filter((item) => item.plan.initialized) : planned;
+  const rows = visible.map(({ enrollment, plan }) => {
     const invoice = enrollment.invoices[0] ?? null;
-    const period = enrollment.months[0] ?? null;
-    const periodInitialized = Boolean(period || invoice);
+    const periodInitialized = plan.initialized;
+    // Kỳ đã qua mà chưa có kế hoạch thì không đoán tình trạng học.
     const monthlyStatus =
-      period?.status ??
-      (invoice
-        ? "active"
-        : isPastPeriod || classRoom.archivedAt || enrollment.student.archivedAt
-          ? null
-          : enrollment.status);
-    const sessions = invoice?.sessions ?? period?.sessions ?? (monthlyStatus ? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault : 0);
-    const pricePerSession = invoice?.pricePerSession ?? period?.pricePerSession ?? classRoom.pricePerSession;
-    const amount = invoice?.amount ?? (monthlyStatus === "active" ? sessions * pricePerSession : 0);
+      periodInitialized || !(isPastPeriod || classRoom.archivedAt || enrollment.student.archivedAt)
+        ? plan.status
+        : null;
+    const sessions = monthlyStatus ? plan.sessions : 0;
+    const pricePerSession = plan.pricePerSession;
+    const amount =
+      invoice?.status === "paid"
+        ? invoice.paidAmount ?? invoice.amount
+        : invoice?.amount ?? (monthlyStatus === "active" ? sessions * pricePerSession : 0);
     return {
       enrollment,
       invoice,

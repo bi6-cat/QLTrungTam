@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertTriangle, CheckCircle2, Save } from "lucide-react";
-import { updateSettingsAction, type SettingsActionState } from "@/lib/actions";
+import { AlertTriangle, Save } from "lucide-react";
+import { updateSettingsAction } from "@/lib/actions/settings";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input, Textarea } from "@/components/ui";
-
-const INITIAL_STATE: SettingsActionState = { error: "", success: "" };
 
 export type SettingsFormValues = {
   bankAccountNumber: string;
@@ -19,7 +19,8 @@ export type SettingsFormValues = {
 };
 
 export function SettingsForm({ values }: { values: SettingsFormValues }) {
-  const [state, action, pending] = useActionState(updateSettingsAction, INITIAL_STATE);
+  const [state, action, pending] = useActionState(updateSettingsAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
 
   return (
     <form action={action} className="grid gap-5">
@@ -85,12 +86,6 @@ export function SettingsForm({ values }: { values: SettingsFormValues }) {
         <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{state.error}</span>
-        </div>
-      ) : null}
-      {state.success ? (
-        <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{state.success}</span>
         </div>
       ) : null}
 

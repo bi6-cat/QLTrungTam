@@ -1,5 +1,5 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
 
 export type InvoiceLifecycleStatus = "unpaid" | "void" | "waived";
 
@@ -42,7 +42,6 @@ export class InvoiceLifecycleError extends Error {
   }
 }
 
-const MAX_SERIALIZABLE_ATTEMPTS = 3;
 const MAX_REASON_LENGTH = 1_000;
 
 function assertActor(actor: InvoiceLifecycleActor) {
@@ -65,37 +64,14 @@ function requireReason(reason: string) {
   return normalized.slice(0, MAX_REASON_LENGTH);
 }
 
-function isKnownPrismaError(error: unknown, code: string) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
-}
-
-async function runSerializable<T>(
-  work: (tx: Prisma.TransactionClient) => Promise<T>
-): Promise<T> {
-  for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
-    try {
-      return await prisma.$transaction(work, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      });
-    } catch (error) {
-      if (error instanceof InvoiceLifecycleError) throw error;
-
-      if (isKnownPrismaError(error, "P2034")) {
-        if (attempt < MAX_SERIALIZABLE_ATTEMPTS) continue;
-        throw new InvoiceLifecycleError(
-          "CONCURRENT_MODIFICATION",
-          "Hóa đơn vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  throw new InvoiceLifecycleError(
-    "CONCURRENT_MODIFICATION",
-    "Không thể hoàn tất thay đổi do xung đột dữ liệu."
-  );
+function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return runSerializableTransaction(work, {
+    onConflict: () =>
+      new InvoiceLifecycleError(
+        "CONCURRENT_MODIFICATION",
+        "Hóa đơn vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
+      )
+  });
 }
 
 function assertTransition(input: {

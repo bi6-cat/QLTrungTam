@@ -2,7 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { Pencil, Save } from "lucide-react";
-import { updateStudentAction } from "@/lib/actions";
+import { updateStudentAction } from "@/lib/actions/students";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input, Textarea } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 
@@ -35,11 +37,12 @@ export function EditStudentButton({ student }: { student: Student }) {
 }
 
 function EditStudentDialog({ student, onClose }: { student: Student; onClose: () => void }) {
-  const [state, action, pending] = useActionState(updateStudentAction, { error: "", ok: false });
+  const [state, action, pending] = useActionState(updateStudentAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
 
   useEffect(() => {
-    if (state.ok) onClose();
-  }, [state.ok, onClose]);
+    if (state.success) onClose();
+  }, [state, onClose]);
 
   return (
     <Modal title="Sửa thông tin học sinh" onClose={onClose}>

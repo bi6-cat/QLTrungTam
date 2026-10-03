@@ -5,6 +5,7 @@ import { Check, Copy, Download, ExternalLink, ListChecks, Loader2 } from "lucide
 import { Modal } from "@/components/Modal";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import { toast } from "@/components/Toaster";
 
 type OverviewStatus = "unpaid" | "paid" | "waived" | "void" | "not_created" | "on_leave";
 
@@ -105,6 +106,7 @@ function ParentLinkDialog({
   async function copyMessage() {
     try {
       await navigator.clipboard.writeText(draft);
+      toast.success("Đã chép tin nhắn kèm link nộp học phí.");
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {

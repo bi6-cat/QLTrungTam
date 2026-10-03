@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { UserMinus } from "lucide-react";
-import { leaveClassAction } from "@/lib/actions";
+import { leaveClassAction } from "@/lib/actions/enrollments";
+import { toast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 import { formatMonth } from "@/lib/format";
@@ -47,10 +48,11 @@ export function LeaveClassButton({
           fromYear: from.year,
           reason
         });
-        if (!result.ok) {
+        if (result.error) {
           setError(result.error);
           return;
         }
+        toast.success(result.success);
         setOpen(false);
       } catch {
         setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");

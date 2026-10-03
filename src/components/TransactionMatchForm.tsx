@@ -9,7 +9,8 @@ import {
   LoaderCircle,
   Search
 } from "lucide-react";
-import { assignTransactionAction, resolveTransactionAction } from "@/lib/actions";
+import { assignTransactionAction, resolveTransactionAction } from "@/lib/actions/transactions";
+import { useResultToast } from "@/components/Toaster";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
@@ -68,6 +69,8 @@ export function TransactionMatchForm({
   const [searchError, setSearchError] = useState("");
   const [assignState, assignAction, assigning] = useActionState(assignTransactionAction, initialActionState);
   const [resolveState, resolveAction, resolving] = useActionState(resolveTransactionAction, initialActionState);
+  useResultToast(assignState);
+  useResultToast(resolveState);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

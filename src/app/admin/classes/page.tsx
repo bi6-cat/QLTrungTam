@@ -11,7 +11,12 @@ import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteUrl, payPath, teacherPath } from "@/lib/class-links";
-import { enrollmentVisibleInPeriodWhere, remainingScheduledSessions } from "@/lib/enrollment-period";
+import {
+  enrollmentVisibleInPeriodWhere,
+  latestMonthUpToPeriodArgs,
+  remainingScheduledSessions,
+  resolveMonthPlan
+} from "@/lib/enrollment-period";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
 import { CreateClassForm } from "@/components/CreateClassForm";
 import { requireAdmin } from "@/lib/auth";
@@ -57,7 +62,7 @@ export default async function ClassesPage({
           include: {
             student: true,
             invoices: { where: { month, year }, orderBy: { createdAt: "desc" } },
-            months: { where: { month, year }, take: 1 }
+            months: latestMonthUpToPeriodArgs(month, year)
           }
         }
       }
@@ -86,6 +91,16 @@ export default async function ClassesPage({
     list.push({ month: debt.month, year: debt.year, amount: debt.amount });
     olderDebtsByEnrollment.set(debt.enrollmentId, list);
   }
+  // Kế hoạch tháng của từng học sinh: kỳ mới kế thừa tình trạng học của tháng gần nhất trước đó.
+  const planOf = (enrollment: NonNullable<typeof selectedClass>["enrollments"][number]) =>
+    resolveMonthPlan({
+      month,
+      year,
+      latestMonth: enrollment.months[0],
+      invoice: enrollment.invoices[0],
+      enrollment,
+      classRoom: selectedClass!
+    });
   const duplicatePhones = new Set(
     selectedClass
       ? Object.entries(
@@ -135,24 +150,13 @@ export default async function ClassesPage({
                 year={year}
                 rows={selectedClass.enrollments.map((enrollment) => {
                   const invoice = enrollment.invoices[0];
-                  const enrollmentMonth = enrollment.months[0];
-                  const monthlyStatus = enrollmentMonth?.status ?? (invoice ? "active" : enrollment.status);
-                  const sessions =
-                    invoice?.sessions ??
-                    enrollmentMonth?.sessions ??
-                    enrollment.sessionsOverride ??
-                    selectedClass.sessionsPerMonthDefault;
-                  const pricePerSession =
-                    invoice?.pricePerSession ??
-                    enrollmentMonth?.pricePerSession ??
-                    selectedClass.pricePerSession;
-
+                  const plan = planOf(enrollment);
                   return {
                     studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
-                    status: invoice?.status ?? (monthlyStatus === "on_leave" ? "on_leave" : "not_created"),
-                    sessions: monthlyStatus === "on_leave" && !invoice ? 0 : sessions,
-                    pricePerSession,
-                    amount: invoice?.amount ?? (monthlyStatus === "on_leave" ? 0 : sessions * pricePerSession)
+                    status: invoice?.status ?? (plan.status === "on_leave" ? "on_leave" : "not_created"),
+                    sessions: plan.sessions,
+                    pricePerSession: plan.pricePerSession,
+                    amount: invoice?.amount ?? plan.sessions * plan.pricePerSession
                   };
                 })}
               />
@@ -312,42 +316,30 @@ export default async function ClassesPage({
                   billingLocked={Boolean(selectedClass.archivedAt)}
                   rows={selectedClass.enrollments.map((enrollment) => {
                     const invoice = enrollment.invoices[0];
-                    const enrollmentMonth = enrollment.months[0];
-                    const monthlyStatus = enrollmentMonth?.status ?? (invoice ? "active" : enrollment.status);
-                    const defaultSessions =
-                      invoice?.sessions ??
-                      enrollmentMonth?.sessions ??
-                      enrollment.sessionsOverride ??
-                      selectedClass.sessionsPerMonthDefault;
-                    // Vào lớp giữa tháng: chỉ gợi ý số buổi còn lại theo lịch, không tự đổi
-                    // (ngày ghi danh có thể là ngày nhập liệu chứ không phải ngày bắt đầu học).
-                    const remainingSessions =
-                      enrollmentMonth || invoice
-                        ? null
-                        : remainingScheduledSessions(selectedClass.schedules, enrollment.createdAt, month, year);
+                    const plan = planOf(enrollment);
+                    // Bắt đầu học giữa tháng: gợi ý số buổi còn lại theo lịch từ ngày bắt đầu học.
+                    const remainingSessions = plan.initialized
+                      ? null
+                      : remainingScheduledSessions(selectedClass.schedules, enrollment.startDate, month, year);
                     return {
                       enrollmentId: enrollment.id,
                       studentId: enrollment.student.id,
                       studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
                       phone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
                       studentArchived: Boolean(enrollment.student.archivedAt),
-                      monthlyStatus,
-                      periodInitialized: Boolean(enrollmentMonth || invoice),
+                      monthlyStatus: plan.status,
+                      periodInitialized: plan.initialized,
                       olderDebts: olderDebtsByEnrollment.get(enrollment.id) ?? [],
                       joinHint:
-                        remainingSessions !== null && remainingSessions < defaultSessions
+                        plan.status === "active" && remainingSessions !== null && remainingSessions < plan.defaultSessions
                           ? {
-                              joinedOn: `${enrollment.createdAt.getDate()}/${enrollment.createdAt.getMonth() + 1}`,
+                              joinedOn: `${enrollment.startDate.getDate()}/${enrollment.startDate.getMonth() + 1}`,
                               sessions: remainingSessions
                             }
                           : null,
-                      defaultSessions,
-                      fallbackSessions:
-                        enrollment.sessionsOverride ?? selectedClass.sessionsPerMonthDefault,
-                      pricePerSession:
-                        invoice?.pricePerSession ??
-                        enrollmentMonth?.pricePerSession ??
-                        selectedClass.pricePerSession,
+                      defaultSessions: plan.sessions,
+                      fallbackSessions: plan.defaultSessions,
+                      pricePerSession: plan.pricePerSession,
                       memoContent: buildMemo(selectedClass.shortCode, enrollment.student.phone, month, year),
                       invoice: invoice
                         ? {
@@ -357,6 +349,7 @@ export default async function ClassesPage({
                             sessions: invoice.sessions,
                             pricePerSession: invoice.pricePerSession,
                             amount: invoice.amount,
+                            paidAmount: invoice.paidAmount,
                             memoContent: invoice.memoContent,
                             status: invoice.status,
                             statusReason: invoice.statusReason

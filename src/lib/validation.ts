@@ -24,7 +24,6 @@ const money = z.coerce
   .min(0, "Không được âm")
   .max(1_000_000_000, "Giá trị quá lớn");
 
-const sessionCount = z.coerce.number().int().min(0, "Số buổi không được âm").max(60, "Số buổi quá lớn");
 
 // month/year: sai/thiếu -> 0 để action tự lấy mặc định theo thời điểm hiện tại.
 const monthOpt = z.coerce.number().int().min(1).max(12).catch(0);
@@ -159,7 +158,7 @@ export const expenseSchema = z.object({
   note: optionalText(500)
 });
 
-export const generateSalarySchema = z.object({
+export const settleSalarySchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2000).max(2100)
 });
@@ -180,7 +179,11 @@ export const enrollmentSchema = z
         (v) => v === null || (Number.isInteger(v) && v >= 0 && v <= 60),
         "Số buổi ghi đè không hợp lệ"
       ),
-    status: enrollmentStatus
+    status: enrollmentStatus,
+    startDate: z
+      .string({ message: "Chọn ngày bắt đầu học" })
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Chọn ngày bắt đầu học")
   })
   .superRefine((data, ctx) => {
     if (data.status === "active" && data.sessionsOverride === 0) {
@@ -191,21 +194,6 @@ export const enrollmentSchema = z
       });
     }
   });
-
-export const updateEnrollmentStatusSchema = z.object({ id, status: enrollmentStatus });
-
-export const generateInvoicesSchema = z.object({
-  classId: id,
-  month: monthOpt,
-  year: yearOpt
-});
-
-export const updateInvoiceSchema = z.object({
-  invoiceId: id,
-  sessions: sessionCount,
-  pricePerSession: money,
-  amount: money.optional()
-});
 
 export const updateClassDetailsSchema = z.object({
   classId: id,
@@ -225,11 +213,6 @@ export const updateSettingsSchema = z.object({
   bankBin: requiredText("Thiếu mã ngân hàng", 20),
   appUrl: looseText(200),
   debtReminderTemplate: requiredText("Thiếu mẫu tin nhắn nhắc nợ", 5000)
-});
-
-export const markCashSchema = z.object({
-  invoiceId: id,
-  returnTo: looseText(300)
 });
 
 export const assignTransactionSchema = z.object({

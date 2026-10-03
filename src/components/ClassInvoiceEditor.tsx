@@ -1,14 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Banknote, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
-import {
-  recordCashPaymentAction,
-  updateClassDetailsAction,
-  type ClassDetailsActionState
-} from "@/lib/actions";
+import { Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
+import { updateClassDetailsAction } from "@/lib/actions/billing";
+import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
+import { DebtCashButton } from "@/components/DebtCashButton";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
+import { toast } from "@/components/Toaster";
 import { LeaveClassButton } from "@/components/LeaveClassButton";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -28,6 +27,8 @@ type InvoiceRow = {
     sessions: number;
     pricePerSession: number;
     amount: number;
+    /** Tiền thực nhận khi đã đóng (khác amount nếu gán lệch tiền). */
+    paidAmount: number | null;
     memoContent: string;
     status: "paid" | "unpaid" | "void" | "waived";
     statusReason: string | null;
@@ -44,7 +45,6 @@ type InvoiceRow = {
 };
 
 const PAGE_SIZE = 10;
-const INITIAL_SAVE_STATE: ClassDetailsActionState = { error: "", ok: false };
 const INVOICE_STATUS = {
   unpaid: { label: "Chưa đóng", tone: "warning" },
   paid: { label: "Đã đóng", tone: "success" },
@@ -73,20 +73,18 @@ export function ClassInvoiceEditor({
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
-  const [cashSubmittingId, setCashSubmittingId] = useState<string | null>(null);
-  const [cashError, setCashError] = useState("");
-  const [, startCashTransition] = useTransition();
   const [saveState, saveAction, saving] = useActionState(
-    async (prevState: ClassDetailsActionState, formData: FormData) => {
+    async (prevState: ResultState, formData: FormData) => {
       const result = await updateClassDetailsAction(prevState, formData);
-      // Action không redirect nữa nên component không mount lại: tự thoát chế độ sửa.
-      if (result.ok) {
+      // Action không redirect nên component không mount lại: tự thoát chế độ sửa.
+      if (result.success) {
         setEditing(false);
         setSessionDrafts({});
+        toast.success(result.success);
       }
       return result;
     },
-    INITIAL_SAVE_STATE
+    EMPTY_RESULT_STATE
   );
   useEffect(() => {
     if (!billingLocked) return;
@@ -109,7 +107,7 @@ export function ClassInvoiceEditor({
             const amount = planningLocked || sessionDrafts[draftKey] === undefined
               ? invoice.amount
               : sessions * invoice.pricePerSession;
-            if (invoice.status === "paid") acc.paid += invoice.amount;
+            if (invoice.status === "paid") acc.paid += invoice.paidAmount ?? invoice.amount;
             if (invoice.status === "unpaid") acc.unpaid += amount;
           } else if (!billingLocked && !row.studentArchived && row.monthlyStatus === "active") {
             acc.planned += sessions * row.pricePerSession;
@@ -133,23 +131,6 @@ export function ClassInvoiceEditor({
     : hasAnyInvoice
       ? "Lưu thay đổi"
       : "Tạo hóa đơn tháng này";
-
-  function markCashPaid(invoiceId: string) {
-    if (editing || cashSubmittingId) return;
-    setCashError("");
-    setCashSubmittingId(invoiceId);
-    startCashTransition(async () => {
-      try {
-        // Action trả kèm dữ liệu mới của trang nên không cần router.refresh().
-        const result = await recordCashPaymentAction(invoiceId);
-        if (!result.ok) setCashError(result.error);
-      } catch {
-        setCashError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
-      } finally {
-        setCashSubmittingId(null);
-      }
-    });
-  }
 
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
@@ -218,11 +199,6 @@ export function ClassInvoiceEditor({
         {saveState.error && !billingLocked && (editing || hasMissingInvoice) ? (
           <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700">
             {saveState.error}
-          </div>
-        ) : null}
-        {cashError ? (
-          <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700">
-            {cashError}
           </div>
         ) : null}
         {rows
@@ -410,6 +386,11 @@ export function ClassInvoiceEditor({
                       <strong className={invoice?.status === "paid" ? "text-success" : invoice?.status === "unpaid" ? "text-warning" : "text-stone-500"}>
                         {formatCurrency(displayAmount)}
                       </strong>
+                      {invoice?.status === "paid" && invoice.paidAmount !== null && invoice.paidAmount !== invoice.amount ? (
+                        <div className="text-[11px] font-semibold text-amber-700" title="Giao dịch được gán lệch số tiền hóa đơn">
+                          Thực thu {formatCurrency(invoice.paidAmount)}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-2 py-3">
                       <code
@@ -434,21 +415,12 @@ export function ClassInvoiceEditor({
                       ) : null}
                       {invoice?.status === "unpaid" ? (
                         <div className="flex flex-nowrap items-center justify-end gap-1">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="h-8 shrink-0 whitespace-nowrap px-2 text-xs"
-                            disabled={editing || cashSubmittingId === invoice.id}
-                            onClick={() => markCashPaid(invoice.id)}
-                            title={
-                              editing
-                                ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền mặt"
-                                : "Ghi nhận học sinh đã nộp tiền mặt"
-                            }
-                          >
-                            <Banknote className="h-3.5 w-3.5" />
-                            {cashSubmittingId === invoice.id ? "Đang ghi..." : "Tiền mặt"}
-                          </Button>
+                          <DebtCashButton
+                            invoiceId={invoice.id}
+                            amount={invoice.amount}
+                            disabled={editing}
+                            disabledTitle="Lưu hoặc hủy bản nháp trước khi ghi nhận tiền mặt"
+                          />
                           <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" disabled={editing} />
                         </div>
                       ) : invoice?.status === "paid" ? (

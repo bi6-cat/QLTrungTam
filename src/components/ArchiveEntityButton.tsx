@@ -2,12 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { Archive, RotateCcw } from "lucide-react";
-import {
-  archiveClassAction,
-  archiveStudentAction,
-  restoreClassAction,
-  restoreStudentAction
-} from "@/lib/actions";
+import { archiveClassAction, restoreClassAction } from "@/lib/actions/classes";
+import { archiveStudentAction, restoreStudentAction } from "@/lib/actions/students";
+import { toast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -48,10 +45,11 @@ export function ArchiveEntityButton({
     startTransition(async () => {
       try {
         const result = await action(formData);
-        if (!result.ok) {
+        if (result.error) {
           setError(result.error);
           return;
         }
+        toast.success(result.success);
         // Action đã revalidatePath và trả kèm dữ liệu mới, không cần router.refresh().
         setOpen(false);
       } catch (actionError) {

@@ -71,7 +71,7 @@ export default async function TransactionsPage({
     prisma.monthlyInvoice.aggregate({
       where: paidInvoiceWhere,
       _count: { _all: true },
-      _sum: { amount: true }
+      _sum: { amount: true, paidAmount: true }
     }),
     prisma.transaction.count({ where: transactionPeriodWhere }),
     prisma.transaction.aggregate({
@@ -87,7 +87,7 @@ export default async function TransactionsPage({
     prisma.monthlyInvoice.groupBy({
       by: ["year", "month", "status"],
       _count: { _all: true },
-      _sum: { amount: true },
+      _sum: { amount: true, paidAmount: true },
       orderBy: [{ year: "desc" }, { month: "desc" }]
     })
   ]);
@@ -179,7 +179,7 @@ export default async function TransactionsPage({
       acc[key].invoiceCount += count;
       if (group.status === "paid") {
         acc[key].expectedAmount += amount;
-        acc[key].paidAmount += amount;
+        acc[key].paidAmount += group._sum.paidAmount ?? amount;
         acc[key].paidCount += count;
       } else if (group.status === "unpaid") {
         acc[key].expectedAmount += amount;
@@ -193,7 +193,7 @@ export default async function TransactionsPage({
     }, {})
   ).sort((a, b) => b.key.localeCompare(a.key));
 
-  const totalPaid = paidAggregate._sum.amount ?? 0;
+  const totalPaid = paidAggregate._sum.paidAmount ?? paidAggregate._sum.amount ?? 0;
   const totalBankTransactions = bankTransactionAggregate._sum.amount ?? 0;
 
   function pagerHref(param: string, value: number) {
@@ -422,7 +422,7 @@ export default async function TransactionsPage({
                         </div>
                       ) : null}
                     </td>
-                    <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">{formatCurrency(invoice.amount)}</td>
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">{formatCurrency(invoice.paidAmount ?? invoice.amount)}</td>
                     <td className="overflow-hidden px-3 py-3">
                       {invoice.transaction?.gatewayRef ? (
                         <TransactionReference value={invoice.transaction.gatewayRef} />

@@ -19,6 +19,7 @@ export async function GET(_request: Request, context: { params: Promise<{ invoic
       status: true,
       paidAt: true,
       amount: true,
+      paidAmount: true,
       month: true,
       year: true,
       memoContent: true,
@@ -44,7 +45,8 @@ export async function GET(_request: Request, context: { params: Promise<{ invoic
     id: invoice.id,
     status: invoice.status,
     paidAt: invoice.paidAt,
-    amount: invoice.amount,
+    // Biên lai ghi số tiền thực nhận (khác số hóa đơn khi trung tâm gán lệch tiền).
+    amount: invoice.status === "paid" ? invoice.paidAmount ?? invoice.amount : invoice.amount,
     month: invoice.month,
     year: invoice.year,
     memoContent: invoice.memoContent,

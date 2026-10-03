@@ -10,7 +10,8 @@ import {
   Trash2,
   Upload
 } from "lucide-react";
-import { refreshAfterStudentImportAction } from "@/lib/actions";
+import { refreshAfterStudentImportAction } from "@/lib/actions/students";
+import { toast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Badge, Button, Input, Select, Textarea } from "@/components/ui";
 import type {
@@ -205,6 +206,9 @@ export function StudentExcelImportButton() {
         return;
       }
       setResult(payload);
+      toast.success(
+        `Đã nhập Excel: tạo ${payload.createdStudents} học sinh, ${payload.createdEnrollments} ghi danh.`
+      );
       // Dữ liệu đã lưu; nếu bước làm mới danh sách lỗi thì kết quả import vẫn đúng.
       await refreshAfterStudentImportAction().catch(() => undefined);
     } catch {

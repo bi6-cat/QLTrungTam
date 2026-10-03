@@ -4,7 +4,8 @@ import { describe, test } from "node:test";
 import {
   isEnrollmentActiveInPeriod,
   periodIndex,
-  remainingScheduledSessions
+  remainingScheduledSessions,
+  resolveMonthPlan
 } from "../src/lib/enrollment-period";
 
 describe("isEnrollmentActiveInPeriod", () => {
@@ -45,5 +46,62 @@ describe("remainingScheduledSessions", () => {
 
   test("lop chua xep lich thi khong goi y", () => {
     assert.equal(remainingScheduledSessions([], new Date(2026, 9, 20), 10, 2026), null);
+  });
+});
+
+describe("resolveMonthPlan", () => {
+  const classRoom = { sessionsPerMonthDefault: 8, pricePerSession: 50_000 };
+  const base = { month: 11, year: 2026, classRoom };
+
+  test("a new month inherits the latest earlier status and resets sessions to the default", () => {
+    const plan = resolveMonthPlan({
+      ...base,
+      latestMonth: { month: 10, year: 2026, status: "active", sessions: 5, pricePerSession: 40_000 },
+      enrollment: { status: "on_leave", sessionsOverride: null }
+    });
+    assert.equal(plan.status, "active");
+    assert.equal(plan.sessions, 8);
+    assert.equal(plan.pricePerSession, 50_000);
+    assert.equal(plan.initialized, false);
+  });
+
+  test("a student who was on leave last month stays on leave with zero sessions", () => {
+    const plan = resolveMonthPlan({
+      ...base,
+      latestMonth: { month: 9, year: 2026, status: "on_leave", sessions: 0, pricePerSession: 50_000 },
+      enrollment: { status: "active", sessionsOverride: 6 }
+    });
+    assert.equal(plan.status, "on_leave");
+    assert.equal(plan.sessions, 0);
+    assert.equal(plan.defaultSessions, 6);
+  });
+
+  test("without any earlier month the status chosen when joining is used", () => {
+    const plan = resolveMonthPlan({ ...base, latestMonth: null, enrollment: { status: "on_leave", sessionsOverride: null } });
+    assert.equal(plan.status, "on_leave");
+    const active = resolveMonthPlan({ ...base, enrollment: { status: "active", sessionsOverride: 4 } });
+    assert.equal(active.status, "active");
+    assert.equal(active.sessions, 4);
+  });
+
+  test("an existing month plan or invoice wins over inherited values", () => {
+    const planned = resolveMonthPlan({
+      ...base,
+      latestMonth: { month: 11, year: 2026, status: "on_leave", sessions: 0, pricePerSession: 45_000 },
+      enrollment: { status: "active", sessionsOverride: null }
+    });
+    assert.equal(planned.status, "on_leave");
+    assert.equal(planned.initialized, true);
+    assert.equal(planned.pricePerSession, 45_000);
+
+    const invoiced = resolveMonthPlan({
+      ...base,
+      latestMonth: { month: 10, year: 2026, status: "on_leave", sessions: 0, pricePerSession: 50_000 },
+      invoice: { sessions: 7, pricePerSession: 55_000 },
+      enrollment: { status: "on_leave", sessionsOverride: null }
+    });
+    assert.equal(invoiced.status, "active");
+    assert.equal(invoiced.sessions, 7);
+    assert.equal(invoiced.pricePerSession, 55_000);
   });
 });

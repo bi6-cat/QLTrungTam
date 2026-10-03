@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { isoWeekday } from "@/lib/schedule";
 
 export function periodStartDate(month: number, year: number) {
@@ -34,10 +34,60 @@ export function enrollmentVisibleInPeriodWhere(month: number, year: number): Pri
 
   return {
     AND: [
-      { OR: [{ createdAt: { lt: periodEnd } }, ...hasPeriodData] },
+      { OR: [{ startDate: { lt: periodEnd } }, ...hasPeriodData] },
       { OR: [{ student: { archivedAt: null } }, hasBilledInvoice] },
       { OR: [{ leftAt: null }, { leftAt: { gt: periodStartDate(month, year) } }, hasBilledInvoice] }
     ]
+  };
+}
+
+/**
+ * Lấy kế hoạch tháng gần nhất tính đến kỳ đang xem (dùng trong `include.months`): trùng kỳ thì
+ * là kế hoạch của chính kỳ đó, không thì là tháng gần nhất trước đó để kế thừa tình trạng học.
+ */
+export function latestMonthUpToPeriodArgs(month: number, year: number) {
+  return {
+    where: { OR: [{ year: { lt: year } }, { year, month: { lte: month } }] },
+    orderBy: [{ year: "desc" as const }, { month: "desc" as const }],
+    take: 1
+  };
+}
+
+export type MonthPlanRecord = {
+  month: number;
+  year: number;
+  status: EnrollmentStatus;
+  sessions: number;
+  pricePerSession: number;
+};
+
+/**
+ * Kế hoạch học của một học sinh trong một kỳ.
+ *
+ * - Kỳ đã có kế hoạch hoặc hóa đơn: dùng đúng dữ liệu đó.
+ * - Kỳ mới: tình trạng học lấy theo tháng gần nhất trước đó (chưa có thì theo lúc thêm vào lớp),
+ *   số buổi về mặc định đã khai (buổi riêng của học sinh, không có thì của lớp), đơn giá theo lớp.
+ */
+export function resolveMonthPlan(input: {
+  month: number;
+  year: number;
+  latestMonth?: MonthPlanRecord | null;
+  invoice?: { sessions: number; pricePerSession: number } | null;
+  enrollment: { status: EnrollmentStatus; sessionsOverride: number | null };
+  classRoom: { sessionsPerMonthDefault: number; pricePerSession: number };
+}) {
+  const { latestMonth, invoice, enrollment, classRoom } = input;
+  const current =
+    latestMonth && latestMonth.month === input.month && latestMonth.year === input.year ? latestMonth : null;
+  const defaultSessions = enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
+  const status: EnrollmentStatus =
+    current?.status ?? (invoice ? "active" : latestMonth?.status ?? enrollment.status);
+  return {
+    status,
+    sessions: invoice?.sessions ?? current?.sessions ?? (status === "active" ? defaultSessions : 0),
+    pricePerSession: invoice?.pricePerSession ?? current?.pricePerSession ?? classRoom.pricePerSession,
+    defaultSessions,
+    initialized: Boolean(current || invoice)
   };
 }
 

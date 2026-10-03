@@ -61,7 +61,6 @@ export function AdminNav() {
             <Link
               key={item.href}
               href={item.href}
-              prefetch
               onClick={() => setOptimisticHref(item.href)}
               className={clsx(
                 "focus-ring group relative flex h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-150",

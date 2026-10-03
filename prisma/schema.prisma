@@ -88,16 +88,14 @@ model Expense {
   classId        String?
   description    String
   amount         Int
-  /// Chỉ dùng khi category = teacher_salary: % chia và số tiền gốc đã dùng để tính.
+  /// Chỉ dùng khi category = teacher_salary: % chia và học phí đã thu của kỳ lúc chốt.
+  /// Lương luôn tính theo đúng kỳ học phí; thu muộn/hoàn tiền tạo bản ghi bổ sung cùng kỳ.
   sharePercent   Int?
   baseAmount     Int?
-  /// Học phí các tháng trước thu muộn (sau khi tháng đó đã chốt lương), gộp vào bản ghi này.
-  lateBaseAmount Int?
   note           String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   classRoom      ClassRoom?      @relation(fields: [classId], references: [id], onDelete: SetNull)
-  salaryInvoices MonthlyInvoice[]
 
   @@index([year, month])
   @@index([category, year, month])
@@ -125,6 +123,8 @@ model Enrollment {
   classId          String
   sessionsOverride Int?
   status           EnrollmentStatus  @default(active)
+  /// Ngày học sinh bắt đầu học lớp (admin nhập khi thêm vào lớp hoặc khi quay lại học).
+  startDate        DateTime          @default(now())
   /// Ngày đầu của tháng đầu tiên học sinh không còn học lớp này; null = đang học.
   leftAt           DateTime?
   createdAt        DateTime          @default(now())
@@ -167,8 +167,8 @@ model MonthlyInvoice {
   statusChangedAt        DateTime?
   paidAt                 DateTime?
   transactionId          String?       @unique
-  /// Bản ghi lương giáo viên đã tính hóa đơn này (đã thu) vào; null = chưa tính lương.
-  salaryExpenseId        String?
+  /// Số tiền thực nhận khi hóa đơn được thanh toán (có thể khác amount khi gán lệch tiền).
+  paidAmount             Int?
   studentNameSnapshot    String?
   studentPhoneSnapshot   String?
   classNameSnapshot      String?
@@ -179,10 +179,8 @@ model MonthlyInvoice {
   enrollment             Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   transaction            Transaction?  @relation("InvoicePaymentTransaction", fields: [transactionId], references: [id])
   matchedTransaction     Transaction?  @relation("TransactionMatchedInvoice")
-  salaryExpense          Expense?      @relation(fields: [salaryExpenseId], references: [id], onDelete: SetNull)
 
   @@unique([enrollmentId, month, year])
-  @@index([salaryExpenseId])
   @@index([status, month, year])
   @@index([memoContent])
 }

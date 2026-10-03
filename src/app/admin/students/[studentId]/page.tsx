@@ -274,16 +274,18 @@ export default async function Student360Page({
   const currentYear = now.getFullYear();
   const currentStatusByEnrollmentId = new Map(
     student.enrollments.map((enrollment) => {
-      const currentPeriod = enrollment.months.find(
-        (month) => month.month === currentMonth && month.year === currentYear
+      // months đã sắp xếp mới → cũ: tháng gần nhất tính đến hiện tại quyết định tình trạng
+      // (tháng mới chưa có kế hoạch kế thừa tình trạng của tháng trước).
+      const latest = enrollment.months.find(
+        (month) => month.year < currentYear || (month.year === currentYear && month.month <= currentMonth)
       );
-      return [enrollment.id, currentPeriod?.status ?? enrollment.status] as const;
+      return [enrollment.id, latest?.status ?? enrollment.status] as const;
     })
   );
 
   const paidAmount = invoices
     .filter((invoice) => invoice.status === "paid")
-    .reduce((sum, invoice) => sum + invoice.amount, 0);
+    .reduce((sum, invoice) => sum + (invoice.paidAmount ?? invoice.amount), 0);
   const unpaidAmount = invoices
     .filter((invoice) => invoice.status === "unpaid")
     .reduce((sum, invoice) => sum + invoice.amount, 0);
@@ -316,8 +318,8 @@ export default async function Student360Page({
     ...student.enrollments.map(
       (enrollment): TimelineEvent => ({
         key: `enrollment-created-${enrollment.id}`,
-        at: enrollment.createdAt,
-        title: `Ghi danh vào ${enrollment.classRoom.name}`,
+        at: enrollment.startDate,
+        title: `Bắt đầu học ${enrollment.classRoom.name}`,
         detail: `${enrollment.classRoom.shortCode} · ${formatEnrollmentStatus(enrollment.status)}`,
         tone: "primary"
       })
@@ -549,7 +551,7 @@ export default async function Student360Page({
                   <th className="px-4 py-3">Giáo viên</th>
                   <th className="px-4 py-3">Trạng thái hiện tại</th>
                   <th className="px-4 py-3">Số buổi mặc định</th>
-                  <th className="px-4 py-3">Ngày ghi danh</th>
+                  <th className="px-4 py-3">Ngày bắt đầu học</th>
                   <th className="px-4 py-3">Lịch sử</th>
                 </tr>
               </thead>
@@ -578,7 +580,7 @@ export default async function Student360Page({
                         {formatEnrollmentStatus(currentStatus)}
                       </Badge>
                       <p className="mt-1 text-xs text-stone-500">
-                        {currentPeriod ? `Theo ${formatMonth(currentMonth, currentYear)}` : "Chưa khởi tạo tháng · dùng thiết lập chung"}
+                        {currentPeriod ? `Theo ${formatMonth(currentMonth, currentYear)}` : "Chưa khởi tạo tháng · kế thừa tháng trước"}
                       </p>
                     </td>
                     <td className="px-4 py-3">
@@ -589,7 +591,7 @@ export default async function Student360Page({
                         <p className="mt-1 text-xs text-stone-500">Có thiết lập riêng</p>
                       ) : null}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatDate(enrollment.createdAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatDate(enrollment.startDate)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-stone-600">
                       {enrollment.months.length} tháng · {enrollment.invoices.length} hóa đơn
                     </td>

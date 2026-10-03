@@ -2,7 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { Pencil, Save } from "lucide-react";
-import { updateClassAction } from "@/lib/actions";
+import { updateClassAction } from "@/lib/actions/classes";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 
@@ -31,11 +33,12 @@ export function EditClassButton({ classRoom }: { classRoom: ClassInfo }) {
 }
 
 function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose: () => void }) {
-  const [state, action, pending] = useActionState(updateClassAction, { error: "", ok: false });
+  const [state, action, pending] = useActionState(updateClassAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
 
   useEffect(() => {
-    if (state.ok) onClose();
-  }, [state.ok, onClose]);
+    if (state.success) onClose();
+  }, [state, onClose]);
 
   return (
     <Modal title="Sửa thông tin lớp" onClose={onClose}>

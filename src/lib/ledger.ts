@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
 
 export type LedgerErrorCode =
   | "INVALID_ACTOR"
@@ -68,7 +68,6 @@ export type AssignTransactionResult = LedgerMutationResult & {
   amountDifference: number;
 };
 
-const MAX_SERIALIZABLE_ATTEMPTS = 3;
 const MAX_REASON_LENGTH = 1_000;
 
 function assertActor(actor: LedgerActor) {
@@ -96,41 +95,17 @@ function requiredReason(reason: string | undefined, code: "REASON_REQUIRED" | "F
   return normalized;
 }
 
-function isKnownPrismaError(error: unknown, code: string) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
-}
-
-async function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-  for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
-    try {
-      return await prisma.$transaction(work, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      });
-    } catch (error) {
-      if (error instanceof LedgerError) throw error;
-
-      if (isKnownPrismaError(error, "P2034")) {
-        if (attempt < MAX_SERIALIZABLE_ATTEMPTS) continue;
-        throw new LedgerError(
-          "CONCURRENT_MODIFICATION",
-          "Dữ liệu vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
-        );
-      }
-
-      // The unique invoice/transaction links are the final safety net if two
-      // requests race between their reads and conditional updates.
-      if (isKnownPrismaError(error, "P2002")) {
-        throw new LedgerError(
-          "CONCURRENT_MODIFICATION",
-          "Giao dịch hoặc hóa đơn đã được xử lý bởi thao tác khác."
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  throw new LedgerError("CONCURRENT_MODIFICATION", "Không thể hoàn tất thao tác do xung đột dữ liệu.");
+function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  // Unique link giữa hóa đơn và giao dịch là lớp chặn cuối nếu hai request cùng đua.
+  return runSerializableTransaction(work, {
+    onConflict: () =>
+      new LedgerError(
+        "CONCURRENT_MODIFICATION",
+        "Dữ liệu vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
+      ),
+    onUniqueViolation: () =>
+      new LedgerError("CONCURRENT_MODIFICATION", "Giao dịch hoặc hóa đơn đã được xử lý bởi thao tác khác.")
+  });
 }
 
 function assertTransactionAvailable(transaction: {
@@ -269,7 +244,9 @@ export async function assignTransactionToInvoice(
       data: {
         status: "paid",
         paidAt: transaction.transferredAt,
-        transactionId: transaction.id
+        transactionId: transaction.id,
+        // Gán lệch tiền (force): doanh thu ghi theo số tiền thực nhận, không theo hóa đơn.
+        paidAmount: transaction.amount
       }
     });
 
@@ -358,7 +335,7 @@ export async function unassignTransaction(input: TransactionReasonInput): Promis
 
     const releasedInvoice = await tx.monthlyInvoice.updateMany({
       where: { id: invoice.id, status: "paid", transactionId: transaction.id },
-      data: { status: "unpaid", paidAt: null, transactionId: null }
+      data: { status: "unpaid", paidAt: null, transactionId: null, paidAmount: null }
     });
     if (releasedInvoice.count !== 1) {
       throw new LedgerError(
@@ -456,7 +433,7 @@ export async function reverseTransaction(input: TransactionReasonInput): Promise
 
       const releasedInvoice = await tx.monthlyInvoice.updateMany({
         where: { id: invoice.id, status: "paid", transactionId: transaction.id },
-        data: { status: "unpaid", paidAt: null, transactionId: null }
+        data: { status: "unpaid", paidAt: null, transactionId: null, paidAmount: null }
       });
       if (releasedInvoice.count !== 1) {
         throw new LedgerError(
@@ -604,7 +581,7 @@ export async function recordCashPayment(input: RecordCashPaymentInput): Promise<
     const paidAt = new Date();
     const claimedInvoice = await tx.monthlyInvoice.updateMany({
       where: { id: invoice.id, status: "unpaid", transactionId: null },
-      data: { status: "paid", paidAt }
+      data: { status: "paid", paidAt, paidAmount: invoice.amount }
     });
     if (claimedInvoice.count !== 1) {
       throw new LedgerError(

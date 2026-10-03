@@ -87,14 +87,14 @@ export default async function AdminHomePage({
           cta: "Xếp lịch"
         }
       : null,
-    alerts.salaryNotGenerated
+    alerts.salaryPending > 0
       ? {
           key: "salary",
           tone: "neutral" as const,
           icon: <Wallet className="h-4 w-4" />,
-          text: `Chưa tính lương giáo viên cho ${formatMonth(month, year)}.`,
-          href: `/admin/finance?month=${month}&year=${year}`,
-          cta: "Tính lương"
+          text: `${alerts.salaryPending} lớp ở các tháng trước còn chênh lệch lương (chưa chốt hoặc thu muộn sau khi chốt).`,
+          href: "/admin/finance",
+          cta: "Xem lương"
         }
       : null
   ].filter((item): item is NonNullable<typeof item> => item !== null);

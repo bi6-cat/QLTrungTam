@@ -1,14 +1,15 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
-import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
-import { createClassAction, type CreateClassState } from "@/lib/actions";
+import { AlertTriangle, Plus } from "lucide-react";
+import { createClassAction } from "@/lib/actions/classes";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 
-const INITIAL_STATE: CreateClassState = { error: "", success: "" };
-
 export function CreateClassForm() {
-  const [state, action, pending] = useActionState(createClassAction, INITIAL_STATE);
+  const [state, action, pending] = useActionState(createClassAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   // Tạo xong thì dọn form; lỗi thì giữ nguyên những gì đã gõ để sửa tiếp.
@@ -42,12 +43,6 @@ export function CreateClassForm() {
         <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{state.error}</span>
-        </div>
-      ) : null}
-      {state.success ? (
-        <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{state.success}</span>
         </div>
       ) : null}
       <Button type="submit" disabled={pending}>

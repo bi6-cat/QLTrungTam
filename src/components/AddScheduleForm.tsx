@@ -2,7 +2,9 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { AlertTriangle, CalendarPlus } from "lucide-react";
-import { createScheduleAction } from "@/lib/actions";
+import { createScheduleAction } from "@/lib/actions/schedule";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input, Select } from "@/components/ui";
 import { WEEKDAYS } from "@/lib/schedule";
 
@@ -11,13 +13,14 @@ export function AddScheduleForm({
 }: {
   classes: Array<{ id: string; name: string; shortCode: string }>;
 }) {
-  const [state, action, pending] = useActionState(createScheduleAction, { error: "", ok: false });
+  const [state, action, pending] = useActionState(createScheduleAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   const wasOk = useRef(false);
 
   // Thêm xong thì chỉ reset giờ/phòng, giữ lại lớp đang chọn để xếp tiếp buổi khác.
   useEffect(() => {
-    if (state.ok && !wasOk.current) {
+    if (state.success && !wasOk.current) {
       wasOk.current = true;
       const form = formRef.current;
       if (form) {
@@ -25,8 +28,8 @@ export function AddScheduleForm({
         (form.elements.namedItem("note") as HTMLInputElement | null)?.setAttribute("value", "");
       }
     }
-    if (!state.ok) wasOk.current = false;
-  }, [state.ok]);
+    if (!state.success) wasOk.current = false;
+  }, [state]);
 
   if (classes.length === 0) {
     return (

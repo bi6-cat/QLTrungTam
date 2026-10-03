@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { RotateCcw, Unlink } from "lucide-react";
-import { reverseTransactionAction, unassignTransactionAction } from "@/lib/actions";
+import { reverseTransactionAction, unassignTransactionAction } from "@/lib/actions/transactions";
+import { useResultToast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -50,6 +51,7 @@ export function TransactionReviewActions({ transactionId }: { transactionId: str
 
 function UnassignDialog({ transactionId, onClose }: { transactionId: string; onClose: () => void }) {
   const [state, action, pending] = useActionState(unassignTransactionAction, initialActionState);
+  useResultToast(state);
 
   return (
     <Modal title="Bỏ gán giao dịch?" onClose={onClose} closeDisabled={pending}>
@@ -95,6 +97,7 @@ function UnassignDialog({ transactionId, onClose }: { transactionId: string; onC
 
 function ReverseDialog({ transactionId, onClose }: { transactionId: string; onClose: () => void }) {
   const [state, action, pending] = useActionState(reverseTransactionAction, initialActionState);
+  useResultToast(state);
 
   return (
     <Modal title="Hoàn tác giao dịch?" onClose={onClose} closeDisabled={pending}>

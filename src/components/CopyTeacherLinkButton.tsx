@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui";
+import { toast } from "@/components/Toaster";
 
 export function CopyTeacherLinkButton({
   className,
@@ -22,6 +23,7 @@ export function CopyTeacherLinkButton({
     ].join("\n");
 
     await navigator.clipboard.writeText(message);
+    toast.success(`Đã chép link giáo viên lớp ${className}.`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }

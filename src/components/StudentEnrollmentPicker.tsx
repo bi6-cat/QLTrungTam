@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
-import { createEnrollmentAction } from "@/lib/actions";
+import { createEnrollmentAction } from "@/lib/actions/enrollments";
+import { toast } from "@/components/Toaster";
 import { Button, Field, Input, Select } from "@/components/ui";
 
 type StudentOption = {
@@ -12,6 +13,12 @@ type StudentOption = {
 };
 
 const PAGE_SIZE = 12;
+
+function todayInputValue() {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 export function StudentEnrollmentPicker({
   classId,
@@ -46,7 +53,9 @@ export function StudentEnrollmentPicker({
     setError("");
     const sessionsOverride = formData.get("sessionsOverride");
     const status = formData.get("status");
+    const startDate = String(formData.get("startDate") ?? "");
     const failed: Array<{ id: string; message: string }> = [];
+    const succeeded: string[] = [];
     // Thêm lần lượt từng em: một em lỗi không làm hỏng cả lượt, và biết rõ em nào chưa vào lớp.
     for (const studentId of selectedIds) {
       const data = new FormData();
@@ -54,15 +63,19 @@ export function StudentEnrollmentPicker({
       data.set("studentId", studentId);
       if (sessionsOverride) data.set("sessionsOverride", sessionsOverride);
       if (status) data.set("status", status);
+      data.set("startDate", startDate);
       try {
         const result = await createEnrollmentAction(data);
-        if (!result.ok) failed.push({ id: studentId, message: result.error });
+        if (result.error) failed.push({ id: studentId, message: result.error });
+        else succeeded.push(result.success);
       } catch {
         failed.push({ id: studentId, message: "Không kết nối được máy chủ." });
       }
     }
     setPending(false);
 
+    if (succeeded.length === 1) toast.success(succeeded[0]);
+    else if (succeeded.length > 1) toast.success(`Đã thêm ${succeeded.length} học sinh vào lớp.`);
     if (failed.length === 0) {
       onSuccess?.();
       return;
@@ -176,7 +189,10 @@ export function StudentEnrollmentPicker({
         </p>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-[160px_160px_auto]">
+      <div className="grid gap-3 md:grid-cols-[170px_140px_150px_auto]">
+        <Field label="Ngày bắt đầu học">
+          <Input name="startDate" type="date" defaultValue={todayInputValue()} required />
+        </Field>
         <Field label="Buổi riêng">
           <Input name="sessionsOverride" type="number" min="1" placeholder="Trống" />
         </Field>
