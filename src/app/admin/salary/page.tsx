@@ -3,6 +3,7 @@ import { Banknote, CalendarCheck, Hourglass, Users } from "lucide-react";
 import { deleteExpenseAction } from "@/lib/actions/finance";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { CopyTextButton, SalaryPayoutButton, type PayoutOption } from "@/components/SalaryForms";
+import { SalaryMonthCutoffs, type MonthCutoffRow } from "@/components/SalaryMonthCutoffs";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { periodIndex } from "@/lib/enrollment-period";
@@ -11,13 +12,15 @@ import { prisma } from "@/lib/prisma";
 import {
   buildTeacherSalaryMessage,
   getPendingSalaryLines,
+  loadDefaultSalaryCutoff,
   loadSalaryLedger,
+  loadSalaryMonthCutoffs,
   salaryLineNotes,
   type LedgerClass,
   type SalaryLine,
   type TeacherLedger
 } from "@/lib/salary";
-import { describeSalaryCutoff } from "@/lib/salary-cutoff";
+import { cutoffResolver, describeSalaryCutoff, salaryCutoffDate } from "@/lib/salary-cutoff";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +50,10 @@ function payoutOptions(teacher: TeacherLedger): PayoutOption[] {
   );
 }
 
+function dateInputValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function teacherParam(teacher: TeacherLedger) {
   return teacher.teacherName || NO_TEACHER;
 }
@@ -71,14 +78,35 @@ export default async function SalaryPage({
     ...pending.map((line) => periodIndex(line.month, line.year))
   );
 
-  const [ledger, paidThisMonth] = await Promise.all([
+  const [ledger, paidThisMonth, defaultCutoff, monthCutoffs] = await Promise.all([
     loadSalaryLedger({ fromIndex, toIndex: currentIndex }),
     prisma.expense.aggregate({
       where: { category: "teacher_salary", classId: { not: null }, paidAt: { gte: monthStart } },
       _sum: { amount: true },
       _count: { _all: true }
-    })
+    }),
+    loadDefaultSalaryCutoff(),
+    loadSalaryMonthCutoffs()
   ]);
+
+  const resolver = cutoffResolver(
+    defaultCutoff,
+    new Map(monthCutoffs.map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
+  );
+  const cutoffRows: MonthCutoffRow[] = Array.from({ length: currentIndex - fromIndex + 1 }, (_, offset) => {
+    const index = fromIndex + offset;
+    const month = (index % 12) + 1;
+    const year = Math.floor(index / 12);
+    return {
+      month,
+      year,
+      value: dateInputValue(resolver.date(index)),
+      defaultLabel: formatDayMonth(salaryCutoffDate(defaultCutoff, index)),
+      overridden: resolver.overridden(index),
+      min: dateInputValue(new Date(year, month - 1, 1)),
+      max: dateInputValue(new Date(year, month + 1, 0))
+    };
+  });
 
   const shown = selectedTeacher ? ledger.filter((teacher) => teacherParam(teacher) === selectedTeacher) : ledger;
   const owedTotal = ledger.reduce((sum, teacher) => sum + teacher.owed, 0);
@@ -196,6 +224,8 @@ export default async function SalaryPage({
           ) : null}
         </div>
       </Panel>
+
+      <SalaryMonthCutoffs rows={cutoffRows} ruleLabel={describeSalaryCutoff(defaultCutoff)} />
 
       {shown.length === 0 ? (
         <EmptyState title="Chưa có lương giáo viên để theo dõi" icon={<Users className="h-6 w-6" />}>
@@ -329,6 +359,7 @@ function ClassLedger({
                     </div>
                     <div className="text-xs text-stone-500">
                       chốt {formatDayMonth(period.cutoffDate)}
+                      {period.cutoffOverridden ? " (đặt riêng)" : ""}
                       {period.cutoffPassed ? "" : " (chưa tới)"}
                     </div>
                     <div className="text-xs text-stone-500">

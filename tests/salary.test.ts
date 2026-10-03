@@ -11,6 +11,7 @@ import {
   type SalaryInput
 } from "../src/lib/salary";
 import {
+  cutoffResolver,
   DEFAULT_SALARY_CUTOFF,
   describeSalaryCutoff,
   parseSalaryCutoff,
@@ -251,6 +252,41 @@ describe("computeSalaryLines", () => {
       })
     );
     assert.deepEqual(lines.map((line) => [line.classId, line.month]), [["c1", 10]]);
+  });
+});
+
+describe("month-specific cutoffs", () => {
+  test("an override moves the cutoff for that month only", () => {
+    const resolver = cutoffResolver(DEFAULT_SALARY_CUTOFF, new Map([[index(8), new Date(2026, 7, 30)]]));
+    assert.equal(resolver.overridden(index(8)), true);
+    assert.equal(salaryIndexForPayment(index(8), new Date(2026, 7, 30, 22), resolver), index(8));
+    assert.equal(salaryIndexForPayment(index(8), new Date(2026, 7, 31, 19, 41), resolver), SEP);
+    assert.equal(salaryIndexForPayment(SEP, new Date(2026, 8, 30, 20), resolver), SEP);
+  });
+
+  test("classes following the centre default use it, classes with their own rule do not", () => {
+    const classes = [
+      { id: "c1", name: "Văn 9", shortCode: "26V9A", teacherName: "Cô Hương", teacherSharePercent: 75, archivedAt: null, salaryCutoff: null },
+      { id: "c2", name: "Anh 9", shortCode: "26TA9A", teacherName: "Cô Lệ", teacherSharePercent: 75, archivedAt: null, salaryCutoff: "same:31" }
+    ];
+    const lines = computeSalaryLines(
+      salaryInput({
+        fromIndex: index(8),
+        toIndex: SEP,
+        classes,
+        monthCutoffs: [{ month: 8, year: 2026, cutoffDate: new Date(2026, 7, 30) }],
+        invoices: [
+          { ...invoice("a", "paid", 360_000, new Date(2026, 7, 31, 19, 41), 8), classId: "c1" },
+          { ...invoice("b", "paid", 360_000, new Date(2026, 7, 31, 19, 41), 8), classId: "c2" }
+        ]
+      })
+    );
+    const byClass = (classId: string, month: number) => lines.find((line) => line.classId === classId && line.month === month)!;
+    assert.equal(byClass("c1", 8).cutoffOverridden, true);
+    assert.equal(byClass("c1", 8).carriedOut.length, 1);
+    assert.equal(byClass("c1", 9).due, 270_000);
+    assert.equal(byClass("c2", 8).cutoffOverridden, false);
+    assert.equal(byClass("c2", 8).due, 270_000);
   });
 });
 

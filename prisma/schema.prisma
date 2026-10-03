@@ -242,6 +242,18 @@ model AuditLog {
   @@index([createdAt])
 }
 
+/// Ngày chốt lương đặt riêng cho một tháng lương (tháng đó trả lương khác ngày thường lệ).
+/// Áp dụng cho các lớp theo ngày chốt chung; lớp có ngày chốt riêng giữ quy tắc của lớp.
+model SalaryMonthCutoff {
+  year       Int
+  month      Int
+  /// 0h (giờ máy chủ) của ngày chốt: tiền nộp đến hết ngày này tính vào lương tháng đó.
+  cutoffDate DateTime
+  updatedAt  DateTime @updatedAt
+
+  @@id([year, month])
+}
+
 model AppSetting {
   key       String   @id
   value     String

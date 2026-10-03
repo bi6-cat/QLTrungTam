@@ -40,11 +40,31 @@ export function salaryCutoffEnd(cutoff: SalaryCutoff, index: number) {
   return new Date(year, month, day + 1);
 }
 
+/** Ngày chốt thực tế của từng tháng lương: theo quy tắc, trừ các tháng được đặt riêng một ngày. */
+export type CutoffResolver = {
+  date(index: number): Date;
+  end(index: number): Date;
+  overridden(index: number): boolean;
+};
+
+/** `overrides`: periodIndex → 0h của ngày chốt đặt riêng cho tháng đó. */
+export function cutoffResolver(rule: SalaryCutoff, overrides?: ReadonlyMap<number, Date>): CutoffResolver {
+  return {
+    date: (index) => overrides?.get(index) ?? salaryCutoffDate(rule, index),
+    end: (index) => {
+      const day = overrides?.get(index);
+      return day ? new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1) : salaryCutoffEnd(rule, index);
+    },
+    overridden: (index) => overrides?.has(index) ?? false
+  };
+}
+
 /** Tháng lương (periodIndex) mà khoản học phí của kỳ `tuitionIndex`, nộp lúc `paidAt`, được tính vào. */
-export function salaryIndexForPayment(tuitionIndex: number, paidAt: Date, cutoff: SalaryCutoff) {
+export function salaryIndexForPayment(tuitionIndex: number, paidAt: Date, cutoff: SalaryCutoff | CutoffResolver) {
+  const resolver = "end" in cutoff ? cutoff : cutoffResolver(cutoff);
   let index = tuitionIndex;
   // Chặn vòng lặp với dữ liệu bất thường (nộp muộn quá 20 năm).
-  for (let guard = 0; guard < 240 && paidAt.getTime() >= salaryCutoffEnd(cutoff, index).getTime(); guard += 1) {
+  for (let guard = 0; guard < 240 && paidAt.getTime() >= resolver.end(index).getTime(); guard += 1) {
     index += 1;
   }
   return index;

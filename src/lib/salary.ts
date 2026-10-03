@@ -3,17 +3,17 @@ import { formatCurrency, formatDayMonth } from "@/lib/format";
 import { periodIndex } from "@/lib/enrollment-period";
 import { prisma } from "@/lib/prisma";
 import {
+  cutoffResolver,
   DEFAULT_SALARY_CUTOFF,
   parseSalaryCutoff,
   SALARY_CUTOFF_SETTING_KEY,
-  salaryCutoffDate,
-  salaryCutoffEnd,
   salaryIndexForPayment,
   type SalaryCutoff
 } from "@/lib/salary-cutoff";
 
 /**
- * Lương giáo viên theo THÁNG LƯƠNG có ngày chốt (xem salary-cutoff.ts):
+ * Lương giáo viên theo THÁNG LƯƠNG có ngày chốt (xem salary-cutoff.ts; tháng nào trả lương khác
+ * ngày thường lệ thì có thể đặt riêng ngày chốt cho tháng đó — SalaryMonthCutoff):
  *   lương tháng T = % chia × (học phí kỳ T nộp đến hết ngày chốt tháng T
  *                             + học phí các kỳ trước nộp muộn, sau ngày chốt của kỳ đó).
  * Học sinh nộp sau ngày chốt được ghi chú ở cả hai nơi: "nộp sau ngày chốt → lương tháng sau"
@@ -133,6 +133,8 @@ export type SalaryLine = SalaryComputation & {
   /** Học phí tính vào lương tháng này: nộp trong hạn + nộp muộn từ các tháng trước. */
   collected: number;
   cutoffDate: Date;
+  /** Ngày chốt của tháng này được đặt riêng (không theo quy tắc chung). */
+  cutoffOverridden: boolean;
   cutoffPassed: boolean;
   /** Các lần chuyển lương của tháng, theo thứ tự ghi. */
   payouts: SalaryRecord[];
@@ -154,6 +156,8 @@ export type SalaryInput = {
   toIndex: number;
   now: Date;
   defaultCutoff: SalaryCutoff;
+  /** Ngày chốt đặt riêng theo tháng (áp dụng cho lớp theo ngày chốt chung). */
+  monthCutoffs?: Array<{ month: number; year: number; cutoffDate: Date }>;
   classes: Array<{
     id: string;
     name: string;
@@ -206,10 +210,15 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
     recordsByClass.set(record.classId, [...(recordsByClass.get(record.classId) ?? []), record]);
   }
 
+  const monthOverrides = new Map(
+    (input.monthCutoffs ?? []).map((item) => [periodIndex(item.month, item.year), item.cutoffDate])
+  );
   const lines: SalaryLine[] = [];
   for (const classRoom of input.classes) {
     const custom = parseSalaryCutoff(classRoom.salaryCutoff);
     const cutoff = custom ?? input.defaultCutoff;
+    // Lớp có ngày chốt riêng giữ quy tắc của lớp; các lớp còn lại theo ngày chốt chung của tháng.
+    const resolver = custom ? cutoffResolver(custom) : cutoffResolver(input.defaultCutoff, monthOverrides);
     const buckets = new Map<number, Bucket>();
     const bucket = (index: number) => {
       const existing = buckets.get(index);
@@ -225,7 +234,7 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         if (inRange(tuitionIndex)) bucket(tuitionIndex).waiting.push(invoice);
         continue;
       }
-      const salaryIndex = invoice.paidAt ? salaryIndexForPayment(tuitionIndex, invoice.paidAt, cutoff) : tuitionIndex;
+      const salaryIndex = invoice.paidAt ? salaryIndexForPayment(tuitionIndex, invoice.paidAt, resolver) : tuitionIndex;
       if (inRange(salaryIndex)) {
         if (salaryIndex === tuitionIndex) bucket(salaryIndex).onTime += invoice.paidAmount ?? invoice.amount;
         else bucket(salaryIndex).carriedIn.push(invoice);
@@ -277,7 +286,7 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         .sort(byPaidAt);
       const waiting = current.waiting.map(toStudent).sort(byName);
       const waitingShare = waiting.reduce((sum, item) => sum + item.share, 0);
-      const cutoffPassed = input.now.getTime() >= salaryCutoffEnd(cutoff, index).getTime();
+      const cutoffPassed = input.now.getTime() >= resolver.end(index).getTime();
 
       lines.push({
         classId: classRoom.id,
@@ -291,7 +300,8 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         month: (index % 12) + 1,
         year: Math.floor(index / 12),
         collected,
-        cutoffDate: salaryCutoffDate(cutoff, index),
+        cutoffDate: resolver.date(index),
+        cutoffOverridden: resolver.overridden(index),
         cutoffPassed,
         ...computation,
         payouts: records,
@@ -334,6 +344,14 @@ export async function loadDefaultSalaryCutoff(db: Db = prisma) {
   return parseSalaryCutoff(row?.value) ?? DEFAULT_SALARY_CUTOFF;
 }
 
+/** Ngày chốt đặt riêng của các tháng (ít dòng nên đọc hết). */
+export function loadSalaryMonthCutoffs(db: Db = prisma) {
+  return db.salaryMonthCutoff.findMany({
+    orderBy: [{ year: "asc" }, { month: "asc" }],
+    select: { month: true, year: true, cutoffDate: true }
+  });
+}
+
 async function loadSalaryInput(options: {
   fromIndex: number;
   toIndex: number;
@@ -350,8 +368,9 @@ async function loadSalaryInput(options: {
     year: { gte: Math.floor(options.fromIndex / 12), lte: Math.floor(options.toIndex / 12) }
   };
   const classFilter = options.classIds ? { in: options.classIds } : undefined;
-  const [defaultCutoff, classes, invoices, records] = await Promise.all([
+  const [defaultCutoff, monthCutoffs, classes, invoices, records] = await Promise.all([
     loadDefaultSalaryCutoff(db),
+    loadSalaryMonthCutoffs(db),
     db.classRoom.findMany({
       where: classFilter ? { id: classFilter } : {},
       orderBy: [{ teacherName: "asc" }, { name: "asc" }],
@@ -395,6 +414,7 @@ async function loadSalaryInput(options: {
     toIndex: options.toIndex,
     now: options.now ?? new Date(),
     defaultCutoff,
+    monthCutoffs,
     classes,
     invoices: invoices.map((invoice) => ({
       id: invoice.id,
@@ -506,8 +526,14 @@ export async function settledSalaryNote(invoiceId: string | null) {
   const tuitionIndex = periodIndex(invoice.month, invoice.year);
 
   if (invoice.status === "paid" && invoice.paidAt) {
-    const cutoff = parseSalaryCutoff(classRoom.salaryCutoff) ?? (await loadDefaultSalaryCutoff());
-    const salaryIndex = salaryIndexForPayment(tuitionIndex, invoice.paidAt, cutoff);
+    const custom = parseSalaryCutoff(classRoom.salaryCutoff);
+    const resolver = custom
+      ? cutoffResolver(custom)
+      : cutoffResolver(
+          await loadDefaultSalaryCutoff(),
+          new Map((await loadSalaryMonthCutoffs()).map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
+        );
+    const salaryIndex = salaryIndexForPayment(tuitionIndex, invoice.paidAt, resolver);
     const month = (salaryIndex % 12) + 1;
     const year = Math.floor(salaryIndex / 12);
     const paid = await prisma.expense.count({ where: { category: "teacher_salary", classId, month, year } });

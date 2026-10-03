@@ -208,6 +208,22 @@ export const salaryPayoutSchema = z.object({
     .pipe(z.array(salaryPayoutLine).min(1, "Chọn ít nhất một lớp để ghi").max(60, "Quá nhiều dòng trong một lần ghi"))
 });
 
+export const salaryMonthCutoffSchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
+  /** Để trống = bỏ ngày đặt riêng, quay về ngày chốt chung. */
+  cutoffDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null))
+    .refine((v) => v === null || /^\d{4}-\d{2}-\d{2}$/.test(v), "Ngày chốt không hợp lệ"),
+  intent: z
+    .string()
+    .optional()
+    .transform((v) => (v === "reset" ? "reset" : "save"))
+});
+
 export const enrollmentSchema = z
   .object({
     studentId: id,

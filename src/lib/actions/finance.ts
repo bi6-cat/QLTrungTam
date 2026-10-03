@@ -7,7 +7,9 @@ import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { recordSalaryPayout } from "@/lib/salary-payout";
 import { expenseCategoryLabel } from "@/lib/schedule";
-import { expenseSchema, safeParseForm, salaryPayoutSchema } from "@/lib/validation";
+import { periodIndex } from "@/lib/enrollment-period";
+import { formatDayMonth } from "@/lib/format";
+import { expenseSchema, safeParseForm, salaryMonthCutoffSchema, salaryPayoutSchema } from "@/lib/validation";
 
 export async function createExpenseAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
   await requireAdmin();
@@ -105,4 +107,55 @@ export async function recordSalaryPayoutAction(_prevState: ResultState, formData
   } catch (payoutError) {
     return actionFailure(payoutError, "Không ghi được lần chuyển lương.");
   }
+}
+
+/**
+ * Đặt riêng ngày chốt lương cho một tháng (tháng đó trả lương khác ngày thường lệ), hoặc bỏ đặt
+ * riêng để quay về ngày chốt chung. Lương các tháng liên quan được tính lại ngay.
+ */
+export async function setSalaryMonthCutoffAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
+  const actor = await requireAdmin();
+  const { data, error } = safeParseForm(salaryMonthCutoffSchema, formData);
+  if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
+  const { month, year } = data;
+  const audit = (metadata: Record<string, string | number | null>) =>
+    prisma.auditLog.create({
+      data: {
+        actorUserId: actor.userId,
+        actorUsername: actor.username.trim(),
+        action: "salary.cutoff_changed",
+        entityType: "SalaryMonthCutoff",
+        entityId: `${year}-${month}`,
+        metadata: { month, year, ...metadata }
+      }
+    });
+
+  if (data.intent === "reset" || !data.cutoffDate) {
+    await prisma.$transaction([
+      prisma.salaryMonthCutoff.deleteMany({ where: { year, month } }),
+      audit({ cutoffDate: null })
+    ]);
+    revalidateFinancialPaths();
+    return successState(`Lương T${month}/${year} quay về ngày chốt chung.`);
+  }
+
+  const cutoffDate = parseDateInput(data.cutoffDate);
+  if (!cutoffDate) return errorState("Ngày chốt không hợp lệ.");
+  const offset = periodIndex(cutoffDate.getMonth() + 1, cutoffDate.getFullYear()) - periodIndex(month, year);
+  if (offset < 0 || offset > 1) {
+    return errorState(`Ngày chốt lương T${month}/${year} phải nằm trong tháng ${month} hoặc tháng kế tiếp.`);
+  }
+
+  await prisma.$transaction([
+    prisma.salaryMonthCutoff.upsert({
+      where: { year_month: { year, month } },
+      update: { cutoffDate },
+      create: { year, month, cutoffDate }
+    }),
+    audit({ cutoffDate: data.cutoffDate })
+  ]);
+  revalidateFinancialPaths();
+  return successState(
+    `Đã đặt ngày chốt lương T${month}/${year} là ${formatDayMonth(cutoffDate)}: HS nộp sau ngày này tính sang lương tháng sau.`
+  );
 }
