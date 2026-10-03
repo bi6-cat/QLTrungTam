@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, CalendarCheck, Hourglass, Users } from "lucide-react";
+import { Archive, Banknote, CalendarCheck, Hourglass, Users } from "lucide-react";
 import { deleteExpenseAction } from "@/lib/actions/finance";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import {
@@ -15,6 +15,7 @@ import { periodIndex } from "@/lib/enrollment-period";
 import { formatCurrency, formatDayMonth, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import {
+  buildSalaryLedger,
   buildTeacherSalaryMessage,
   getPendingSalaryLines,
   loadDefaultSalaryCutoff,
@@ -114,7 +115,12 @@ export default async function SalaryPage({
     };
   });
 
-  const shown = selectedTeacher ? ledger.filter((teacher) => teacherParam(teacher) === selectedTeacher) : ledger;
+  // Lớp đã lưu trữ tách xuống mục riêng cuối trang cho đỡ rối; mỗi phần tự cộng lại theo giáo viên.
+  const lines = ledger.flatMap((teacher) => teacher.classes.flatMap((classRoom) => classRoom.periods));
+  const byTeacher = (list: TeacherLedger[]) =>
+    selectedTeacher ? list.filter((teacher) => teacherParam(teacher) === selectedTeacher) : list;
+  const shown = byTeacher(buildSalaryLedger(lines.filter((line) => !line.archived)));
+  const shownArchived = byTeacher(buildSalaryLedger(lines.filter((line) => line.archived)));
   const owedTotal = ledger.reduce((sum, teacher) => sum + teacher.owed, 0);
   const waitingTotal = ledger.reduce((sum, teacher) => sum + teacher.waitingShare, 0);
   const currentDue = ledger
@@ -237,7 +243,7 @@ export default async function SalaryPage({
 
       <SalaryMonthCutoffs rows={cutoffRows} ruleLabel={describeSalaryCutoff(defaultCutoff)} />
 
-      {shown.length === 0 ? (
+      {shown.length === 0 && shownArchived.length === 0 ? (
         <EmptyState title="Chưa có lương giáo viên để theo dõi" icon={<Users className="h-6 w-6" />}>
           Khai % lương giáo viên ở Lớp học → Sửa lớp. Khi có học phí đã thu, lương từng tháng sẽ tự hiện ở đây.
         </EmptyState>
@@ -246,7 +252,48 @@ export default async function SalaryPage({
           <TeacherPanel key={teacherParam(teacher)} teacher={teacher} currentIndex={currentIndex} now={now} />
         ))
       )}
+
+      {shownArchived.length > 0 ? (
+        <ArchivedSection teachers={shownArchived} currentIndex={currentIndex} now={now} />
+      ) : null}
     </div>
+  );
+}
+
+/** Lương các lớp đã lưu trữ: thu gọn mặc định, tự mở khi còn nợ giáo viên để không bị sót. */
+function ArchivedSection({
+  teachers,
+  currentIndex,
+  now
+}: {
+  teachers: TeacherLedger[];
+  currentIndex: number;
+  now: Date;
+}) {
+  const classCount = teachers.reduce((sum, teacher) => sum + teacher.classes.length, 0);
+  const owed = teachers.reduce((sum, teacher) => sum + teacher.owed, 0);
+  return (
+    <details className="group rounded-2xl border border-stone-200/80 bg-stone-50/60 shadow-soft" open={owed > 0}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-4">
+        <span className="flex items-center gap-2 font-bold text-stone-700">
+          <Archive className="h-5 w-5 text-stone-500" />
+          Lớp đã lưu trữ ({classCount} lớp)
+        </span>
+        <span className="text-xs text-stone-500">
+          {owed > 0 ? (
+            <span className="font-semibold text-warning">Còn thiếu {formatCurrency(owed)}</span>
+          ) : (
+            "Đã trả đủ"
+          )}{" "}
+          <span className="font-semibold text-primary group-open:hidden">· Xem</span>
+        </span>
+      </summary>
+      <div className="grid gap-6 border-t border-stone-200 p-4">
+        {teachers.map((teacher) => (
+          <TeacherPanel key={teacherParam(teacher)} teacher={teacher} currentIndex={currentIndex} now={now} />
+        ))}
+      </div>
+    </details>
   );
 }
 

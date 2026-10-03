@@ -53,7 +53,7 @@ function StudentButton({ student, onSelect }: { student: Student; onSelect: (id:
         <UserRound className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-base font-semibold text-neutralText">{student.fullName}</span>
+        <span className="block break-words text-base font-semibold leading-snug text-neutralText">{student.fullName}</span>
         {student.hint ? <span className="block text-xs text-stone-500">{student.hint}</span> : null}
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-stone-400" />
@@ -116,8 +116,9 @@ function ScrollList({ children, rowCount }: { children: React.ReactNode; rowCoun
   };
 
   return (
-    <div className="grid gap-1.5">
-      <div className="relative rounded-xl border border-stone-200">
+    // min-w-0: khung không được nở theo tên dài nhất, tên dài tự rút gọn "…" trên máy màn hình hẹp.
+    <div className="grid min-w-0 gap-1.5">
+      <div className="relative min-w-0 rounded-xl border border-stone-200">
         <div
           ref={listRef}
           role="list"
@@ -164,18 +165,18 @@ function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: 
   const results = query.trim() ? students.filter((student) => matchesName(student.fullName, query)) : students;
 
   return (
-    <div className="mt-3 grid gap-3">
+    <div className="mt-3 grid min-w-0 gap-3">
       <label className="relative block">
         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder={`Tìm tên trong ${students.length} học sinh`}
+          placeholder="Gõ tên để tìm"
           aria-label="Tìm tên học sinh"
           autoComplete="off"
           enterKeyHint="search"
-          className="focus-ring h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-10 text-base shadow-sm transition-colors placeholder:text-stone-400 hover:border-stone-400 focus:border-primary"
+          className={`focus-ring h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 ${query ? "pr-10" : "pr-3"} text-base shadow-sm transition-colors placeholder:text-stone-400 hover:border-stone-400 focus:border-primary`}
         />
         {query ? (
           <button
@@ -496,7 +497,7 @@ export function PaymentFlow({
               <UserRound className="h-5 w-5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-base font-bold text-neutralText">{selectedStudent.fullName}</span>
+              <span className="block break-words text-base font-bold leading-snug text-neutralText">{selectedStudent.fullName}</span>
               {selectedStudent.hint ? <span className="block text-xs text-stone-500">{selectedStudent.hint}</span> : null}
             </span>
             <Button
