@@ -4,11 +4,12 @@ import { TransactionMatchForm } from "@/components/TransactionMatchForm";
 import { TransactionDetailsButton } from "@/components/TransactionDetailsButton";
 import { TransactionReference } from "@/components/TransactionReference";
 import { TransactionReviewActions } from "@/components/TransactionReviewActions";
-import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
+import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { periodIndex } from "@/lib/enrollment-period";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 const LIST_PAGE_SIZE = 12;
@@ -260,21 +261,9 @@ export default async function TransactionsPage({
       <PageHeader
         title="Giao dịch"
         description="Học phí theo kỳ (tháng của hóa đơn) và tiền về theo ngày giao dịch là hai cách xem khác nhau: tiền tháng 9 đóng muộn trong tháng 10 nằm ở kỳ T9 nhưng là tiền về T10."
+        actions={<MonthSwitcher basePath="/admin/transactions" month={selectedMonth} year={selectedYear} />}
       />
 
-      <Panel>
-        <form action="/admin/transactions" method="GET" className="grid items-end gap-3 sm:grid-cols-[140px_160px_auto]">
-          <Field label="Lọc tháng">
-            <Input name="month" type="number" min="1" max="12" defaultValue={selectedMonth} />
-          </Field>
-          <Field label="Năm">
-            <Input name="year" type="number" min="2020" defaultValue={selectedYear} />
-          </Field>
-          <Button type="submit" variant="secondary" className="sm:w-fit">
-            Xem lịch sử
-          </Button>
-        </form>
-      </Panel>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard

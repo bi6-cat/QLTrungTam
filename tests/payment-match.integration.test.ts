@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, afterEach, before, describe, test } from "node:test";
 
-import { assignTransactionToInvoice, recordCashPayment, unassignTransaction } from "../src/lib/ledger";
+import { assignTransactionToInvoice, unassignTransaction } from "../src/lib/ledger";
 import { matchInvoiceFromTransaction } from "../src/lib/payment";
 import { prisma } from "../src/lib/prisma";
 import {
@@ -104,8 +104,9 @@ describe("memo matching", { concurrency: false }, () => {
     assert.equal(reopened.status, "unpaid");
     assert.equal(reopened.paidAmount, null);
 
-    await recordCashPayment({ invoiceId: invoice.id, actor: harness.actor });
-    const cash = await prisma.monthlyInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
-    assert.equal(cash.paidAmount, 800_000);
+    const exact = await harness.createBankTransaction({ amount: 800_000 });
+    await assignTransactionToInvoice({ transactionId: exact.id, invoiceId: invoice.id, actor: harness.actor });
+    const repaid = await prisma.monthlyInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    assert.equal(repaid.paidAmount, 800_000);
   });
 });

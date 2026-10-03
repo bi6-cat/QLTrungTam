@@ -4,12 +4,9 @@ import { errorState, successState, type ResultState } from "@/lib/action-states"
 import { actionFailure, revalidateFinancialPaths, runSerializableAction } from "@/lib/actions/shared";
 import { requireAdmin } from "@/lib/auth";
 import { isEnrollmentActiveInPeriod } from "@/lib/enrollment-period";
-import { formatCurrency } from "@/lib/format";
 import { changeInvoiceLifecycle, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
-import { LedgerError, recordCashPayment } from "@/lib/ledger";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
-import { settledSalaryNote } from "@/lib/salary";
 import { safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
 
 function clampSessions(value: FormDataEntryValue | null) {
@@ -186,32 +183,6 @@ async function saveClassDetails(
     }
     return summary;
   });
-}
-
-// Client gọi thẳng action thay vì fetch API rồi router.refresh(): revalidatePath trong
-// action gửi kèm dữ liệu mới của trang hiện tại trong cùng response.
-export async function recordCashPaymentAction(invoiceId: string): Promise<ResultState> {
-  const session = await requireAdmin();
-  try {
-    await recordCashPayment({ invoiceId: String(invoiceId), actor: session });
-  } catch (error) {
-    // Bấm lặp hóa đơn đã đóng không tạo thêm giao dịch; chỉ làm mới để thấy trạng thái thật.
-    if (!(error instanceof LedgerError && error.code === "INVOICE_ALREADY_PAID")) {
-      return actionFailure(error, "Không ghi nhận được tiền mặt.");
-    }
-  }
-
-  revalidateFinancialPaths();
-  const invoice = await prisma.monthlyInvoice.findUnique({
-    where: { id: String(invoiceId) },
-    select: { amount: true, month: true, year: true, studentNameSnapshot: true }
-  });
-  const note = await settledSalaryNote(String(invoiceId));
-  return successState(
-    invoice
-      ? `Đã thu tiền mặt ${formatCurrency(invoice.amount)} · ${invoice.studentNameSnapshot ?? "học sinh"} T${invoice.month}/${invoice.year}.${note}`
-      : "Đã ghi nhận tiền mặt."
-  );
 }
 
 const LIFECYCLE_TARGETS = new Set<InvoiceLifecycleStatus>(["unpaid", "void", "waived"]);

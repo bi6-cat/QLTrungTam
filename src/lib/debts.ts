@@ -130,19 +130,119 @@ export async function getOutstandingDebts(options?: {
     byStudent.set(student.id, row);
   }
 
-  // Nợ lâu nhất lên đầu, cùng mức thì số tiền lớn hơn lên trước.
-  const rows = [...byStudent.values()].sort(
-    (left, right) => right.oldestOverdue - left.oldestOverdue || right.totalAmount - left.totalAmount
-  );
+  // Mặc định nợ lâu nhất lên đầu, cùng mức thì số tiền lớn hơn lên trước.
+  const rows = sortDebtRows([...byStudent.values()], "oldest");
+  return { rows, ...summarizeDebtRows(rows) };
+}
 
+export type DebtSort = "oldest" | "newest" | "amount" | "name";
+
+export const DEBT_SORTS: Array<{ value: DebtSort; label: string }> = [
+  { value: "oldest", label: "Nợ lâu nhất trước" },
+  { value: "newest", label: "Tháng gần nhất trước" },
+  { value: "amount", label: "Nợ nhiều tiền nhất" },
+  { value: "name", label: "Tên học sinh A→Z" }
+];
+
+export function parseDebtSort(value: string | undefined): DebtSort {
+  return DEBT_SORTS.some((item) => item.value === value) ? (value as DebtSort) : "oldest";
+}
+
+export type DebtPeriod = {
+  key: string;
+  month: number;
+  year: number;
+  amount: number;
+  invoiceCount: number;
+  studentCount: number;
+};
+
+export function debtPeriodKey(month: number, year: number) {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+/** "2026-09" → { month: 9, year: 2026 }; sai định dạng → null. */
+export function parseDebtPeriod(value: string | undefined) {
+  const match = /^(\d{4})-(\d{2})$/.exec(value ?? "");
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12 ? { month, year } : null;
+}
+
+/** Tổng nợ theo từng tháng học phí, tháng gần nhất trước. */
+export function summarizeDebtPeriods(rows: DebtRow[]): DebtPeriod[] {
+  const periods = new Map<string, DebtPeriod & { students: Set<string> }>();
+  for (const row of rows) {
+    for (const invoice of row.invoices) {
+      const key = debtPeriodKey(invoice.month, invoice.year);
+      const period =
+        periods.get(key) ??
+        { key, month: invoice.month, year: invoice.year, amount: 0, invoiceCount: 0, studentCount: 0, students: new Set<string>() };
+      period.amount += invoice.amount;
+      period.invoiceCount += 1;
+      period.students.add(row.studentId);
+      periods.set(key, period);
+    }
+  }
+  return [...periods.values()]
+    .map(({ students, ...period }) => ({ ...period, studentCount: students.size }))
+    .sort((a, b) => monthIndex(b.month, b.year) - monthIndex(a.month, a.year));
+}
+
+/**
+ * Chỉ giữ các khoản nợ của một tháng (tổng và mức quá hạn tính lại theo tháng đó). Tin nhắc nợ
+ * vẫn nên dựng từ dòng đầy đủ để phụ huynh thấy hết các khoản.
+ */
+export function filterDebtRowsByPeriod(rows: DebtRow[], period: { month: number; year: number }): DebtRow[] {
+  return rows.flatMap((row) => {
+    const invoices = row.invoices.filter(
+      (invoice) => invoice.month === period.month && invoice.year === period.year
+    );
+    if (invoices.length === 0) return [];
+    return [
+      {
+        ...row,
+        invoices,
+        classes: row.classes.filter((classRoom) =>
+          invoices.some((invoice) => invoice.classShortCode === classRoom.shortCode)
+        ),
+        totalAmount: invoices.reduce((sum, invoice) => sum + invoice.amount, 0),
+        oldestOverdue: Math.max(...invoices.map((invoice) => invoice.monthsOverdue))
+      }
+    ];
+  });
+}
+
+export function sortDebtRows(rows: DebtRow[], sort: DebtSort): DebtRow[] {
+  const newestIndex = (row: DebtRow) => Math.max(...row.invoices.map((invoice) => monthIndex(invoice.month, invoice.year)));
+  const collator = new Intl.Collator("vi");
+  return [...rows].sort((left, right) => {
+    switch (sort) {
+      case "newest":
+        return newestIndex(right) - newestIndex(left) || right.totalAmount - left.totalAmount;
+      case "amount":
+        return right.totalAmount - left.totalAmount || right.oldestOverdue - left.oldestOverdue;
+      case "name":
+        return collator.compare(left.studentName, right.studentName);
+      default:
+        return right.oldestOverdue - left.oldestOverdue || right.totalAmount - left.totalAmount;
+    }
+  });
+}
+
+export function summarizeDebtRows(rows: DebtRow[]) {
   const overdueRows = rows.filter((row) => row.oldestOverdue > 0);
   return {
-    rows,
     totalAmount: rows.reduce((sum, row) => sum + row.totalAmount, 0),
     studentCount: rows.length,
-    invoiceCount: invoices.length,
+    invoiceCount: rows.reduce((sum, row) => sum + row.invoices.length, 0),
     overdueStudentCount: overdueRows.length,
-    overdueAmount: overdueRows.reduce((sum, row) => sum + row.totalAmount, 0)
+    overdueAmount: overdueRows.reduce(
+      (sum, row) =>
+        sum + row.invoices.filter((invoice) => invoice.monthsOverdue > 0).reduce((total, invoice) => total + invoice.amount, 0),
+      0
+    )
   };
 }
 

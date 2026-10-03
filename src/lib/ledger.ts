@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
 
@@ -49,12 +48,6 @@ export type TransactionReasonInput = {
   transactionId: string;
   actor: LedgerActor;
   reason: string;
-};
-
-export type RecordCashPaymentInput = {
-  invoiceId: string;
-  actor: LedgerActor;
-  reason?: string;
 };
 
 export type LedgerMutationResult = {
@@ -547,92 +540,5 @@ export async function resolveUnmatchedTransaction(
     });
 
     return { transactionId: transaction.id, invoiceId: null, occurredAt: resolvedAt };
-  });
-}
-
-/** Records a cash receipt and claims the invoice without exposing a race window. */
-export async function recordCashPayment(input: RecordCashPaymentInput): Promise<LedgerMutationResult> {
-  assertActor(input.actor);
-  const reason = optionalReason(input.reason);
-
-  return runSerializable(async (tx) => {
-    const invoice = await tx.monthlyInvoice.findUnique({
-      where: { id: input.invoiceId },
-      select: {
-        id: true,
-        amount: true,
-        status: true,
-        transactionId: true,
-        month: true,
-        year: true,
-        enrollment: {
-          select: {
-            student: { select: { fullName: true } },
-            classRoom: { select: { shortCode: true } }
-          }
-        }
-      }
-    });
-    if (!invoice) {
-      throw new LedgerError("INVOICE_NOT_FOUND", "Không tìm thấy hóa đơn.");
-    }
-    assertInvoiceAvailable(invoice);
-
-    const paidAt = new Date();
-    const claimedInvoice = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "unpaid", transactionId: null },
-      data: { status: "paid", paidAt, paidAmount: invoice.amount }
-    });
-    if (claimedInvoice.count !== 1) {
-      throw new LedgerError(
-        "CONCURRENT_MODIFICATION",
-        "Hóa đơn vừa được thanh toán hoặc thay đổi bởi thao tác khác."
-      );
-    }
-
-    const transaction = await tx.transaction.create({
-      data: {
-        gatewayRef: `CASH-${invoice.id}-${randomUUID()}`,
-        amount: invoice.amount,
-        rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
-        transferredAt: paidAt,
-        paymentMethod: "cash",
-        matchedInvoiceId: invoice.id,
-        matchedAt: paidAt,
-        matchReason: "manual_cash_payment",
-        rawPayload: {
-          method: "cash",
-          source: "admin_manual_cash",
-          invoiceId: invoice.id
-        }
-      },
-      select: { id: true }
-    });
-
-    const linkedInvoice = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "paid", transactionId: null },
-      data: { transactionId: transaction.id }
-    });
-    if (linkedInvoice.count !== 1) {
-      throw new LedgerError(
-        "CONCURRENT_MODIFICATION",
-        "Không thể hoàn tất liên kết giao dịch tiền mặt với hóa đơn."
-      );
-    }
-
-    await writeAudit(tx, {
-      actor: input.actor,
-      action: "transaction.cash_recorded",
-      entityType: "Transaction",
-      entityId: transaction.id,
-      reason,
-      metadata: {
-        invoiceId: invoice.id,
-        amount: invoice.amount,
-        paymentMethod: "cash"
-      }
-    });
-
-    return { transactionId: transaction.id, invoiceId: invoice.id, occurredAt: paidAt };
   });
 }

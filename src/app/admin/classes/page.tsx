@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, Archive, Layers3 } from "lucide-react";
-import { Button, EmptyState, Field, Input, Panel, PageHeader } from "@/components/ui";
+import { EmptyState, Panel, PageHeader } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +20,7 @@ import {
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
 import { CreateClassForm } from "@/components/CreateClassForm";
 import { requireAdmin } from "@/lib/auth";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 
@@ -255,19 +256,12 @@ export default async function ClassesPage({
                     {selectedClass.sessionsPerMonthDefault} buổi mặc định
                   </p>
                 </div>
-                <form action="/admin/classes" method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
-                  <input type="hidden" name="classId" value={selectedClass.id} />
-                  {showArchived ? <input type="hidden" name="archived" value="1" /> : null}
-                  <Field label="Tháng">
-                    <Input name="month" type="number" min="1" max="12" defaultValue={month} />
-                  </Field>
-                  <Field label="Năm">
-                    <Input name="year" type="number" min="2020" defaultValue={year} />
-                  </Field>
-                  <Button type="submit" variant="secondary" className="self-end">
-                    Xem tháng
-                  </Button>
-                </form>
+                <MonthSwitcher
+                  basePath="/admin/classes"
+                  month={month}
+                  year={year}
+                  params={{ classId: selectedClass.id, archived: showArchived ? "1" : undefined }}
+                />
               </div>
 
               {duplicatePhones.size > 0 ? (

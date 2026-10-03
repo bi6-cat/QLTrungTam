@@ -7,6 +7,7 @@ import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { MoneyInput } from "@/components/MoneyInput";
 
 type ClassInfo = {
   id: string;
@@ -61,13 +62,7 @@ function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Giá / buổi">
-            <Input
-              name="pricePerSession"
-              type="number"
-              min="0"
-              defaultValue={classRoom.pricePerSession}
-              required
-            />
+            <MoneyInput name="pricePerSession" defaultValue={classRoom.pricePerSession} required />
           </Field>
           <Field label="Buổi / tháng">
             <Input
@@ -88,6 +83,7 @@ function EditClassDialog({ classRoom, onClose }: { classRoom: ClassInfo; onClose
             max="100"
             step="1"
             defaultValue={classRoom.teacherSharePercent}
+            required
           />
         </Field>
         {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}

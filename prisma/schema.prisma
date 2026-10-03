@@ -88,10 +88,13 @@ model Expense {
   classId        String?
   description    String
   amount         Int
-  /// Chỉ dùng khi category = teacher_salary: % chia và học phí đã thu của kỳ lúc chốt.
-  /// Lương luôn tính theo đúng kỳ học phí; thu muộn/hoàn tiền tạo bản ghi bổ sung cùng kỳ.
+  /// Chỉ dùng khi category = teacher_salary: mỗi bản ghi là MỘT lần chuyển lương cho kỳ học
+  /// phí (month/year); một kỳ có thể chuyển nhiều lần (trả trước, chuyển bù khi HS nộp muộn).
+  /// sharePercent/baseAmount: % chia và học phí kỳ đã thu tại lúc ghi.
   sharePercent   Int?
   baseAmount     Int?
+  /// Ngày chuyển tiền thực tế (lương giáo viên); có thể khác ngày ghi vào hệ thống.
+  paidAt         DateTime?
   note           String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt

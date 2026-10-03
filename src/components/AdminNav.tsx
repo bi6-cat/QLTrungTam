@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Banknote,
   BookOpen,
   CalendarDays,
   FileSpreadsheet,
@@ -24,6 +25,7 @@ const nav = [
   { href: "/admin/debts", label: "Công nợ", icon: Wallet },
   { href: "/admin/transactions", label: "Giao dịch", icon: ReceiptText },
   { href: "/admin/finance", label: "Thu chi", icon: PiggyBank },
+  { href: "/admin/salary", label: "Lương GV", icon: Banknote },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings }
 ];

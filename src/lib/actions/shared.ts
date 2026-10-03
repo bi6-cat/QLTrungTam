@@ -35,6 +35,7 @@ export function revalidateFinancialPaths() {
   revalidatePath("/admin/debts");
   revalidatePath("/admin/transactions");
   revalidatePath("/admin/finance");
+  revalidatePath("/admin/salary");
   revalidatePath("/pay/[short_code]", "page");
   revalidatePath("/teacher/classes/[short_code]", "page");
 }

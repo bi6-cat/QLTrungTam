@@ -7,10 +7,10 @@ import { loadSalaryLines, type SalaryLine } from "@/lib/salary";
  * Hai góc nhìn tách bạch, không trộn:
  *
  * 1. Lãi/lỗ theo KỲ HỌC PHÍ (tháng dạy): doanh thu = tiền thực thu của hóa đơn thuộc kỳ,
- *    lương GV = % × doanh thu đó (dù chốt lúc nào), chi phí khác = chi phí ghi cho kỳ.
+ *    lương GV = % × doanh thu đó (dù chuyển lúc nào), chi phí khác = chi phí ghi cho kỳ.
  *    Tiền tháng 9 nộp muộn vẫn là doanh thu và lương của tháng 9.
  * 2. Dòng tiền trong THÁNG (theo ngày tiền về): tiền thực nhận trong tháng, tách theo kỳ học
- *    phí và hình thức — dùng để đối chiếu sao kê ngân hàng/quỹ tiền mặt.
+ *    phí và hình thức — dùng để đối chiếu sao kê ngân hàng.
  */
 
 export type ClassMargin = {
@@ -44,9 +44,9 @@ export type MonthlyFinance = {
   collectedShortfall: number;
   outstanding: number;
   waived: number;
-  /** Lương phải trả theo học phí đã thu của kỳ (kể cả phần chưa chốt). */
+  /** Lương phải trả theo học phí đã thu của kỳ (kể cả phần chưa chuyển). */
   teacherCost: number;
-  /** Lương đã chốt (đã ghi thành chi phí) của kỳ. */
+  /** Lương đã chuyển (tổng các lần chuyển đã ghi) của kỳ. */
   teacherSettled: number;
   otherCost: number;
   totalCost: number;

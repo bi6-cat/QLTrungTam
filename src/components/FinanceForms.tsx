@@ -1,54 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCheck, Plus } from "lucide-react";
-import { createExpenseAction, settleTeacherSalaryAction } from "@/lib/actions/finance";
+import Link from "next/link";
+import { AlertTriangle, Plus } from "lucide-react";
+import { createExpenseAction } from "@/lib/actions/finance";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { MoneyInput } from "@/components/MoneyInput";
 import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { EXPENSE_CATEGORIES } from "@/lib/schedule";
-import { formatCurrency } from "@/lib/format";
-
-/**
- * Chốt lương một giáo viên trong kỳ: ghi phần chênh lệch (lương lần đầu, bổ sung thu muộn
- * hoặc điều chỉnh giảm) của các lớp của người đó thành chi phí của chính kỳ này.
- */
-export function SettleSalaryButton({
-  month,
-  year,
-  teacherName,
-  classIds,
-  difference
-}: {
-  month: number;
-  year: number;
-  teacherName: string;
-  classIds: string[];
-  difference: number;
-}) {
-  const [state, action, pending] = useActionState(settleTeacherSalaryAction, EMPTY_RESULT_STATE);
-  useResultToast(state, { showError: true });
-
-  return (
-    <form action={action}>
-      <input type="hidden" name="month" value={month} />
-      <input type="hidden" name="year" value={year} />
-      {classIds.map((classId) => (
-        <input key={classId} type="hidden" name="classId" value={classId} />
-      ))}
-      <Button
-        type="submit"
-        variant={difference < 0 ? "secondary" : "accent"}
-        className="h-9 whitespace-nowrap px-3 text-xs"
-        disabled={pending}
-        title={`Ghi ${difference < 0 ? "điều chỉnh giảm" : "lương"} ${formatCurrency(Math.abs(difference))} cho ${teacherName || "giáo viên"} vào chi phí tháng ${month}/${year}`}
-      >
-        <CheckCheck className="h-4 w-4" />
-        {pending ? "Đang chốt..." : difference < 0 ? `Chốt giảm ${formatCurrency(-difference)}` : `Chốt ${formatCurrency(difference)}`}
-      </Button>
-    </form>
-  );
-}
 
 export function AddExpenseForm({
   month,
@@ -61,6 +21,7 @@ export function AddExpenseForm({
 }) {
   const [state, action, pending] = useActionState(createExpenseAction, EMPTY_RESULT_STATE);
   const [category, setCategory] = useState("other");
+  const [resetKey, setResetKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const isSalary = category === "teacher_salary";
   useResultToast(state);
@@ -70,6 +31,7 @@ export function AddExpenseForm({
     if (!state.success) return;
     formRef.current?.reset();
     setCategory("other");
+    setResetKey((value) => value + 1);
   }, [state]);
 
   return (
@@ -91,13 +53,16 @@ export function AddExpenseForm({
         </Select>
       </Field>
       <Field label="Số tiền">
-        <Input name="amount" type="number" min="1" required inputMode="numeric" />
+        <MoneyInput key={resetKey} name="amount" required placeholder="0" />
       </Field>
       <div className="lg:col-span-2">
         {isSalary ? (
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Lương theo lớp được tính tự động ở bảng <strong>Lương giáo viên</strong> phía trên. Ở đây chỉ nhập
-            khoản lương chung không gắn lớp (vd lương cố định).
+            Lương theo lớp ghi ở trang{" "}
+            <Link href="/admin/salary" className="font-semibold underline">
+              Lương GV
+            </Link>
+            . Ở đây chỉ nhập khoản lương chung không gắn lớp (vd lương cố định).
           </p>
         ) : (
           <Field label="Gắn với lớp" hint="Không bắt buộc">

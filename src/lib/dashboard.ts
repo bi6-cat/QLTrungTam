@@ -60,7 +60,7 @@ export type DashboardData = {
     unmatchedTransactions: number;
     classesWithoutSchedule: number;
     classesWithoutTeacherRate: number;
-    /** Số lớp-kỳ đã qua còn chênh lệch lương (chưa chốt, thu muộn hoặc hoàn tiền sau chốt). */
+    /** Số lớp-kỳ đã qua còn lệch lương (chưa chuyển đủ, HS nộp muộn sau khi chuyển, hoặc học phí bị hoàn). */
     salaryPending: number;
   };
   trend: TrendPoint[];

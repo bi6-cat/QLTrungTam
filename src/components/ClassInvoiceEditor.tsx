@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
 import { updateClassDetailsAction } from "@/lib/actions/billing";
 import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
-import { DebtCashButton } from "@/components/DebtCashButton";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
 import { toast } from "@/components/Toaster";
 import { LeaveClassButton } from "@/components/LeaveClassButton";
@@ -414,15 +413,7 @@ export function ClassInvoiceEditor({
                         />
                       ) : null}
                       {invoice?.status === "unpaid" ? (
-                        <div className="flex flex-nowrap items-center justify-end gap-1">
-                          <DebtCashButton
-                            invoiceId={invoice.id}
-                            amount={invoice.amount}
-                            disabled={editing}
-                            disabledTitle="Lưu hoặc hủy bản nháp trước khi ghi nhận tiền mặt"
-                          />
-                          <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" disabled={editing} />
-                        </div>
+                        <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" disabled={editing} />
                       ) : invoice?.status === "paid" ? (
                         <span className="inline-flex items-center justify-end gap-1 text-xs font-semibold text-success">
                           <Lock className="h-3.5 w-3.5" />

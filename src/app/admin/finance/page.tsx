@@ -1,9 +1,6 @@
 import Link from "next/link";
 import {
-  AlertTriangle,
   Banknote,
-  ChevronLeft,
-  ChevronRight,
   Coins,
   LineChart,
   PiggyBank,
@@ -13,34 +10,21 @@ import {
   Users
 } from "lucide-react";
 import { deleteExpenseAction } from "@/lib/actions/finance";
-import { AddExpenseForm, SettleSalaryButton } from "@/components/FinanceForms";
+import { AddExpenseForm } from "@/components/FinanceForms";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
-import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
-import { periodIndex } from "@/lib/enrollment-period";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
+import { SalaryPendingAlert } from "@/components/SalaryPendingAlert";
+import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { getFinanceTrend, getMonthlyFinance } from "@/lib/finance";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { getPendingSalaryLines, groupSalaryByTeacher, type SalaryLine } from "@/lib/salary";
+import { getPendingSalaryLines, groupSalaryByTeacher, salaryStatus } from "@/lib/salary";
 import { expenseCategoryLabel } from "@/lib/schedule";
 import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-function shiftPeriod(month: number, year: number, delta: number) {
-  const index = periodIndex(month, year) + delta;
-  return { month: (index % 12) + 1, year: Math.floor(index / 12) };
-}
-
-function salaryStatus(line: SalaryLine): { label: string; tone: "success" | "warning" | "primary" | "neutral" } {
-  if (line.mode === "manual") return { label: "Nhập tay", tone: "neutral" };
-  if (line.difference === 0) {
-    return line.paidOut !== 0 ? { label: "Đã chốt", tone: "success" } : { label: "Chưa có thu", tone: "neutral" };
-  }
-  if (line.paidOut === 0) return { label: "Chưa chốt", tone: "warning" };
-  return line.difference > 0
-    ? { label: "Thu thêm sau chốt · cần bổ sung", tone: "warning" }
-    : { label: "Đã trả thừa · cần điều chỉnh", tone: "primary" };
-}
+const dateFormat = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 
 export default async function FinancePage({
   searchParams
@@ -56,8 +40,6 @@ export default async function FinancePage({
     Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12 ? parsedMonth : now.getMonth() + 1;
   const year =
     Number.isInteger(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100 ? parsedYear : now.getFullYear();
-  const previous = shiftPeriod(month, year, -1);
-  const next = shiftPeriod(month, year, 1);
 
   const [finance, trend, pendingSalary, expenses, classes] = await Promise.all([
     getMonthlyFinance(month, year),
@@ -74,6 +56,7 @@ export default async function FinancePage({
         sharePercent: true,
         baseAmount: true,
         note: true,
+        paidAt: true,
         createdAt: true,
         classRoom: { select: { name: true, shortCode: true } }
       }
@@ -87,7 +70,7 @@ export default async function FinancePage({
 
   const teacherGroups = groupSalaryByTeacher(finance.salaryLines);
   const unsettled = finance.teacherCost - finance.teacherSettled;
-  const otherPending = pendingSalary.filter((line) => line.month !== month || line.year !== year);
+  const owedPast = pendingSalary.filter((line) => line.difference > 0);
   const profitTone = finance.profit > 0 ? "success" : finance.profit < 0 ? "warning" : "neutral";
 
   return (
@@ -95,38 +78,13 @@ export default async function FinancePage({
       <PageHeader
         title="Thu chi"
         description="Lãi/lỗ tính theo kỳ học phí: học phí của tháng nào (dù nộp muộn) và lương giáo viên tương ứng đều nằm ở đúng tháng đó."
+        actions={<MonthSwitcher basePath="/admin/finance" month={month} year={year} />}
       />
 
-      <Panel>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <form action="/admin/finance" method="GET" className="grid items-end gap-3 sm:grid-cols-[140px_160px_auto]">
-            <Field label="Tháng">
-              <Input name="month" type="number" min="1" max="12" defaultValue={month} />
-            </Field>
-            <Field label="Năm">
-              <Input name="year" type="number" min="2020" defaultValue={year} />
-            </Field>
-            <Button type="submit" variant="secondary" className="sm:w-fit">
-              Xem tháng
-            </Button>
-          </form>
-          <div className="flex gap-2">
-            <Link
-              href={`/admin/finance?month=${previous.month}&year=${previous.year}`}
-              className="focus-ring inline-flex h-11 items-center gap-1 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm hover:bg-stone-50"
-            >
-              <ChevronLeft className="h-4 w-4" />T{previous.month}/{previous.year}
-            </Link>
-            <Link
-              href={`/admin/finance?month=${next.month}&year=${next.year}`}
-              className="focus-ring inline-flex h-11 items-center gap-1 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm hover:bg-stone-50"
-            >
-              T{next.month}/{next.year}
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </Panel>
+      <SalaryPendingAlert
+        count={owedPast.length}
+        amount={owedPast.reduce((sum, line) => sum + line.difference, 0)}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -146,8 +104,8 @@ export default async function FinancePage({
           value={formatCurrency(finance.teacherCost)}
           hint={
             unsettled !== 0
-              ? `Đã chốt ${formatCurrency(finance.teacherSettled)} · còn ${formatCurrency(unsettled)} chưa chốt`
-              : `Đã chốt đủ ${formatCurrency(finance.teacherSettled)}`
+              ? `Đã chuyển ${formatCurrency(finance.teacherSettled)} · còn ${formatCurrency(unsettled)}`
+              : `Đã chuyển đủ ${formatCurrency(finance.teacherSettled)}`
           }
           icon={<Banknote className="h-5 w-5" />}
         />
@@ -178,7 +136,11 @@ export default async function FinancePage({
             <h2 className="font-bold">Lương giáo viên kỳ {formatMonth(month, year)}</h2>
           </div>
           <p className="text-xs text-stone-500">
-            Lương = % của lớp × học phí kỳ này đã thu. Tự cập nhật khi có tiền về; bấm Chốt để ghi vào chi phí.
+            Lương = % của lớp × học phí kỳ này đã thu, tự cập nhật khi có tiền về. Ghi các lần chuyển tiền ở{" "}
+            <Link href="/admin/salary" className="font-semibold text-primary hover:underline">
+              Lương GV
+            </Link>
+            .
           </p>
         </div>
         {teacherGroups.length === 0 ? (
@@ -195,14 +157,13 @@ export default async function FinancePage({
                   <th className="px-4 py-3">Giáo viên / Lớp</th>
                   <th className="px-4 py-3 text-right">Học phí đã thu</th>
                   <th className="px-4 py-3 text-right">Phải trả</th>
-                  <th className="px-4 py-3 text-right">Đã chốt</th>
-                  <th className="px-4 py-3 text-right">Chênh lệch</th>
+                  <th className="px-4 py-3 text-right">Đã chuyển</th>
+                  <th className="px-4 py-3 text-right">Còn nợ GV</th>
                   <th className="px-4 py-3">Tình trạng</th>
                 </tr>
               </thead>
               {teacherGroups.map((group) => {
-                const settleable = group.lines.filter((line) => line.mode === "percent" && line.difference !== 0);
-                const settleDifference = settleable.reduce((sum, line) => sum + line.difference, 0);
+                const open = group.lines.some((line) => line.mode === "percent" && line.difference !== 0);
                 return (
                   <tbody
                     key={group.teacherName || "__none"}
@@ -230,21 +191,20 @@ export default async function FinancePage({
                         {group.difference === 0 ? "—" : formatCurrency(group.difference)}
                       </td>
                       <td className="px-4 py-3">
-                        {settleable.length > 0 ? (
-                          <SettleSalaryButton
-                            month={month}
-                            year={year}
-                            teacherName={group.teacherName}
-                            classIds={settleable.map((line) => line.classId)}
-                            difference={settleDifference}
-                          />
-                        ) : (
-                          <span className="text-xs text-stone-400">Không cần chốt</span>
-                        )}
+                        <Link
+                          href={`/admin/salary?teacher=${encodeURIComponent(group.teacherName || "__none")}`}
+                          className={`focus-ring inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold ${
+                            open
+                              ? "bg-accent text-white shadow-sm hover:bg-amber-600"
+                              : "text-primary hover:bg-indigo-50"
+                          }`}
+                        >
+                          {open ? "Ghi chuyển lương" : "Xem sổ lương"}
+                        </Link>
                       </td>
                     </tr>
                     {group.lines.map((line) => {
-                      const status = salaryStatus(line);
+                      const status = salaryStatus({ ...line, waitingCount: 0, waitingShare: 0 });
                       return (
                         <tr key={line.classId} className="transition-colors hover:bg-stone-50">
                           <td className="px-4 py-2.5 pl-8">
@@ -286,39 +246,6 @@ export default async function FinancePage({
           </div>
         )}
       </Panel>
-
-      {otherPending.length > 0 ? (
-        <Panel className="border-amber-200 bg-amber-50/40">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <div className="min-w-0 flex-1">
-              <h2 className="font-bold">Kỳ trước còn chênh lệch lương</h2>
-              <p className="mt-1 text-sm text-stone-600">
-                Các kỳ này có học phí thu thêm, bị hoàn tác hoặc chưa chốt lương. Mở đúng tháng để chốt — tiền vẫn tính
-                cho tháng đó, không gộp sang tháng khác.
-              </p>
-              <div className="mt-3 grid gap-2">
-                {otherPending.map((line) => (
-                  <Link
-                    key={`${line.classId}-${line.year}-${line.month}`}
-                    href={`/admin/finance?month=${line.month}&year=${line.year}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm hover:border-amber-300"
-                  >
-                    <span>
-                      <strong>{formatMonth(line.month, line.year)}</strong> · {line.className}
-                      {line.teacherName ? ` · ${line.teacherName}` : ""}
-                    </span>
-                    <span className={`font-semibold ${line.difference > 0 ? "text-warning" : "text-primary"}`}>
-                      {line.paidOut === 0 ? "Chưa chốt" : line.difference > 0 ? "Cần bổ sung" : "Trả thừa"}{" "}
-                      {formatCurrency(Math.abs(line.difference))}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Panel>
-      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="overflow-hidden p-0">
@@ -414,7 +341,7 @@ export default async function FinancePage({
 
           <Panel>
             <h2 className="font-bold">Dòng tiền về trong {formatMonth(month, year)}</h2>
-            <p className="mt-1 text-xs text-stone-500">Theo ngày nhận tiền, để đối chiếu sao kê và quỹ tiền mặt.</p>
+            <p className="mt-1 text-xs text-stone-500">Theo ngày nhận tiền, để đối chiếu sao kê ngân hàng.</p>
             <dl className="mt-3 grid gap-1.5 text-sm">
               {(
                 [
@@ -422,8 +349,13 @@ export default async function FinancePage({
                   ["· Học phí kỳ này", finance.cashIn.currentPeriod, ""],
                   ["· Thu nợ kỳ trước", finance.cashIn.earlierPeriods, "text-warning"],
                   ["· Đóng trước kỳ sau", finance.cashIn.laterPeriods, ""],
-                  ["Chuyển khoản", finance.cashIn.bankTransfer, ""],
-                  ["Tiền mặt", finance.cashIn.cash, ""]
+                  // Tiền mặt chỉ còn ở dữ liệu cũ (nay nộp tiền mặt cũng chuyển qua QR).
+                  ...(finance.cashIn.cash !== 0
+                    ? ([
+                        ["Chuyển khoản", finance.cashIn.bankTransfer, ""],
+                        ["Tiền mặt (ghi tay cũ)", finance.cashIn.cash, ""]
+                      ] as const)
+                    : [])
                 ] as const
               ).map(([label, value, tone]) => (
                 <div key={label} className="flex items-center justify-between gap-3">
@@ -502,7 +434,7 @@ export default async function FinancePage({
         </div>
         {expenses.length === 0 ? (
           <div className="p-5">
-            <EmptyState title="Chưa có chi phí nào">Chốt lương ở bảng phía trên hoặc thêm chi phí thủ công.</EmptyState>
+            <EmptyState title="Chưa có chi phí nào">Ghi lương ở trang Lương GV hoặc thêm chi phí thủ công.</EmptyState>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -523,7 +455,7 @@ export default async function FinancePage({
                     <td className="px-4 py-3">
                       <div className="font-medium">{expense.description}</div>
                       <div className="text-xs text-stone-500">
-                        Ghi ngày {expense.createdAt.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+                        {expense.paidAt ? "Chuyển ngày" : "Ghi ngày"} {dateFormat.format(expense.paidAt ?? expense.createdAt)}
                         {expense.note ? ` · ${expense.note}` : ""}
                       </div>
                     </td>
@@ -535,7 +467,7 @@ export default async function FinancePage({
                     <td className="px-4 py-3 text-stone-600">{expense.classRoom?.shortCode ?? "Chung"}</td>
                     <td className="px-4 py-3 text-xs text-stone-500">
                       {expense.sharePercent !== null && expense.baseAmount !== null
-                        ? `${expense.sharePercent}% · lúc chốt đã thu ${formatCurrency(expense.baseAmount)}`
+                        ? `${expense.sharePercent}% · lúc ghi kỳ đã thu ${formatCurrency(expense.baseAmount)}`
                         : "Nhập tay"}
                     </td>
                     <td
@@ -555,7 +487,7 @@ export default async function FinancePage({
                             <>
                               Xóa <strong>{expense.description}</strong> ({formatCurrency(expense.amount)})?
                               {expense.category === "teacher_salary" && expense.classRoom
-                                ? " Phần lương này sẽ quay lại trạng thái chưa chốt."
+                                ? " Số này sẽ quay lại phần còn nợ giáo viên."
                                 : ""}
                             </>
                           }

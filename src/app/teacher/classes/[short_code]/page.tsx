@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, GraduationCap, Users } from "lucide-react";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
-import { Badge, Button, EmptyState, Field, Input } from "@/components/ui";
+import { Badge, EmptyState } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import {
   enrollmentVisibleInPeriodWhere,
@@ -14,6 +14,7 @@ import { resolveClassLink } from "@/lib/class-link-resolver";
 import { teacherPath } from "@/lib/class-links";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
@@ -140,17 +141,7 @@ export default async function TeacherClassPage({
                   {classRoom.sessionsPerMonthDefault} buổi mặc định
                 </p>
               </div>
-              <form action={teacherPath(classRoom)} method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
-                <Field label="Tháng">
-                  <Input name="month" type="number" min="1" max="12" defaultValue={month} />
-                </Field>
-                <Field label="Năm">
-                  <Input name="year" type="number" min="2020" defaultValue={year} />
-                </Field>
-                <Button type="submit" variant="secondary" className="self-end">
-                  Xem tháng
-                </Button>
-              </form>
+              <MonthSwitcher basePath={teacherPath(classRoom)} month={month} year={year} />
             </div>
           </div>
         </header>

@@ -206,6 +206,10 @@ export class LedgerTestHarness {
     await prisma.enrollment.deleteMany({
       where: { id: { startsWith: this.entityPrefix } }
     });
+    // Chi phí (lương) giữ lại khi xóa lớp (SET NULL) nên phải xóa trước theo lớp của test.
+    await prisma.expense.deleteMany({
+      where: { classId: { startsWith: this.entityPrefix } }
+    });
     await prisma.classRoom.deleteMany({
       where: { id: { startsWith: this.entityPrefix } }
     });

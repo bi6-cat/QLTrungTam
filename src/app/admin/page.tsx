@@ -9,10 +9,11 @@ import {
   Users,
   Wallet
 } from "lucide-react";
-import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
+import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { getDashboard } from "@/lib/dashboard";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { requireAdmin } from "@/lib/auth";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 
@@ -92,9 +93,9 @@ export default async function AdminHomePage({
           key: "salary",
           tone: "neutral" as const,
           icon: <Wallet className="h-4 w-4" />,
-          text: `${alerts.salaryPending} lớp ở các tháng trước còn chênh lệch lương (chưa chốt hoặc thu muộn sau khi chốt).`,
-          href: "/admin/finance",
-          cta: "Xem lương"
+          text: `${alerts.salaryPending} lớp-kỳ trước còn lệch lương giáo viên (học sinh nộp muộn sau khi đã chuyển lương, hoặc học phí bị hoàn).`,
+          href: "/admin/salary",
+          cta: "Mở Lương GV"
         }
       : null
   ].filter((item): item is NonNullable<typeof item> => item !== null);
@@ -108,19 +109,7 @@ export default async function AdminHomePage({
             ? "Theo dõi thu học phí theo từng lớp trong tháng hiện tại."
             : "Đang xem số liệu của một tháng trong quá khứ hoặc tương lai."
         }
-        actions={
-          <form action="/admin" method="GET" className="flex flex-wrap items-end gap-2">
-            <Field label="Tháng">
-              <Input name="month" type="number" min="1" max="12" defaultValue={month} className="w-24" />
-            </Field>
-            <Field label="Năm">
-              <Input name="year" type="number" min="2020" defaultValue={year} className="w-28" />
-            </Field>
-            <Button type="submit" variant="secondary">
-              Xem
-            </Button>
-          </form>
-        }
+        actions={<MonthSwitcher basePath="/admin" month={month} year={year} />}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

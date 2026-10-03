@@ -5,7 +5,6 @@ import {
   assignTransactionToInvoice,
   LedgerError,
   type LedgerErrorCode,
-  recordCashPayment,
   resolveUnmatchedTransaction,
   reverseTransaction,
   unassignTransaction
@@ -245,10 +244,6 @@ describe("financial ledger integration", { concurrency: false }, () => {
         }),
       "INVOICE_NOT_PAYABLE"
     );
-    await expectLedgerError(
-      () => recordCashPayment({ invoiceId: waivedInvoice.id, actor: harness.actor }),
-      "INVOICE_NOT_PAYABLE"
-    );
 
     const [storedTransaction, storedVoid, storedWaived, auditCount] = await Promise.all([
       prisma.transaction.findUniqueOrThrow({ where: { id: transaction.id } }),
@@ -393,43 +388,6 @@ describe("financial ledger integration", { concurrency: false }, () => {
           reason: "Lặp lại"
         }),
       "TRANSACTION_ALREADY_RESOLVED"
-    );
-  });
-
-  test("records cash with its payment method, dual links and audit", async () => {
-    const fixture = await harness.createFixture();
-    const invoice = await harness.createInvoice(fixture, { amount: 640_000 });
-    const reason = "Phụ huynh nộp tại quầy";
-
-    const result = await recordCashPayment({
-      invoiceId: invoice.id,
-      actor: harness.actor,
-      reason: ` ${reason} `
-    });
-
-    const [transaction, storedInvoice, audit] = await Promise.all([
-      prisma.transaction.findUniqueOrThrow({ where: { id: result.transactionId } }),
-      prisma.monthlyInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
-      prisma.auditLog.findFirstOrThrow({
-        where: { action: "transaction.cash_recorded", entityId: result.transactionId }
-      })
-    ]);
-    assert.equal(transaction.amount, 640_000);
-    assert.equal(transaction.paymentMethod, "cash");
-    assert.match(transaction.gatewayRef, new RegExp(`^CASH-${invoice.id}-`));
-    assert.equal(transaction.matchedInvoiceId, invoice.id);
-    assert.equal(transaction.matchReason, "manual_cash_payment");
-    assert.equal(storedInvoice.status, "paid");
-    assert.equal(storedInvoice.transactionId, transaction.id);
-    assert.equal(audit.reason, reason);
-    const metadata = jsonObject(audit.metadata);
-    assert.equal(metadata.invoiceId, invoice.id);
-    assert.equal(metadata.paymentMethod, "cash");
-    assert.equal(metadata.amount, 640_000);
-
-    await expectLedgerError(
-      () => recordCashPayment({ invoiceId: invoice.id, actor: harness.actor }),
-      "INVOICE_ALREADY_PAID"
     );
   });
 
