@@ -8,6 +8,7 @@ import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } 
 import { periodIndex } from "@/lib/enrollment-period";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 const LIST_PAGE_SIZE = 12;
@@ -23,6 +24,7 @@ export default async function TransactionsPage({
     unmatchedPage?: string;
   }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);

@@ -7,6 +7,7 @@ import { buildReminderMessage, buildZaloLink, getOutstandingDebts } from "@/lib/
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export default async function DebtsPage({
 }: {
   searchParams: Promise<{ classId?: string }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const classId = (params.classId || "").trim();
   const [settings, classes] = await Promise.all([

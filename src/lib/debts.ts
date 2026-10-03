@@ -1,4 +1,5 @@
 import { CENTER_INFO } from "@/lib/center";
+import { absoluteUrl, payPath } from "@/lib/class-links";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_DEBT_REMINDER_TEMPLATE } from "@/lib/settings";
@@ -87,7 +88,7 @@ export async function getOutstandingDebts(options?: {
   for (const invoice of invoices) {
     const student = invoice.enrollment.student;
     const classRoom = invoice.enrollment.classRoom;
-    const payUrl = baseUrl ? `${baseUrl}/pay/${classRoom.publicToken}` : "";
+    const payUrl = baseUrl ? absoluteUrl(baseUrl, payPath(classRoom)) : "";
     const overdue = Math.max(0, currentIndex - monthIndex(invoice.month, invoice.year));
 
     const row =

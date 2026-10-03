@@ -57,6 +57,12 @@ export async function getAppSettings(): Promise<AppSettings> {
   };
 }
 
+/** Che secret để hiển thị: chỉ để lộ 4 ký tự cuối. Chuỗi rỗng = chưa cấu hình. */
+export function maskSecret(value: string) {
+  if (!value) return "";
+  return `••••${value.length > 8 ? value.slice(-4) : ""}`;
+}
+
 export async function saveAppSettings(settings: AppSettings) {
   await prisma.$transaction(
     Object.entries(settingKeys).map(([field, key]) =>

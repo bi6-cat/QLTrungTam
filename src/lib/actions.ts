@@ -22,9 +22,9 @@ import { isEnrollmentActiveInPeriod, periodIndex, periodStartDate } from "@/lib/
 import { buildMemo } from "@/lib/payment";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { generatePublicToken } from "@/lib/publicToken";
+import { generatePublicToken, TEACHER_TOKEN_LENGTH } from "@/lib/publicToken";
 import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
-import { saveAppSettings } from "@/lib/settings";
+import { getAppSettings, saveAppSettings } from "@/lib/settings";
 import type { z } from "zod";
 
 const LOGIN_LIMIT = { max: 8, windowMs: 15 * 60 * 1000 };
@@ -235,10 +235,17 @@ export async function changePasswordAction(
   return { error: "", success: "Đã đổi mật khẩu thành công." };
 }
 
-export async function createClassAction(formData: FormData) {
+export type CreateClassState = { error: string; success: string };
+
+export async function createClassAction(
+  _prevState: CreateClassState,
+  formData: FormData
+): Promise<CreateClassState> {
   await requireAdmin();
-  const data = parseForm(createClassSchema, formData);
-  // Sinh mã công khai ngắn, thử lại nếu trùng; sau vài lần thì nới dài để chắc chắn.
+  const { data, error } = safeParseForm(createClassSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  // Mã link phụ huynh và giáo viên là hai mã ngẫu nhiên riêng; trùng (rất hiếm) thì sinh lại.
   for (let attempt = 0; ; attempt++) {
     try {
       await prisma.classRoom.create({
@@ -249,23 +256,25 @@ export async function createClassAction(formData: FormData) {
           pricePerSession: data.pricePerSession,
           sessionsPerMonthDefault: data.sessionsPerMonthDefault,
           teacherSharePercent: data.teacherSharePercent,
-          publicToken: generatePublicToken(attempt < 10 ? undefined : 6)
+          publicToken: generatePublicToken(),
+          teacherToken: generatePublicToken(TEACHER_TOKEN_LENGTH)
         }
       });
       break;
-    } catch (error) {
-      const target = error instanceof Prisma.PrismaClientKnownRequestError ? (error.meta?.target as string[] | undefined) : undefined;
-      const isTokenCollision =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002" &&
-        Array.isArray(target) &&
-        target.includes("publicToken");
-      // Chỉ thử lại khi trùng publicToken; lỗi khác (vd trùng shortCode) ném ra ngoài.
-      if (isTokenCollision && attempt < 25) continue;
-      throw error;
+    } catch (createError) {
+      if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === "P2002") {
+        const target = String(createError.meta?.target ?? "");
+        if (target.includes("shortCode")) {
+          return { error: `Mã lớp ${data.shortCode} đã tồn tại, hãy chọn mã khác.`, success: "" };
+        }
+        if ((target.includes("publicToken") || target.includes("teacherToken")) && attempt < 5) continue;
+      }
+      console.error("Không tạo được lớp.", createError);
+      return { error: "Không tạo được lớp. Vui lòng tải lại trang và thử lại.", success: "" };
     }
   }
   revalidatePath("/admin/classes");
+  return { error: "", success: `Đã tạo lớp ${data.name} (${data.shortCode}).` };
 }
 
 export async function archiveClassAction(formData: FormData) {
@@ -967,13 +976,33 @@ async function saveClassDetails(
   });
 }
 
-export async function updateSettingsAction(formData: FormData) {
+export type SettingsActionState = { error: string; success: string };
+
+export async function updateSettingsAction(
+  _prevState: SettingsActionState,
+  formData: FormData
+): Promise<SettingsActionState> {
   await requireAdmin();
-  const data = parseForm(updateSettingsSchema, formData);
-  await saveAppSettings(data);
+  const { data, error } = safeParseForm(updateSettingsSchema, formData);
+  if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", success: "" };
+
+  try {
+    // Trang cài đặt không gửi secret thật xuống trình duyệt: ô để trống nghĩa là giữ nguyên.
+    const current = await getAppSettings();
+    await saveAppSettings({
+      ...data,
+      sepayApiKey: data.sepayApiKey || current.sepayApiKey,
+      sepayWebhookSecret: data.sepayWebhookSecret || current.sepayWebhookSecret
+    });
+  } catch (saveError) {
+    console.error("Không lưu được cài đặt.", saveError);
+    return { error: "Không lưu được cài đặt. Vui lòng tải lại trang và thử lại.", success: "" };
+  }
+
   revalidatePath("/admin/settings");
   revalidatePath("/admin/debts");
   revalidatePath("/pay/[short_code]", "page");
+  return { error: "", success: "Đã lưu cài đặt." };
 }
 
 // Import Excel lưu qua API route (payload lớn); sau đó client gọi action này thay cho
@@ -1198,6 +1227,16 @@ export async function createExpenseAction(
   await requireAdmin();
   const { data, error } = safeParseForm(expenseSchema, formData);
   if (error || !data) return { error: error ?? "Dữ liệu không hợp lệ.", ok: false };
+
+  // Lương theo lớp chỉ được tạo bằng nút "Tính lương": bản ghi nhập tay không gắn hóa đơn
+  // nên lần tính lương sau sẽ coi học phí tháng đó là "thu muộn" và trả lương lần nữa.
+  if (data.category === "teacher_salary" && data.classId) {
+    return {
+      error:
+        "Lương giáo viên theo lớp được tạo bằng nút \"Tính lương giáo viên\". Khoản lương nhập tay chỉ dùng cho chi phí chung (không gắn lớp).",
+      ok: false
+    };
+  }
 
   if (data.classId) {
     const exists = await prisma.classRoom.findUnique({

@@ -1,8 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Archive, Layers3, Plus } from "lucide-react";
-import {
-  createClassAction
-} from "@/lib/actions";
+import { AlertTriangle, Archive, Layers3 } from "lucide-react";
 import { Button, EmptyState, Field, Input, Panel, PageHeader } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { buildMemo } from "@/lib/payment";
@@ -13,9 +10,11 @@ import { CopyTeacherLinkButton } from "@/components/CopyTeacherLinkButton";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
+import { absoluteUrl, payPath, teacherPath } from "@/lib/class-links";
 import { enrollmentVisibleInPeriodWhere, remainingScheduledSessions } from "@/lib/enrollment-period";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
-import { SubmitButton } from "@/components/SubmitButton";
+import { CreateClassForm } from "@/components/CreateClassForm";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +23,7 @@ export default async function ClassesPage({
 }: {
   searchParams: Promise<{ classId?: string; month?: string; year?: string; archived?: string }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);
@@ -124,13 +124,13 @@ export default async function ClassesPage({
               {!selectedClass.archivedAt ? (
                 <CopyTeacherLinkButton
                   className={selectedClass.name}
-                  teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.publicToken}?month=${month}&year=${year}`}
+                  teacherUrl={`${absoluteUrl(settings.appUrl, teacherPath(selectedClass))}?month=${month}&year=${year}`}
                 />
               ) : null}
               <CopyParentLinkButton
                 className={selectedClass.name}
                 classShortCode={selectedClass.shortCode}
-                payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.publicToken}`}
+                payUrl={absoluteUrl(settings.appUrl, payPath(selectedClass))}
                 month={month}
                 year={year}
                 rows={selectedClass.enrollments.map((enrollment) => {
@@ -230,32 +230,7 @@ export default async function ClassesPage({
 
           {!showArchived ? <Panel>
             <h2 className="font-bold">Tạo lớp mới</h2>
-            <form action={createClassAction} className="mt-4 grid gap-3">
-              <Field label="Tên lớp">
-                <Input name="name" required placeholder="Lớp 10A - Toán" />
-              </Field>
-              <Field label="Mã lớp">
-                <Input name="shortCode" required placeholder="L10A" />
-              </Field>
-              <Field label="Tên giáo viên">
-                <Input name="teacherName" placeholder="Cô Hạnh" />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Giá / buổi">
-                  <Input name="pricePerSession" type="number" min="0" required />
-                </Field>
-                <Field label="Buổi / tháng">
-                  <Input name="sessionsPerMonthDefault" type="number" min="1" defaultValue="8" required />
-                </Field>
-              </div>
-              <Field label="% lương GV" hint="% học phí đã thu, nhập sau cũng được">
-                <Input name="teacherSharePercent" type="number" min="0" max="100" defaultValue="0" />
-              </Field>
-              <SubmitButton pendingLabel="Đang tạo...">
-                <Plus className="h-4 w-4" />
-                Tạo lớp
-              </SubmitButton>
-            </form>
+            <CreateClassForm />
           </Panel> : null}
         </div>
 

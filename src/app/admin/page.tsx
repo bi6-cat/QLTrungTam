@@ -12,6 +12,7 @@ import {
 import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
 import { getDashboard } from "@/lib/dashboard";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function AdminHomePage({
 }: {
   searchParams: Promise<{ month?: string; year?: string }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);

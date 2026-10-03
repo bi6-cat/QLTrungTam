@@ -1,15 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, GraduationCap, Users } from "lucide-react";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
 import { Badge, Button, EmptyState, Field, Input } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { enrollmentVisibleInPeriodWhere } from "@/lib/enrollment-period";
+import { resolveClassLink } from "@/lib/class-link-resolver";
+import { teacherPath } from "@/lib/class-links";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false }
+};
 
 export default async function TeacherClassPage({
   params,
@@ -20,6 +27,16 @@ export default async function TeacherClassPage({
 }) {
   const { short_code } = await params;
   const query = await searchParams;
+  const resolved = await resolveClassLink(short_code, "teacher");
+  if (!resolved) notFound();
+  if (resolved.kind === "redirect") {
+    // Link cũ: chuyển sang link giáo viên mới, giữ nguyên tháng/năm đang xem.
+    const search = new URLSearchParams();
+    if (query.month) search.set("month", query.month);
+    if (query.year) search.set("year", query.year);
+    const queryString = search.toString();
+    redirect(queryString ? `${resolved.redirectTo}?${queryString}` : resolved.redirectTo);
+  }
   const now = new Date();
   const month = Math.min(12, Math.max(1, Number(query.month) || now.getMonth() + 1));
   const year = Number(query.year) || now.getFullYear();
@@ -27,7 +44,7 @@ export default async function TeacherClassPage({
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
 
   const classRoom = await prisma.classRoom.findUnique({
-    where: { publicToken: short_code },
+    where: { id: resolved.classId },
     include: {
       enrollments: {
         where: enrollmentVisibleInPeriodWhere(month, year),
@@ -112,7 +129,7 @@ export default async function TeacherClassPage({
                   {classRoom.sessionsPerMonthDefault} buổi mặc định
                 </p>
               </div>
-              <form action={`/teacher/classes/${classRoom.publicToken}`} method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
+              <form action={teacherPath(classRoom)} method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
                 <Field label="Tháng">
                   <Input name="month" type="number" min="1" max="12" defaultValue={month} />
                 </Field>
@@ -291,7 +308,7 @@ export default async function TeacherClassPage({
               </p>
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/teacher/classes/${classRoom.publicToken}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
+                  href={`${teacherPath(classRoom)}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
                   className={[
                     "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
                     currentPage <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
@@ -304,7 +321,7 @@ export default async function TeacherClassPage({
                   {currentPage}/{totalPages}
                 </span>
                 <Link
-                  href={`/teacher/classes/${classRoom.publicToken}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
+                  href={`${teacherPath(classRoom)}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
                   className={[
                     "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
                     currentPage >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-stone-50"

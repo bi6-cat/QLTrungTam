@@ -24,6 +24,7 @@ import { EditStudentButton } from "@/components/EditStudentButton";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatCurrency, formatEnrollmentStatus, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 const TIMELINE_PAGE_SIZE = 40;
@@ -134,6 +135,7 @@ export default async function Student360Page({
   params: Promise<{ studentId: string }>;
   searchParams: Promise<{ historyPage?: string }>;
 }) {
+  await requireAdmin();
   const { studentId } = await params;
   const query = await searchParams;
   const student = await prisma.student.findUnique({

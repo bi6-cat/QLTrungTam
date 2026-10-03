@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { AlertTriangle, CheckCircle2, Plus, Wand2 } from "lucide-react";
 import { createExpenseAction, generateTeacherSalaryAction } from "@/lib/actions";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
@@ -56,6 +56,8 @@ export function AddExpenseForm({
   classes: Array<{ id: string; name: string }>;
 }) {
   const [state, action, pending] = useActionState(createExpenseAction, { error: "", ok: false });
+  const [category, setCategory] = useState("other");
+  const isSalary = category === "teacher_salary";
 
   return (
     <form action={action} className="grid gap-3 lg:grid-cols-6">
@@ -67,7 +69,7 @@ export function AddExpenseForm({
         </Field>
       </div>
       <Field label="Loại chi phí">
-        <Select name="category" defaultValue="other">
+        <Select name="category" value={category} onChange={(event) => setCategory(event.target.value)}>
           {EXPENSE_CATEGORIES.map((category) => (
             <option key={category.value} value={category.value}>
               {category.label}
@@ -79,16 +81,24 @@ export function AddExpenseForm({
         <Input name="amount" type="number" min="1" required inputMode="numeric" />
       </Field>
       <div className="lg:col-span-2">
-        <Field label="Gắn với lớp" hint="Không bắt buộc">
-          <Select name="classId" defaultValue="">
-            <option value="">Chi phí chung</option>
-            {classes.map((classRoom) => (
-              <option key={classRoom.id} value={classRoom.id}>
-                {classRoom.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {isSalary ? (
+          // Lương theo lớp tạo bằng nút "Tính lương"; nhập tay chỉ cho khoản lương chung.
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            Lương theo lớp hãy dùng nút <strong>Tính lương giáo viên</strong>. Ở đây chỉ nhập khoản lương chung
+            không gắn lớp (vd lương cố định).
+          </p>
+        ) : (
+          <Field label="Gắn với lớp" hint="Không bắt buộc">
+            <Select name="classId" defaultValue="">
+              <option value="">Chi phí chung</option>
+              {classes.map((classRoom) => (
+                <option key={classRoom.id} value={classRoom.id}>
+                  {classRoom.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
       <div className="lg:col-span-6">
         <Field label="Ghi chú">

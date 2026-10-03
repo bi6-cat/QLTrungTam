@@ -15,6 +15,7 @@ import { getMonthlyFinance } from "@/lib/finance";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { expenseCategoryLabel } from "@/lib/schedule";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function FinancePage({
 }: {
   searchParams: Promise<{ month?: string; year?: string }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);

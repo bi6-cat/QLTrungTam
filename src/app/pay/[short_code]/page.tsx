@@ -1,12 +1,16 @@
-import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { PaymentFlow } from "@/components/PaymentFlow";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
-import { buildVietQrImageUrl } from "@/lib/payment";
-import { prisma } from "@/lib/prisma";
-import { getAppSettings } from "@/lib/settings";
+import { resolveClassLink } from "@/lib/class-link-resolver";
+import { getPayableStudents } from "@/lib/pay-portal";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false }
+};
 
 export default async function PayPage({
   params
@@ -14,66 +18,13 @@ export default async function PayPage({
   params: Promise<{ short_code: string }>;
 }) {
   const { short_code } = await params;
-  const classRoom = await prisma.classRoom.findUnique({
-    where: { publicToken: short_code },
-    include: {
-      enrollments: {
-        where: {
-          OR: [
-            {
-              status: "active",
-              student: { archivedAt: null },
-              OR: [{ leftAt: null }, { leftAt: { gt: new Date() } }]
-            },
-            { invoices: { some: { status: "unpaid" } } }
-          ]
-        },
-        orderBy: { student: { fullName: "asc" } },
-        include: {
-          student: true,
-          invoices: {
-            where: { status: { in: ["unpaid", "paid", "waived", "void"] } },
-            orderBy: [{ year: "desc" }, { month: "desc" }]
-          }
-        }
-      }
-    }
-  });
+  const resolved = await resolveClassLink(short_code, "pay");
+  if (!resolved) notFound();
+  if (resolved.kind === "redirect") redirect(resolved.redirectTo);
 
-  if (!classRoom) {
-    notFound();
-  }
-
-  const settings = await getAppSettings();
-  const bankBin = settings.bankBin;
-  const accountNumber = settings.bankAccountNumber;
-  const accountName = settings.bankAccountName;
-  const payableEnrollments = classRoom.enrollments.filter(
-    (enrollment) =>
-      enrollment.invoices.some((invoice) => invoice.status === "unpaid") ||
-      (!classRoom.archivedAt &&
-        !enrollment.student.archivedAt &&
-        (!enrollment.leftAt || enrollment.leftAt.getTime() > Date.now()))
-  );
-  const students = payableEnrollments.map((enrollment) => ({
-    id: enrollment.student.id,
-    fullName: enrollment.student.fullName,
-    invoices: enrollment.invoices.map((invoice) => ({
-      id: invoice.id,
-      month: invoice.month,
-      year: invoice.year,
-      amount: invoice.amount,
-      memoContent: invoice.memoContent,
-      status: invoice.status,
-      qrImageUrl: buildVietQrImageUrl({
-        bankBin,
-        accountNumber,
-        accountName,
-        amount: invoice.amount,
-        memo: invoice.memoContent
-      })
-    }))
-  }));
+  const classRoom = await getPayableStudents(resolved.classId);
+  if (!classRoom) notFound();
+  const { students } = classRoom;
 
   return (
     <main className="min-h-screen">
@@ -99,7 +50,7 @@ export default async function PayPage({
             <p className="mt-2 text-stone-600">Lớp chưa có học sinh đang học hoặc mọi khoản đã được xử lý.</p>
           </section>
         ) : (
-          <PaymentFlow students={students} />
+          <PaymentFlow classSlug={short_code} students={students} />
         )}
       </div>
     </main>

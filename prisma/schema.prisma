@@ -37,7 +37,12 @@ model ClassRoom {
   id                      String          @id @default(cuid())
   name                    String
   shortCode               String          @unique
+  /// Mã ngẫu nhiên của link nộp tiền phụ huynh: /pay/<MÃ LỚP>-<publicToken>.
   publicToken             String          @unique @default(cuid())
+  /// Mã ngẫu nhiên riêng của link giáo viên: /teacher/classes/<MÃ LỚP>-<teacherToken>.
+  teacherToken            String          @unique
+  /// Mã 4 ký tự cũ (dùng chung cho phụ huynh và giáo viên); chỉ còn để chuyển hướng tạm.
+  legacyToken             String?         @unique
   teacherName             String          @default("")
   pricePerSession         Int
   sessionsPerMonthDefault Int

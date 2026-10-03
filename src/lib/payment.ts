@@ -62,10 +62,14 @@ export async function matchInvoiceFromTransaction(args: {
       month: parsed.month,
       ...(parsed.year ? { year: parsed.year } : {}),
       status: "unpaid",
-      enrollment: {
-        classRoom: { shortCode: parsed.shortCode },
-        student: { phone: parsed.phone }
-      }
+      enrollment: { classRoom: { shortCode: parsed.shortCode } },
+      // Memo của hóa đơn được tạo theo SĐT lúc phát hành (lưu ở studentPhoneSnapshot), nên
+      // so với SĐT đó chứ không phải SĐT hiện tại — admin có thể đã sửa SĐT sau khi tạo hóa đơn.
+      // Hóa đơn rất cũ chưa có snapshot thì mới so với SĐT hiện tại của học sinh.
+      OR: [
+        { studentPhoneSnapshot: parsed.phone },
+        { studentPhoneSnapshot: null, enrollment: { student: { phone: parsed.phone } } }
+      ]
     },
     include: {
       enrollment: { include: { classRoom: true, student: true } }

@@ -6,10 +6,12 @@ import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui"
 import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { WEEKDAYS, countScheduledSessions, sortSchedules, weekdayLabel } from "@/lib/schedule";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function SchedulePage() {
+  await requireAdmin();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();

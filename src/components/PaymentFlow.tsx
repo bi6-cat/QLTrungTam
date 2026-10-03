@@ -34,8 +34,13 @@ type Invoice = {
 type Student = {
   id: string;
   fullName: string;
-  invoices: Invoice[];
 };
+
+/** Hóa đơn của học sinh đang chọn, tải từ /api/pay/classes/<lớp>/students/<id>. */
+type InvoiceLoad =
+  | { studentId: string; status: "loading" }
+  | { studentId: string; status: "ready"; invoices: Invoice[] }
+  | { studentId: string; status: "error" };
 
 /** Thông tin dựng biên lai, lấy từ /api/pay/invoices/[id] khi hoá đơn đã đóng. */
 type Receipt = {
@@ -152,23 +157,48 @@ function ReceiptCard({ receipt }: { receipt: Receipt }) {
   );
 }
 
-export function PaymentFlow({ students }: { students: Student[] }) {
+export function PaymentFlow({ classSlug, students }: { classSlug: string; students: Student[] }) {
   const [studentId, setStudentId] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [statuses, setStatuses] = useState<Record<string, InvoiceStatus>>({});
   const [receipts, setReceipts] = useState<Record<string, Receipt>>({});
   const [paused, setPaused] = useState(false);
-  const selected = useMemo(
-    () => students.find((student) => student.id === studentId) ?? null,
-    [studentId, students]
+  const [invoiceLoad, setInvoiceLoad] = useState<InvoiceLoad | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Chỉ tải hóa đơn của em vừa chọn, mỗi lần bấm "Tiếp theo" là lấy số liệu mới.
+  useEffect(() => {
+    if (!confirmed || !studentId) return;
+    const controller = new AbortController();
+    setInvoiceLoad({ studentId, status: "loading" });
+    fetch(
+      `/api/pay/classes/${encodeURIComponent(classSlug)}/students/${encodeURIComponent(studentId)}`,
+      { cache: "no-store", signal: controller.signal }
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error("load_failed");
+        const body = (await response.json()) as { invoices: Invoice[] };
+        setInvoiceLoad({ studentId, status: "ready", invoices: body.invoices });
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setInvoiceLoad({ studentId, status: "error" });
+      });
+    return () => controller.abort();
+  }, [confirmed, studentId, classSlug, reloadKey]);
+
+  const selectedInvoices = useMemo(
+    () =>
+      invoiceLoad?.studentId === studentId && invoiceLoad.status === "ready" ? invoiceLoad.invoices : null,
+    [invoiceLoad, studentId]
   );
 
   const pendingIds = useMemo(() => {
-    if (!selected) return [] as string[];
-    return selected.invoices
+    if (!selectedInvoices) return [] as string[];
+    return selectedInvoices
       .filter((invoice) => (statuses[invoice.id] ?? invoice.status) === "unpaid")
       .map((invoice) => invoice.id);
-  }, [selected, statuses]);
+  }, [selectedInvoices, statuses]);
 
   // Ref để vòng poll đọc danh sách mới nhất mà không phải khởi động lại timer.
   const pendingRef = useRef(pendingIds);
@@ -204,17 +234,17 @@ export function PaymentFlow({ students }: { students: Student[] }) {
   // Phụ huynh mở lại link sau khi đã đóng: nạp biên lai gần nhất một lần, không poll.
   const loadedReceiptIds = useRef(new Set<string>());
   useEffect(() => {
-    if (!confirmed || !selected || pendingIds.length > 0) return;
-    const latestPaid = selected.invoices.find(
+    if (!confirmed || !selectedInvoices || pendingIds.length > 0) return;
+    const latestPaid = selectedInvoices.find(
       (invoice) => (statuses[invoice.id] ?? invoice.status) === "paid"
     );
     if (!latestPaid || loadedReceiptIds.current.has(latestPaid.id)) return;
     loadedReceiptIds.current.add(latestPaid.id);
     void fetchStatuses([latestPaid.id]);
-  }, [confirmed, selected, pendingIds.length, statuses, fetchStatuses]);
+  }, [confirmed, selectedInvoices, pendingIds.length, statuses, fetchStatuses]);
 
   useEffect(() => {
-    if (!confirmed || !selected || paused) return;
+    if (!confirmed || !selectedInvoices || paused) return;
     if (pendingIds.length === 0) return;
 
     let cancelled = false;
@@ -252,7 +282,7 @@ export function PaymentFlow({ students }: { students: Student[] }) {
       if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [confirmed, selected, paused, pendingIds.length, fetchStatuses]);
+  }, [confirmed, selectedInvoices, paused, pendingIds.length, fetchStatuses]);
 
   if (students.length === 0) {
     return (
@@ -262,8 +292,8 @@ export function PaymentFlow({ students }: { students: Student[] }) {
     );
   }
 
-  const visibleInvoices = selected
-    ? selected.invoices.map((invoice) => ({
+  const visibleInvoices = selectedInvoices
+    ? selectedInvoices.map((invoice) => ({
         ...invoice,
         status: statuses[invoice.id] ?? invoice.status
       }))
@@ -318,6 +348,19 @@ export function PaymentFlow({ students }: { students: Student[] }) {
         <section className="flex items-center gap-3 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-5 text-sm text-stone-600">
           <QrCode className="h-5 w-5 shrink-0 text-stone-400" />
           Chọn đúng tên học sinh rồi bấm <strong className="font-semibold text-neutralText">Tiếp theo</strong> để xem học phí và mã QR.
+        </section>
+      ) : invoiceLoad?.studentId === studentId && invoiceLoad.status === "error" ? (
+        <section className="grid gap-3 rounded-2xl border border-rose-100 bg-white p-6 text-center shadow-soft">
+          <p className="font-semibold text-neutralText">Chưa tải được học phí, vui lòng thử lại.</p>
+          <Button type="button" variant="secondary" onClick={() => setReloadKey((value) => value + 1)}>
+            <RefreshCw className="h-4 w-4" />
+            Thử lại
+          </Button>
+        </section>
+      ) : !selectedInvoices ? (
+        <section className="flex items-center justify-center gap-2 rounded-2xl border border-stone-200/80 bg-white p-6 text-sm text-stone-500 shadow-soft">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Đang tải học phí...
         </section>
       ) : visibleInvoices.length === 0 ? (
         <section className="rounded-2xl border border-amber-100 bg-white p-8 text-center shadow-soft">

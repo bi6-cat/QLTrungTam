@@ -19,7 +19,9 @@ docker compose -f docker-compose.monitoring.dev.yml up -d
 
 Nếu network đã tồn tại, `docker network create` sẽ báo lỗi vô hại; không cần tạo lại.
 `.env.example` và credential sinh ở trên chỉ dành cho local. Trước khi seed, kiểm tra
-`SEED_DEMO`; giá trị khác `false` cho phép seed dữ liệu demo.
+`SEED_DEMO`: chỉ giá trị `true` mới seed dữ liệu demo (xoá sạch dữ liệu cũ) và bị từ chối khi
+`NODE_ENV=production`. Seed không ghi đè mật khẩu admin đã có; muốn đặt lại theo `.env` thì
+chạy với `SEED_RESET_ADMIN_PASSWORD=true`.
 
 Kiểm tra:
 
