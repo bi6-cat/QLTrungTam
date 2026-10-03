@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { buildVietQrImageUrl } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
+import { normalizeName, sortByGivenName } from "@/lib/student-search";
 
 export type PayPortalInvoice = {
   id: string;
@@ -55,7 +56,7 @@ export async function getPayableStudents(classId: string) {
         orderBy: { student: { fullName: "asc" } },
         select: {
           leftAt: true,
-          student: { select: { id: true, fullName: true, archivedAt: true } },
+          student: { select: { id: true, fullName: true, phone: true, archivedAt: true } },
           invoices: { where: { status: "unpaid" }, select: { id: true }, take: 1 }
         }
       }
@@ -75,9 +76,25 @@ export async function getPayableStudents(classId: string) {
         now
       )
     )
-    .map((enrollment) => ({ id: enrollment.student.id, fullName: enrollment.student.fullName }));
+    .map((enrollment) => enrollment.student);
 
-  return { name: classRoom.name, students };
+  // Trùng tên thì kèm 3 số cuối SĐT để phụ huynh phân biệt (không lộ cả số).
+  const nameCount = new Map<string, number>();
+  for (const student of students) {
+    const key = normalizeName(student.fullName);
+    nameCount.set(key, (nameCount.get(key) ?? 0) + 1);
+  }
+  return {
+    name: classRoom.name,
+    students: sortByGivenName(students).map((student) => ({
+      id: student.id,
+      fullName: student.fullName,
+      hint:
+        (nameCount.get(normalizeName(student.fullName)) ?? 0) > 1
+          ? `SĐT …${student.phone.replace(/\D/g, "").slice(-3)}`
+          : null
+    }))
+  };
 }
 
 /** Hóa đơn của một học sinh trong lớp, kèm ảnh QR. Null khi em đó không hiện ở trang nộp tiền. */

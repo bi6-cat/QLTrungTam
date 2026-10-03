@@ -88,7 +88,8 @@ export async function getOutstandingDebts(options?: {
   for (const invoice of invoices) {
     const student = invoice.enrollment.student;
     const classRoom = invoice.enrollment.classRoom;
-    const payUrl = baseUrl ? absoluteUrl(baseUrl, payPath(classRoom)) : "";
+    // Link nhắc nợ mở thẳng học phí của đúng em này (?hs=), phụ huynh không phải tìm tên.
+    const payUrl = baseUrl ? `${absoluteUrl(baseUrl, payPath(classRoom))}?hs=${encodeURIComponent(student.id)}` : "";
     const overdue = Math.max(0, currentIndex - monthIndex(invoice.month, invoice.year));
 
     const row =
@@ -265,7 +266,7 @@ export function buildReminderMessage(
     ? [
         "Phụ huynh vui lòng thanh toán tại link sau:",
         row.primaryPayUrl,
-        "(Chọn tên con, quét mã QR rồi chuyển khoản — không cần sửa nội dung chuyển khoản)"
+        "(Mở link là thấy học phí của con, quét mã QR rồi chuyển khoản — không cần sửa nội dung chuyển khoản)"
       ].join("\n")
     : "";
   const values: Record<string, string> = {

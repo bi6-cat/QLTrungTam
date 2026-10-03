@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowRight,
   Check,
+  ChevronRight,
+  History,
+  Search,
+  UserRound,
+  X,
   CheckCircle2,
   Copy,
   FileClock,
@@ -18,6 +22,7 @@ import {
 } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import { matchesName } from "@/lib/student-search";
 
 type InvoiceStatus = "paid" | "unpaid" | "void" | "waived";
 
@@ -34,7 +39,135 @@ type Invoice = {
 type Student = {
   id: string;
   fullName: string;
+  /** Chỉ có khi lớp có người trùng tên, vd "SĐT …123". */
+  hint: string | null;
 };
+
+const RECENT_LIMIT = 3;
+
+// Khóa theo mã lớp (phần trước dấu "-" cuối) để vẫn nhớ khi link đổi mã ngẫu nhiên.
+function recentKey(classSlug: string) {
+  const dash = classSlug.lastIndexOf("-");
+  return `qltt:pay:recent:${(dash > 0 ? classSlug.slice(0, dash) : classSlug).toUpperCase()}`;
+}
+
+/** Học sinh phụ huynh đã chọn trên máy này (tối đa 3), để lần sau bấm một chạm. */
+function readRecent(classSlug: string): string[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(recentKey(classSlug)) ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecent(classSlug: string, studentId: string) {
+  try {
+    const next = [studentId, ...readRecent(classSlug).filter((id) => id !== studentId)].slice(0, RECENT_LIMIT);
+    window.localStorage.setItem(recentKey(classSlug), JSON.stringify(next));
+  } catch {
+    /* trình duyệt chặn lưu trữ — bỏ qua */
+  }
+}
+
+function StudentButton({ student, onSelect }: { student: Student; onSelect: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(student.id)}
+      className="focus-ring flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-indigo-50 active:bg-indigo-100"
+    >
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-primary">
+        <UserRound className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-base font-semibold text-neutralText">{student.fullName}</span>
+        {student.hint ? <span className="block text-xs text-stone-500">{student.hint}</span> : null}
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-stone-400" />
+    </button>
+  );
+}
+
+/**
+ * Chọn học sinh khi lớp đông: ô tìm (gõ không dấu cũng được), danh sách xếp theo tên, và các em
+ * đã chọn trên máy này hiện sẵn ở đầu. Bấm vào tên là xem học phí luôn.
+ */
+function StudentPicker({
+  classSlug,
+  students,
+  onSelect
+}: {
+  classSlug: string;
+  students: Student[];
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setRecentIds(readRecent(classSlug));
+  }, [classSlug]);
+
+  const recent = recentIds
+    .map((id) => students.find((student) => student.id === id))
+    .filter((student): student is Student => Boolean(student));
+  const results = query.trim() ? students.filter((student) => matchesName(student.fullName, query)) : students;
+
+  return (
+    <div className="mt-3 grid gap-3">
+      {recent.length > 0 && !query.trim() ? (
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-2">
+          <p className="flex items-center gap-1.5 px-2 pb-1 pt-0.5 text-xs font-semibold text-primary">
+            <History className="h-3.5 w-3.5" />
+            Đã chọn trên máy này
+          </p>
+          {recent.map((student) => (
+            <StudentButton key={student.id} student={student} onSelect={onSelect} />
+          ))}
+        </div>
+      ) : null}
+
+      <label className="relative block">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`Tìm tên trong ${students.length} học sinh`}
+          aria-label="Tìm tên học sinh"
+          autoComplete="off"
+          enterKeyHint="search"
+          className="focus-ring h-12 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-10 text-base shadow-sm transition-colors placeholder:text-stone-400 hover:border-stone-400 focus:border-primary"
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="focus-ring absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-stone-400 hover:bg-stone-100"
+            aria-label="Xóa tìm kiếm"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </label>
+
+      <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-stone-200 p-1" role="list">
+        {results.length === 0 ? (
+          <p className="p-4 text-center text-sm text-stone-500">
+            Không thấy tên phù hợp. Thử gõ tên của con (vd &ldquo;khoa&rdquo;), không cần dấu.
+          </p>
+        ) : (
+          results.map((student) => (
+            <div key={student.id} role="listitem">
+              <StudentButton student={student} onSelect={onSelect} />
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** Hóa đơn của học sinh đang chọn, tải từ /api/pay/classes/<lớp>/students/<id>. */
 type InvoiceLoad =
@@ -157,9 +290,17 @@ function ReceiptCard({ receipt }: { receipt: Receipt }) {
   );
 }
 
-export function PaymentFlow({ classSlug, students }: { classSlug: string; students: Student[] }) {
-  const [studentId, setStudentId] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
+export function PaymentFlow({
+  classSlug,
+  students,
+  initialStudentId
+}: {
+  classSlug: string;
+  students: Student[];
+  initialStudentId?: string;
+}) {
+  const [studentId, setStudentId] = useState(initialStudentId ?? "");
+  const [confirmed, setConfirmed] = useState(Boolean(initialStudentId));
   const [statuses, setStatuses] = useState<Record<string, InvoiceStatus>>({});
   const [receipts, setReceipts] = useState<Record<string, Receipt>>({});
   const [paused, setPaused] = useState(false);
@@ -292,6 +433,7 @@ export function PaymentFlow({ classSlug, students }: { classSlug: string; studen
     );
   }
 
+  const selectedStudent = students.find((student) => student.id === studentId) ?? null;
   const visibleInvoices = selectedInvoices
     ? selectedInvoices.map((invoice) => ({
         ...invoice,
@@ -309,35 +451,42 @@ export function PaymentFlow({ classSlug, students }: { classSlug: string; studen
       <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-soft print:hidden">
         <div className="flex items-center gap-2.5">
           <StepBadge n={1} />
-          <p className="text-base font-bold">Chọn tên học sinh</p>
+          <p className="text-base font-bold">{confirmed ? "Học sinh" : "Chọn tên học sinh"}</p>
         </div>
-        <select
-          value={studentId}
-          onChange={(event) => {
-            setStudentId(event.target.value);
-            setConfirmed(false);
-            setPaused(false);
-          }}
-          className="focus-ring mt-3 h-12 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-base shadow-sm transition-colors hover:border-stone-400 focus:border-primary"
-        >
-          <option value="" disabled>
-            Tên học sinh
-          </option>
-          {students.map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.fullName}
-            </option>
-          ))}
-        </select>
-        <Button
-          type="button"
-          className="mt-4 h-12 w-full text-base"
-          disabled={!studentId}
-          onClick={() => setConfirmed(true)}
-        >
-          Tiếp theo
-          <ArrowRight className="h-5 w-5" />
-        </Button>
+        {confirmed && selectedStudent ? (
+          <div className="mt-3 flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-primary shadow-sm">
+              <UserRound className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-base font-bold text-neutralText">{selectedStudent.fullName}</span>
+              {selectedStudent.hint ? <span className="block text-xs text-stone-500">{selectedStudent.hint}</span> : null}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-sm"
+              onClick={() => {
+                setConfirmed(false);
+                setStudentId("");
+                setPaused(false);
+              }}
+            >
+              Đổi
+            </Button>
+          </div>
+        ) : (
+          <StudentPicker
+            classSlug={classSlug}
+            students={students}
+            onSelect={(id) => {
+              rememberRecent(classSlug, id);
+              setStudentId(id);
+              setConfirmed(true);
+              setPaused(false);
+            }}
+          />
+        )}
       </section>
 
       {freshReceipts.map((receipt) => (
@@ -347,7 +496,7 @@ export function PaymentFlow({ classSlug, students }: { classSlug: string; studen
       {!confirmed ? (
         <section className="flex items-center gap-3 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-5 text-sm text-stone-600">
           <QrCode className="h-5 w-5 shrink-0 text-stone-400" />
-          Chọn đúng tên học sinh rồi bấm <strong className="font-semibold text-neutralText">Tiếp theo</strong> để xem học phí và mã QR.
+          Bấm vào tên học sinh để xem học phí và mã QR.
         </section>
       ) : invoiceLoad?.studentId === studentId && invoiceLoad.status === "error" ? (
         <section className="grid gap-3 rounded-2xl border border-rose-100 bg-white p-6 text-center shadow-soft">

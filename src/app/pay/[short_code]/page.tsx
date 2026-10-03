@@ -13,11 +13,14 @@ export const metadata: Metadata = {
 };
 
 export default async function PayPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ short_code: string }>;
+  searchParams: Promise<{ hs?: string }>;
 }) {
   const { short_code } = await params;
+  const { hs } = await searchParams;
   const resolved = await resolveClassLink(short_code, "pay");
   if (!resolved) notFound();
   if (resolved.kind === "redirect") redirect(resolved.redirectTo);
@@ -37,7 +40,7 @@ export default async function PayPage({
               Nộp học phí
             </span>
             <h1 className="mt-3 text-2xl font-bold tracking-tight">{classRoom.name}</h1>
-            <p className="mt-2 text-sm text-white/85">Chọn tên học sinh, kiểm tra số tiền rồi quét mã QR để chuyển khoản.</p>
+            <p className="mt-2 text-sm text-white/85">Tìm tên học sinh, kiểm tra số tiền rồi quét mã QR để chuyển khoản.</p>
           </div>
         </header>
 
@@ -50,7 +53,12 @@ export default async function PayPage({
             <p className="mt-2 text-stone-600">Lớp chưa có học sinh đang học hoặc mọi khoản đã được xử lý.</p>
           </section>
         ) : (
-          <PaymentFlow classSlug={short_code} students={students} />
+          <PaymentFlow
+            classSlug={short_code}
+            students={students}
+            // Link nhắc nợ có ?hs=<mã học sinh>: mở thẳng học phí của em đó nếu em có trong lớp.
+            initialStudentId={students.some((student) => student.id === hs) ? hs : undefined}
+          />
         )}
       </div>
     </main>
