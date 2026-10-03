@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check,
   ChevronRight,
-  History,
   Search,
   UserRound,
   X,
@@ -43,33 +42,6 @@ type Student = {
   hint: string | null;
 };
 
-const RECENT_LIMIT = 3;
-
-// Khóa theo mã lớp (phần trước dấu "-" cuối) để vẫn nhớ khi link đổi mã ngẫu nhiên.
-function recentKey(classSlug: string) {
-  const dash = classSlug.lastIndexOf("-");
-  return `qltt:pay:recent:${(dash > 0 ? classSlug.slice(0, dash) : classSlug).toUpperCase()}`;
-}
-
-/** Học sinh phụ huynh đã chọn trên máy này (tối đa 3), để lần sau bấm một chạm. */
-function readRecent(classSlug: string): string[] {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(recentKey(classSlug)) ?? "[]");
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function rememberRecent(classSlug: string, studentId: string) {
-  try {
-    const next = [studentId, ...readRecent(classSlug).filter((id) => id !== studentId)].slice(0, RECENT_LIMIT);
-    window.localStorage.setItem(recentKey(classSlug), JSON.stringify(next));
-  } catch {
-    /* trình duyệt chặn lưu trữ — bỏ qua */
-  }
-}
-
 function StudentButton({ student, onSelect }: { student: Student; onSelect: (id: string) => void }) {
   return (
     <button
@@ -89,45 +61,110 @@ function StudentButton({ student, onSelect }: { student: Student; onSelect: (id:
   );
 }
 
+const VISIBLE_ROWS = 5;
+const TRACK_INSET = 8; // khớp top-2/bottom-2 của thanh cuộn
+
 /**
- * Chọn học sinh khi lớp đông: ô tìm (gõ không dấu cũng được), danh sách xếp theo tên, và các em
- * đã chọn trên máy này hiện sẵn ở đầu. Bấm vào tên là xem học phí luôn.
+ * Khung cuộn cao đúng VISIBLE_ROWS dòng, có thanh cuộn tự vẽ luôn hiện (điện thoại thường ẩn thanh
+ * cuộn gốc nên phụ huynh không biết còn tên bên dưới). Kéo hoặc chạm vào thanh để nhảy tới vị trí đó.
  */
-function StudentPicker({
-  classSlug,
-  students,
-  onSelect
-}: {
-  classSlug: string;
-  students: Student[];
-  onSelect: (id: string) => void;
-}) {
+function ScrollList({ children, rowCount }: { children: React.ReactNode; rowCount: number }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<number>();
+  const [thumb, setThumb] = useState<{ top: number; height: number } | null>(null);
+
+  const updateThumb = useCallback(() => {
+    const list = listRef.current;
+    if (!list || list.scrollHeight <= list.clientHeight + 1) {
+      setThumb(null);
+      return;
+    }
+    const trackHeight = list.clientHeight - TRACK_INSET * 2;
+    const height = Math.max(28, (trackHeight * list.clientHeight) / list.scrollHeight);
+    const maxScroll = list.scrollHeight - list.clientHeight;
+    setThumb({ top: ((trackHeight - height) * list.scrollTop) / maxScroll, height });
+  }, []);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      // Dòng thứ VISIBLE_ROWS + 1 bắt đầu ở đâu thì khung cao tới đó.
+      const next = list.children[VISIBLE_ROWS] as HTMLElement | undefined;
+      setMaxHeight(next ? next.offsetTop : undefined);
+    };
+    measure();
+    const observer = new ResizeObserver(() => {
+      measure();
+      updateThumb();
+    });
+    observer.observe(list);
+    if (list.firstElementChild) observer.observe(list.firstElementChild);
+    return () => observer.disconnect();
+  }, [rowCount, updateThumb]);
+
+  useLayoutEffect(updateThumb, [maxHeight, rowCount, updateThumb]);
+
+  const scrollToPointer = (clientY: number) => {
+    const list = listRef.current;
+    const track = trackRef.current;
+    if (!list || !track || !thumb) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = (clientY - rect.top - thumb.height / 2) / (rect.height - thumb.height);
+    list.scrollTop = Math.min(1, Math.max(0, ratio)) * (list.scrollHeight - list.clientHeight);
+  };
+
+  return (
+    <div className="grid gap-1.5">
+      <div className="relative rounded-xl border border-stone-200">
+        <div
+          ref={listRef}
+          role="list"
+          onScroll={updateThumb}
+          style={{ maxHeight }}
+          className={`scrollbar-none relative overflow-y-auto overscroll-contain p-1 ${thumb ? "pr-6" : ""}`}
+        >
+          {children}
+        </div>
+        {thumb ? (
+          <div
+            ref={trackRef}
+            aria-hidden="true"
+            className="absolute bottom-2 right-1 top-2 w-4 cursor-pointer touch-none"
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              scrollToPointer(event.clientY);
+            }}
+            onPointerMove={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) scrollToPointer(event.clientY);
+            }}
+          >
+            <div className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-stone-200" />
+            <div
+              className="absolute left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-primary/70"
+              style={{ top: thumb.top, height: thumb.height }}
+            />
+          </div>
+        ) : null}
+      </div>
+      {thumb ? (
+        <p className="text-center text-xs text-stone-500">Vuốt trong khung để xem đủ {rowCount} học sinh</p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Chọn học sinh khi lớp đông: ô tìm (gõ không dấu cũng được), danh sách xếp theo tên trong khung
+ * cuộn 5 dòng. Bấm vào tên là xem học phí luôn.
+ */
+function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: (id: string) => void }) {
   const [query, setQuery] = useState("");
-  const [recentIds, setRecentIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    setRecentIds(readRecent(classSlug));
-  }, [classSlug]);
-
-  const recent = recentIds
-    .map((id) => students.find((student) => student.id === id))
-    .filter((student): student is Student => Boolean(student));
   const results = query.trim() ? students.filter((student) => matchesName(student.fullName, query)) : students;
 
   return (
     <div className="mt-3 grid gap-3">
-      {recent.length > 0 && !query.trim() ? (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-2">
-          <p className="flex items-center gap-1.5 px-2 pb-1 pt-0.5 text-xs font-semibold text-primary">
-            <History className="h-3.5 w-3.5" />
-            Đã chọn trên máy này
-          </p>
-          {recent.map((student) => (
-            <StudentButton key={student.id} student={student} onSelect={onSelect} />
-          ))}
-        </div>
-      ) : null}
-
       <label className="relative block">
         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
         <input
@@ -152,19 +189,19 @@ function StudentPicker({
         ) : null}
       </label>
 
-      <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-stone-200 p-1" role="list">
-        {results.length === 0 ? (
-          <p className="p-4 text-center text-sm text-stone-500">
-            Không thấy tên phù hợp. Thử gõ tên của con (vd &ldquo;khoa&rdquo;), không cần dấu.
-          </p>
-        ) : (
-          results.map((student) => (
+      {results.length === 0 ? (
+        <p className="rounded-xl border border-stone-200 p-4 text-center text-sm text-stone-500">
+          Không thấy tên phù hợp. Thử gõ tên của con (vd &ldquo;khoa&rdquo;), không cần dấu.
+        </p>
+      ) : (
+        <ScrollList rowCount={results.length}>
+          {results.map((student) => (
             <div key={student.id} role="listitem">
               <StudentButton student={student} onSelect={onSelect} />
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </ScrollList>
+      )}
     </div>
   );
 }
@@ -477,10 +514,8 @@ export function PaymentFlow({
           </div>
         ) : (
           <StudentPicker
-            classSlug={classSlug}
             students={students}
             onSelect={(id) => {
-              rememberRecent(classSlug, id);
               setStudentId(id);
               setConfirmed(true);
               setPaused(false);

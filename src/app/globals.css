@@ -65,6 +65,14 @@ textarea {
   background-clip: padding-box;
 }
 
+/* Ẩn thanh cuộn gốc khi đã vẽ thanh cuộn riêng (điện thoại hay tự ẩn thanh cuộn gốc) */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Vòng focus rõ ràng nhưng chỉ hiện khi dùng bàn phím */
 .focus-ring {
   @apply outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-neutralBg;
