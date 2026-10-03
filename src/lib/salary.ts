@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { CENTER_INFO } from "@/lib/center";
 import { formatCurrency, formatDayMonth } from "@/lib/format";
 import { periodIndex } from "@/lib/enrollment-period";
 import { prisma } from "@/lib/prisma";
@@ -831,5 +832,79 @@ export function buildTeacherSalaryMessage(teacher: TeacherLedger, now = new Date
     }
   }
   lines.push("", teacher.owed > 0 ? `Tổng còn lại: ${formatCurrency(teacher.owed)}` : "Đã thanh toán đủ.");
+  return lines.join("\n");
+}
+
+const PAYSLIP_RULE = "──────────────";
+
+/**
+ * Phiếu lương một tháng của một giáo viên (gộp mọi lớp), dạng chữ để dán Zalo: lương từng lớp,
+ * tổng, các lần đã trả, còn lại, và ghi chú HS nộp muộn/chưa nộp. Tháng chưa tới ngày chốt ghi "tạm tính".
+ */
+export function buildTeacherPayslip(teacher: TeacherLedger, month: number, year: number, now = new Date()) {
+  const index = periodIndex(month, year);
+  const all = teacher.classes.flatMap((classRoom) => classRoom.periods);
+  const periods = all.filter((period) => period.month === month && period.year === year);
+  const provisional = periods.some((period) => !period.cutoffPassed);
+  const total = (pick: (period: SalaryLine) => number) => periods.reduce((sum, period) => sum + pick(period), 0);
+  const lines = [
+    `PHIẾU LƯƠNG THÁNG ${month}/${year}${provisional ? " (tạm tính)" : ""}`,
+    CENTER_INFO.name,
+    `Giáo viên: ${teacher.teacherName || "chưa ghi tên"}`,
+    `Ngày lập: ${now.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}`,
+    PAYSLIP_RULE
+  ];
+
+  periods.forEach((period, position) => {
+    lines.push(`${position + 1}. ${period.className}`);
+    if (period.mode === "percent") {
+      lines.push(
+        period.cutoffPassed
+          ? `   Học phí thu đến ${formatDayMonth(period.cutoffDate)}: ${formatCurrency(period.ownCollected)}`
+          : `   Học phí đã thu đến nay (chốt ${formatDayMonth(period.cutoffDate)}): ${formatCurrency(period.ownCollected)}`
+      );
+      lines.push(`   Lương ${period.sharePercent}%: ${formatCurrency(period.grossDue - period.carriedInShare)}`);
+      if (period.carriedInShare > 0) {
+        lines.push(`   Nộp muộn tháng trước: +${formatCurrency(period.carriedInShare)}`);
+      }
+    }
+    lines.push(`   Lương tháng: ${formatCurrency(period.grossDue)}${period.mode === "percent" ? "" : " (nhập tay)"}`);
+  });
+
+  lines.push(PAYSLIP_RULE, `TỔNG LƯƠNG T${month}: ${formatCurrency(total((period) => period.grossDue))}`);
+  const payouts = periods
+    .flatMap((period) => period.payouts)
+    .sort((a, b) => (a.paidAt ?? a.createdAt).getTime() - (b.paidAt ?? b.createdAt).getTime());
+  const paidLine = (label: string, cash: boolean) => {
+    const items = payouts.filter((payout) => (payout.paymentMethod === "cash") === cash);
+    if (items.length === 0) return;
+    const days = [...new Set(items.map((payout) => formatDayMonth(payout.paidAt ?? payout.createdAt)))].join(", ");
+    lines.push(`${label}: ${formatCurrency(items.reduce((sum, payout) => sum + payout.amount, 0))} (${days})`);
+  };
+  paidLine("Đã chuyển khoản", false);
+  paidLine("Đã trả tiền mặt", true);
+  if (payouts.length === 0) lines.push("Chưa chuyển.");
+
+  const remaining = total((period) => Math.max(0, period.difference));
+  const over = total((period) => Math.max(0, -period.difference));
+  if (remaining > 0) lines.push(`CÒN LẠI${provisional ? " (tạm tính)" : ""}: ${formatCurrency(remaining)}`);
+  if (over > 0) lines.push(`Trả dư: ${formatCurrency(over)} (trừ vào lương tháng sau)`);
+  if (remaining === 0 && over === 0 && payouts.length > 0) lines.push("ĐÃ THANH TOÁN ĐỦ");
+
+  const earlier = all.filter((period) => periodIndex(period.month, period.year) < index && period.difference > 0);
+  if (earlier.length > 0) {
+    lines.push(
+      `Lương tháng trước còn thiếu: ${earlier
+        .map((period) => `${period.className} T${period.month}: ${formatCurrency(period.difference)}`)
+        .join("; ")}`
+    );
+  }
+
+  const notes = periods.flatMap((period) =>
+    salaryLineNotes(period).map(
+      (note) => `• ${periods.length > 1 ? `${period.className} — ` : ""}${note.label}: ${note.text}`
+    )
+  );
+  if (notes.length > 0) lines.push(PAYSLIP_RULE, "Ghi chú:", ...notes);
   return lines.join("\n");
 }

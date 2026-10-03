@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   buildSalaryLedger,
+  buildTeacherPayslip,
   buildTeacherSalaryMessage,
   computeSalary,
   computeSalaryLines,
@@ -430,6 +431,33 @@ describe("buildSalaryLedger", () => {
     assert.match(message, /Đã chuyển: CK 2\.500\.000\s₫ \(30\/09\) \+ CK 500\.000\s₫ \(10\/10\)/);
     assert.match(message, /Nộp sau ngày chốt 30\/09, tính sang lương sau: HS b \(nộp 02\/10 → T10\)/);
     assert.match(message, /Nộp muộn tháng trước, tính vào đây: HS b \(T9 · nộp 02\/10\)/);
+  });
+});
+
+describe("buildTeacherPayslip", () => {
+  test("one month's payslip lists the class pay, payouts, what is left and late payers", () => {
+    const [teacher] = buildSalaryLedger(
+      computeSalaryLines(
+        salaryInput({
+          invoices: [invoice("a", "paid", 4_000_000, new Date(2026, 8, 5)), invoice("b", "paid", 480_000, new Date(2026, 9, 2))],
+          records: [payout("p1", 2_500_000, new Date(2026, 8, 30))]
+        })
+      )
+    );
+    const slip = buildTeacherPayslip(teacher, 9, 2026, new Date(2026, 9, 20));
+    assert.match(slip, /^PHIẾU LƯƠNG THÁNG 9\/2026\n/);
+    assert.match(slip, /Giáo viên: Cô Hương/);
+    assert.match(slip, /Học phí thu đến 30\/09: 4\.000\.000\s₫/);
+    assert.match(slip, /TỔNG LƯƠNG T9: 3\.000\.000\s₫/);
+    assert.match(slip, /Đã chuyển khoản: 2\.500\.000\s₫ \(30\/09\)/);
+    assert.match(slip, /CÒN LẠI: 500\.000\s₫/);
+    assert.match(slip, /Nộp sau ngày chốt 30\/09, tính sang lương sau: HS b/);
+
+    const october = buildTeacherPayslip(teacher, 10, 2026, new Date(2026, 9, 20));
+    assert.match(october, /^PHIẾU LƯƠNG THÁNG 10\/2026 \(tạm tính\)/);
+    assert.match(october, /Nộp muộn tháng trước: \+360\.000\s₫/);
+    assert.match(october, /Chưa chuyển\./);
+    assert.match(october, /Lương tháng trước còn thiếu: .* T9: 500\.000\s₫/);
   });
 });
 

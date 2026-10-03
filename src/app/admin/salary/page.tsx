@@ -3,10 +3,11 @@ import { Archive, Banknote, CalendarCheck, Hourglass, Users } from "lucide-react
 import { deleteExpenseAction } from "@/lib/actions/finance";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import {
-  CopyTextButton,
+  PayslipButton,
   SalaryPayoutButton,
   SalaryWriteOffButton,
-  type PayoutOption
+  type PayoutOption,
+  type PayslipOption
 } from "@/components/SalaryForms";
 import { SalaryMonthCutoffs, type MonthCutoffRow } from "@/components/SalaryMonthCutoffs";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
@@ -16,6 +17,7 @@ import { formatCurrency, formatDayMonth, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import {
   buildSalaryLedger,
+  buildTeacherPayslip,
   buildTeacherSalaryMessage,
   getPendingSalaryLines,
   loadDefaultSalaryCutoff,
@@ -62,6 +64,29 @@ function dateInputValue(date: Date) {
 
 function teacherParam(teacher: TeacherLedger) {
   return teacher.teacherName || NO_TEACHER;
+}
+
+/** Phiếu lương từng tháng (mới nhất trước) và cả bảng lương; mặc định là tháng gần nhất đã qua ngày chốt. */
+function payslipOptions(teacher: TeacherLedger, now: Date) {
+  const periods = teacher.classes.flatMap((classRoom) => classRoom.periods);
+  const indexes = [...new Set(periods.map((period) => periodIndex(period.month, period.year)))].sort((a, b) => b - a);
+  const slips: PayslipOption[] = indexes.map((index) => {
+    const month = (index % 12) + 1;
+    const year = Math.floor(index / 12);
+    const provisional = periods.some(
+      (period) => period.month === month && period.year === year && !period.cutoffPassed
+    );
+    return {
+      key: String(index),
+      label: `Phiếu T${month}/${year}${provisional ? " (tạm tính)" : ""}`,
+      text: buildTeacherPayslip(teacher, month, year, now)
+    };
+  });
+  const closed = indexes.find((index) =>
+    periods.every((period) => periodIndex(period.month, period.year) !== index || period.cutoffPassed)
+  );
+  slips.push({ key: "all", label: "Cả bảng lương", text: buildTeacherSalaryMessage(teacher, now) });
+  return { slips, defaultKey: String(closed ?? indexes[0] ?? "all") };
 }
 
 export default async function SalaryPage({
@@ -121,6 +146,12 @@ export default async function SalaryPage({
     selectedTeacher ? list.filter((teacher) => teacherParam(teacher) === selectedTeacher) : list;
   const shown = byTeacher(buildSalaryLedger(lines.filter((line) => !line.archived)));
   const shownArchived = byTeacher(buildSalaryLedger(lines.filter((line) => line.archived)));
+  // Chip lọc chỉ cho giáo viên còn lớp đang học, hoặc vẫn còn nợ lương (kể cả lớp đã lưu trữ).
+  const chipTeachers = ledger.filter(
+    (teacher) => teacher.classes.some((classRoom) => !classRoom.archived) || teacher.owed > 0
+  );
+  // Phiếu lương lấy mọi lớp của giáo viên trong tháng, kể cả lớp vừa lưu trữ.
+  const fullLedger = new Map(ledger.map((teacher) => [teacherParam(teacher), teacher]));
   const owedTotal = ledger.reduce((sum, teacher) => sum + teacher.owed, 0);
   const waitingTotal = ledger.reduce((sum, teacher) => sum + teacher.waitingShare, 0);
   const currentDue = ledger
@@ -195,7 +226,7 @@ export default async function SalaryPage({
           >
             Tất cả giáo viên
           </Link>
-          {ledger.map((teacher) => {
+          {chipTeachers.map((teacher) => {
             const value = teacherParam(teacher);
             const active = selectedTeacher === value;
             return (
@@ -249,12 +280,18 @@ export default async function SalaryPage({
         </EmptyState>
       ) : (
         shown.map((teacher) => (
-          <TeacherPanel key={teacherParam(teacher)} teacher={teacher} currentIndex={currentIndex} now={now} />
+          <TeacherPanel
+            key={teacherParam(teacher)}
+            teacher={teacher}
+            fullTeacher={fullLedger.get(teacherParam(teacher)) ?? teacher}
+            currentIndex={currentIndex}
+            now={now}
+          />
         ))
       )}
 
       {shownArchived.length > 0 ? (
-        <ArchivedSection teachers={shownArchived} currentIndex={currentIndex} now={now} />
+        <ArchivedSection teachers={shownArchived} fullLedger={fullLedger} currentIndex={currentIndex} now={now} />
       ) : null}
     </div>
   );
@@ -263,10 +300,12 @@ export default async function SalaryPage({
 /** Lương các lớp đã lưu trữ: thu gọn mặc định, tự mở khi còn nợ giáo viên để không bị sót. */
 function ArchivedSection({
   teachers,
+  fullLedger,
   currentIndex,
   now
 }: {
   teachers: TeacherLedger[];
+  fullLedger: Map<string, TeacherLedger>;
   currentIndex: number;
   now: Date;
 }) {
@@ -290,15 +329,33 @@ function ArchivedSection({
       </summary>
       <div className="grid gap-6 border-t border-stone-200 p-4">
         {teachers.map((teacher) => (
-          <TeacherPanel key={teacherParam(teacher)} teacher={teacher} currentIndex={currentIndex} now={now} />
+          <TeacherPanel
+            key={teacherParam(teacher)}
+            teacher={teacher}
+            fullTeacher={fullLedger.get(teacherParam(teacher)) ?? teacher}
+            currentIndex={currentIndex}
+            now={now}
+          />
         ))}
       </div>
     </details>
   );
 }
 
-function TeacherPanel({ teacher, currentIndex, now }: { teacher: TeacherLedger; currentIndex: number; now: Date }) {
+function TeacherPanel({
+  teacher,
+  fullTeacher,
+  currentIndex,
+  now
+}: {
+  teacher: TeacherLedger;
+  /** Cả lớp đang học lẫn đã lưu trữ của giáo viên, để phiếu lương đủ mọi lớp trong tháng. */
+  fullTeacher: TeacherLedger;
+  currentIndex: number;
+  now: Date;
+}) {
   const options = payoutOptions(teacher);
+  const payslips = payslipOptions(fullTeacher, now);
   const owedKeys = options.filter((option) => option.remaining > 0).map((option) => option.key);
 
   return (
@@ -330,11 +387,7 @@ function TeacherPanel({ teacher, currentIndex, now }: { teacher: TeacherLedger; 
           </dl>
         </div>
         <div className="flex flex-wrap gap-2">
-          <CopyTextButton
-            text={buildTeacherSalaryMessage(teacher, now)}
-            label="Chép bảng lương"
-            successMessage={`Đã chép bảng lương ${teacher.teacherName || "giáo viên"} — dán vào Zalo để gửi.`}
-          />
+          <PayslipButton teacherName={teacher.teacherName} slips={payslips.slips} defaultKey={payslips.defaultKey} />
           {options.length > 0 ? (
             <SalaryPayoutButton
               teacherName={teacher.teacherName}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { AlertTriangle, Ban, Check, Copy, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, Ban, Check, Copy, FileText, RotateCcw, Send } from "lucide-react";
 import { recordSalaryPayoutAction, setSalaryWriteOffAction } from "@/lib/actions/finance";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { Modal } from "@/components/Modal";
@@ -258,26 +258,92 @@ function PayoutDialog({
   );
 }
 
-/** Nút chép một đoạn văn bản (vd bảng lương gửi giáo viên) vào clipboard. */
-export function CopyTextButton({ text, label, successMessage }: { text: string; label: string; successMessage: string }) {
+/** Chép văn bản vào clipboard và báo kết quả bằng toast. */
+async function copyText(text: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(successMessage);
+    return true;
+  } catch {
+    toast.error("Trình duyệt không cho chép tự động. Hãy thử lại hoặc dùng trình duyệt khác.");
+    return false;
+  }
+}
+
+export type PayslipOption = { key: string; label: string; text: string };
+
+/** Phiếu lương từng tháng (và cả bảng lương) của một giáo viên: chọn tháng, xem trước rồi chép gửi Zalo. */
+export function PayslipButton({
+  teacherName,
+  slips,
+  defaultKey
+}: {
+  teacherName: string;
+  slips: PayslipOption[];
+  defaultKey: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedKey, setSelectedKey] = useState(defaultKey);
   const [copied, setCopied] = useState(false);
+  const selected = slips.find((slip) => slip.key === selectedKey) ?? slips[0];
+  if (!selected) return null;
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(selected.text, `Đã chép ${selected.label.toLowerCase()} của ${teacherName || "giáo viên"} — dán vào Zalo để gửi.`)) {
       setCopied(true);
-      toast.success(successMessage);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Trình duyệt không cho chép tự động. Hãy thử lại hoặc dùng trình duyệt khác.");
     }
   }
 
   return (
-    <Button type="button" variant="secondary" className="h-10 whitespace-nowrap px-3.5" onClick={copy}>
-      {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
-      {label}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        className="h-10 whitespace-nowrap px-3.5"
+        onClick={() => {
+          setSelectedKey(defaultKey);
+          setOpen(true);
+        }}
+      >
+        <FileText className="h-4 w-4" />
+        Phiếu lương
+      </Button>
+      {open ? (
+        <Modal title={`Phiếu lương · ${teacherName || "giáo viên"}`} onClose={() => setOpen(false)} maxWidthClassName="max-w-xl">
+          <div className="grid gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {slips.map((slip) => (
+                <button
+                  key={slip.key}
+                  type="button"
+                  onClick={() => setSelectedKey(slip.key)}
+                  className={`focus-ring rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition-colors ${
+                    slip.key === selected.key
+                      ? "bg-primary text-white ring-primary"
+                      : "bg-white text-stone-700 ring-stone-300 hover:bg-stone-50"
+                  }`}
+                >
+                  {slip.label}
+                </button>
+              ))}
+            </div>
+            <pre className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-stone-200 bg-stone-50 p-4 font-sans text-sm leading-relaxed text-stone-800">
+              {selected.text}
+            </pre>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+                Đóng
+              </Button>
+              <Button type="button" onClick={copy}>
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                Chép để gửi
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
