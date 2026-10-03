@@ -1,9 +1,6 @@
 import Link from "next/link";
-import { AlertTriangle, Archive, Layers3, Plus } from "lucide-react";
-import {
-  createClassAction
-} from "@/lib/actions";
-import { Button, EmptyState, Field, Input, Panel, PageHeader } from "@/components/ui";
+import { AlertTriangle, Archive, Layers3 } from "lucide-react";
+import { EmptyState, Panel, PageHeader } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +10,18 @@ import { CopyTeacherLinkButton } from "@/components/CopyTeacherLinkButton";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditClassButton } from "@/components/EditClassButton";
 import { getAppSettings } from "@/lib/settings";
+import { DEFAULT_SALARY_CUTOFF, describeSalaryCutoff, parseSalaryCutoff } from "@/lib/salary-cutoff";
+import { absoluteUrl, payPath, teacherPath } from "@/lib/class-links";
+import {
+  enrollmentVisibleInPeriodWhere,
+  latestMonthUpToPeriodArgs,
+  remainingScheduledSessions,
+  resolveMonthPlan
+} from "@/lib/enrollment-period";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
+import { CreateClassForm } from "@/components/CreateClassForm";
+import { requireAdmin } from "@/lib/auth";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +30,7 @@ export default async function ClassesPage({
 }: {
   searchParams: Promise<{ classId?: string; month?: string; year?: string; archived?: string }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);
@@ -35,13 +44,13 @@ export default async function ClassesPage({
       ? parsedYear
       : now.getFullYear();
   const showArchived = params.archived === "1";
-  const periodEnd = new Date(year, month, 1);
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
   const [classes, students, settings] = await Promise.all([
     prisma.classRoom.findMany({
       where: { archivedAt: showArchived ? { not: null } : null },
       orderBy: { createdAt: "asc" },
       include: {
+        schedules: { select: { weekday: true } },
         enrollments: {
           where: showArchived
             ? {
@@ -50,29 +59,12 @@ export default async function ClassesPage({
                   { invoices: { some: { month, year } } }
                 ]
               }
-            : {
-                AND: [
-                  {
-                    OR: [
-                      { createdAt: { lt: periodEnd } },
-                      { months: { some: { month, year } } },
-                      { invoices: { some: { month, year } } }
-                    ]
-                  },
-                  {
-                    OR: [
-                      { student: { archivedAt: null } },
-                      { months: { some: { month, year } } },
-                      { invoices: { some: { month, year } } }
-                    ]
-                  }
-                ]
-              },
+            : enrollmentVisibleInPeriodWhere(month, year),
           orderBy: { student: { fullName: "asc" } },
           include: {
             student: true,
             invoices: { where: { month, year }, orderBy: { createdAt: "desc" } },
-            months: { where: { month, year }, take: 1 }
+            months: latestMonthUpToPeriodArgs(month, year)
           }
         }
       }
@@ -80,9 +72,38 @@ export default async function ClassesPage({
     prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } }),
     getAppSettings()
   ]);
+  const defaultCutoffLabel = describeSalaryCutoff(parseSalaryCutoff(settings.salaryCutoff) ?? DEFAULT_SALARY_CUTOFF);
 
   const selectedClass =
     classes.find((classRoom) => classRoom.id === params.classId) ?? classes[0] ?? null;
+  // Nợ các tháng trước của học sinh trong lớp, để sang tháng mới vẫn thấy ai còn nợ.
+  const olderDebts = selectedClass
+    ? await prisma.monthlyInvoice.findMany({
+        where: {
+          status: "unpaid",
+          enrollment: { classId: selectedClass.id },
+          OR: [{ year: { lt: year } }, { year, month: { lt: month } }]
+        },
+        orderBy: [{ year: "asc" }, { month: "asc" }],
+        select: { enrollmentId: true, month: true, year: true, amount: true }
+      })
+    : [];
+  const olderDebtsByEnrollment = new Map<string, Array<{ month: number; year: number; amount: number }>>();
+  for (const debt of olderDebts) {
+    const list = olderDebtsByEnrollment.get(debt.enrollmentId) ?? [];
+    list.push({ month: debt.month, year: debt.year, amount: debt.amount });
+    olderDebtsByEnrollment.set(debt.enrollmentId, list);
+  }
+  // Kế hoạch tháng của từng học sinh: kỳ mới kế thừa tình trạng học của tháng gần nhất trước đó.
+  const planOf = (enrollment: NonNullable<typeof selectedClass>["enrollments"][number]) =>
+    resolveMonthPlan({
+      month,
+      year,
+      latestMonth: enrollment.months[0],
+      invoice: enrollment.invoices[0],
+      enrollment,
+      classRoom: selectedClass!
+    });
   const duplicatePhones = new Set(
     selectedClass
       ? Object.entries(
@@ -114,20 +135,35 @@ export default async function ClassesPage({
                     teacherName: selectedClass.teacherName,
                     pricePerSession: selectedClass.pricePerSession,
                     sessionsPerMonthDefault: selectedClass.sessionsPerMonthDefault,
-                    teacherSharePercent: selectedClass.teacherSharePercent
+                    teacherSharePercent: selectedClass.teacherSharePercent,
+                    salaryCutoff: selectedClass.salaryCutoff
                   }}
+                  defaultCutoffLabel={defaultCutoffLabel}
                 />
               ) : null}
               {!selectedClass.archivedAt ? (
                 <CopyTeacherLinkButton
                   className={selectedClass.name}
-                  teacherUrl={`${settings.appUrl.replace(/\/$/, "")}/teacher/classes/${selectedClass.publicToken}?month=${month}&year=${year}`}
+                  teacherUrl={`${absoluteUrl(settings.appUrl, teacherPath(selectedClass))}?month=${month}&year=${year}`}
                 />
               ) : null}
               <CopyParentLinkButton
                 className={selectedClass.name}
                 classShortCode={selectedClass.shortCode}
-                payUrl={`${settings.appUrl.replace(/\/$/, "")}/pay/${selectedClass.publicToken}`}
+                payUrl={absoluteUrl(settings.appUrl, payPath(selectedClass))}
+                month={month}
+                year={year}
+                rows={selectedClass.enrollments.map((enrollment) => {
+                  const invoice = enrollment.invoices[0];
+                  const plan = planOf(enrollment);
+                  return {
+                    studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
+                    status: invoice?.status ?? (plan.status === "on_leave" ? "on_leave" : "not_created"),
+                    sessions: plan.sessions,
+                    pricePerSession: plan.pricePerSession,
+                    amount: invoice?.amount ?? plan.sessions * plan.pricePerSession
+                  };
+                })}
               />
               </>
             ) : null}
@@ -203,32 +239,7 @@ export default async function ClassesPage({
 
           {!showArchived ? <Panel>
             <h2 className="font-bold">Tạo lớp mới</h2>
-            <form action={createClassAction} className="mt-4 grid gap-3">
-              <Field label="Tên lớp">
-                <Input name="name" required placeholder="Lớp 10A - Toán" />
-              </Field>
-              <Field label="Mã lớp">
-                <Input name="shortCode" required placeholder="L10A" />
-              </Field>
-              <Field label="Tên giáo viên">
-                <Input name="teacherName" placeholder="Cô Hạnh" />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Giá / buổi">
-                  <Input name="pricePerSession" type="number" min="0" required />
-                </Field>
-                <Field label="Buổi / tháng">
-                  <Input name="sessionsPerMonthDefault" type="number" min="1" defaultValue="8" required />
-                </Field>
-              </div>
-              <Field label="% lương GV" hint="% học phí đã thu, nhập sau cũng được">
-                <Input name="teacherSharePercent" type="number" min="0" max="100" defaultValue="0" />
-              </Field>
-              <Button type="submit">
-                <Plus className="h-4 w-4" />
-                Tạo lớp
-              </Button>
-            </form>
+            <CreateClassForm defaultCutoffLabel={defaultCutoffLabel} />
           </Panel> : null}
         </div>
 
@@ -249,19 +260,12 @@ export default async function ClassesPage({
                     {selectedClass.sessionsPerMonthDefault} buổi mặc định
                   </p>
                 </div>
-                <form action="/admin/classes" method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
-                  <input type="hidden" name="classId" value={selectedClass.id} />
-                  {showArchived ? <input type="hidden" name="archived" value="1" /> : null}
-                  <Field label="Tháng">
-                    <Input name="month" type="number" min="1" max="12" defaultValue={month} />
-                  </Field>
-                  <Field label="Năm">
-                    <Input name="year" type="number" min="2020" defaultValue={year} />
-                  </Field>
-                  <Button type="submit" variant="secondary" className="self-end">
-                    Xem tháng
-                  </Button>
-                </form>
+                <MonthSwitcher
+                  basePath="/admin/classes"
+                  month={month}
+                  year={year}
+                  params={{ classId: selectedClass.id, archived: showArchived ? "1" : undefined }}
+                />
               </div>
 
               {duplicatePhones.size > 0 ? (
@@ -310,28 +314,30 @@ export default async function ClassesPage({
                   billingLocked={Boolean(selectedClass.archivedAt)}
                   rows={selectedClass.enrollments.map((enrollment) => {
                     const invoice = enrollment.invoices[0];
-                    const enrollmentMonth = enrollment.months[0];
-                    const monthlyStatus = enrollmentMonth?.status ?? (invoice ? "active" : enrollment.status);
-                    const defaultSessions =
-                      invoice?.sessions ??
-                      enrollmentMonth?.sessions ??
-                      enrollment.sessionsOverride ??
-                      selectedClass.sessionsPerMonthDefault;
+                    const plan = planOf(enrollment);
+                    // Bắt đầu học giữa tháng: gợi ý số buổi còn lại theo lịch từ ngày bắt đầu học.
+                    const remainingSessions = plan.initialized
+                      ? null
+                      : remainingScheduledSessions(selectedClass.schedules, enrollment.startDate, month, year);
                     return {
                       enrollmentId: enrollment.id,
                       studentId: enrollment.student.id,
                       studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
                       phone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
                       studentArchived: Boolean(enrollment.student.archivedAt),
-                      monthlyStatus,
-                      periodInitialized: Boolean(enrollmentMonth || invoice),
-                      defaultSessions,
-                      fallbackSessions:
-                        enrollment.sessionsOverride ?? selectedClass.sessionsPerMonthDefault,
-                      pricePerSession:
-                        invoice?.pricePerSession ??
-                        enrollmentMonth?.pricePerSession ??
-                        selectedClass.pricePerSession,
+                      monthlyStatus: plan.status,
+                      periodInitialized: plan.initialized,
+                      olderDebts: olderDebtsByEnrollment.get(enrollment.id) ?? [],
+                      joinHint:
+                        plan.status === "active" && remainingSessions !== null && remainingSessions < plan.defaultSessions
+                          ? {
+                              joinedOn: `${enrollment.startDate.getDate()}/${enrollment.startDate.getMonth() + 1}`,
+                              sessions: remainingSessions
+                            }
+                          : null,
+                      defaultSessions: plan.sessions,
+                      fallbackSessions: plan.defaultSessions,
+                      pricePerSession: plan.pricePerSession,
                       memoContent: buildMemo(selectedClass.shortCode, enrollment.student.phone, month, year),
                       invoice: invoice
                         ? {
@@ -341,6 +347,7 @@ export default async function ClassesPage({
                             sessions: invoice.sessions,
                             pricePerSession: invoice.pricePerSession,
                             amount: invoice.amount,
+                            paidAmount: invoice.paidAmount,
                             memoContent: invoice.memoContent,
                             status: invoice.status,
                             statusReason: invoice.statusReason

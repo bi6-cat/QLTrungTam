@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { LogIn } from "lucide-react";
-import { loginAction } from "@/lib/actions";
+import { loginAction } from "@/lib/actions/auth";
 import { Button, Field, Input } from "@/components/ui";
 
 export function LoginForm() {

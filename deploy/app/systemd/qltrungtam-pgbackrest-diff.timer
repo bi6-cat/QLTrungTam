@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily differential pgBackRest backup for QLTrungTam
+
+[Timer]
+OnCalendar=Mon..Sat *-*-* 02:00:00 Asia/Ho_Chi_Minh
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=1m
+Unit=qltrungtam-pgbackrest@diff.service
+
+[Install]
+WantedBy=timers.target

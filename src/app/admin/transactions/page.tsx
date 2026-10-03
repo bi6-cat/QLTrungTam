@@ -4,9 +4,12 @@ import { TransactionMatchForm } from "@/components/TransactionMatchForm";
 import { TransactionDetailsButton } from "@/components/TransactionDetailsButton";
 import { TransactionReference } from "@/components/TransactionReference";
 import { TransactionReviewActions } from "@/components/TransactionReviewActions";
-import { Badge, Button, EmptyState, Field, Input, Panel, PageHeader, StatCard } from "@/components/ui";
+import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
+import { periodIndex } from "@/lib/enrollment-period";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 const LIST_PAGE_SIZE = 12;
@@ -22,6 +25,7 @@ export default async function TransactionsPage({
     unmatchedPage?: string;
   }>;
 }) {
+  await requireAdmin();
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);
@@ -68,7 +72,7 @@ export default async function TransactionsPage({
     prisma.monthlyInvoice.aggregate({
       where: paidInvoiceWhere,
       _count: { _all: true },
-      _sum: { amount: true }
+      _sum: { amount: true, paidAmount: true }
     }),
     prisma.transaction.count({ where: transactionPeriodWhere }),
     prisma.transaction.aggregate({
@@ -84,7 +88,7 @@ export default async function TransactionsPage({
     prisma.monthlyInvoice.groupBy({
       by: ["year", "month", "status"],
       _count: { _all: true },
-      _sum: { amount: true },
+      _sum: { amount: true, paidAmount: true },
       orderBy: [{ year: "desc" }, { month: "desc" }]
     })
   ]);
@@ -176,7 +180,7 @@ export default async function TransactionsPage({
       acc[key].invoiceCount += count;
       if (group.status === "paid") {
         acc[key].expectedAmount += amount;
-        acc[key].paidAmount += amount;
+        acc[key].paidAmount += group._sum.paidAmount ?? amount;
         acc[key].paidCount += count;
       } else if (group.status === "unpaid") {
         acc[key].expectedAmount += amount;
@@ -190,7 +194,7 @@ export default async function TransactionsPage({
     }, {})
   ).sort((a, b) => b.key.localeCompare(a.key));
 
-  const totalPaid = paidAggregate._sum.amount ?? 0;
+  const totalPaid = paidAggregate._sum.paidAmount ?? paidAggregate._sum.amount ?? 0;
   const totalBankTransactions = bankTransactionAggregate._sum.amount ?? 0;
 
   function pagerHref(param: string, value: number) {
@@ -256,33 +260,21 @@ export default async function TransactionsPage({
     <div className="grid gap-6">
       <PageHeader
         title="Giao dịch"
-        description="Theo dõi lịch sử chuyển khoản, lịch sử đóng tiền theo tháng và xử lý giao dịch chưa khớp."
+        description="Học phí theo kỳ (tháng của hóa đơn) và tiền về theo ngày giao dịch là hai cách xem khác nhau: tiền tháng 9 đóng muộn trong tháng 10 nằm ở kỳ T9 nhưng là tiền về T10."
+        actions={<MonthSwitcher basePath="/admin/transactions" month={selectedMonth} year={selectedYear} />}
       />
 
-      <Panel>
-        <form action="/admin/transactions" method="GET" className="grid items-end gap-3 sm:grid-cols-[140px_160px_auto]">
-          <Field label="Lọc tháng">
-            <Input name="month" type="number" min="1" max="12" defaultValue={selectedMonth} />
-          </Field>
-          <Field label="Năm">
-            <Input name="year" type="number" min="2020" defaultValue={selectedYear} />
-          </Field>
-          <Button type="submit" variant="secondary" className="sm:w-fit">
-            Xem lịch sử
-          </Button>
-        </form>
-      </Panel>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
-          label={`Đã ghi nhận ${formatMonth(selectedMonth, selectedYear)}`}
+          label={`Học phí kỳ ${formatMonth(selectedMonth, selectedYear)} đã đóng`}
           tone="success"
           value={formatCurrency(totalPaid)}
           hint={`${paid.total} hóa đơn đã đóng`}
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <StatCard
-          label={`Chuyển khoản ${formatMonth(selectedMonth, selectedYear)}`}
+          label={`Chuyển khoản về trong ${formatMonth(selectedMonth, selectedYear)}`}
           tone="primary"
           value={formatCurrency(totalBankTransactions)}
           hint={`${bankTransactionAggregate._count._all} giao dịch ngân hàng hợp lệ`}
@@ -347,7 +339,8 @@ export default async function TransactionsPage({
       <Panel className="overflow-hidden p-0">
         <div className="flex items-center gap-2 border-b border-stone-200 p-5">
           <History className="h-5 w-5 text-primary" />
-          <h2 className="font-bold">Lịch sử đóng tiền {formatMonth(selectedMonth, selectedYear)}</h2>
+          <h2 className="font-bold">Học phí kỳ {formatMonth(selectedMonth, selectedYear)} đã đóng</h2>
+          <span className="text-xs text-stone-500">· theo tháng của hóa đơn, kể cả đóng muộn</span>
         </div>
         {paid.total === 0 ? (
           <div className="p-5">
@@ -408,8 +401,17 @@ export default async function TransactionsPage({
                     <td className="overflow-hidden px-3 py-3">
                       <p className="truncate whitespace-nowrap" title={teacherName}>{teacherName}</p>
                     </td>
-                    <td className="overflow-hidden whitespace-nowrap px-3 py-3">{formatMonth(invoice.month, invoice.year)}</td>
-                    <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">{formatCurrency(invoice.amount)}</td>
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3">
+                      {formatMonth(invoice.month, invoice.year)}
+                      {invoice.paidAt &&
+                      periodIndex(invoice.paidAt.getMonth() + 1, invoice.paidAt.getFullYear()) >
+                        periodIndex(invoice.month, invoice.year) ? (
+                        <div>
+                          <Badge tone="warning">Đóng muộn</Badge>
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="overflow-hidden whitespace-nowrap px-3 py-3 font-semibold">{formatCurrency(invoice.paidAmount ?? invoice.amount)}</td>
                     <td className="overflow-hidden px-3 py-3">
                       {invoice.transaction?.gatewayRef ? (
                         <TransactionReference value={invoice.transaction.gatewayRef} />
@@ -444,7 +446,8 @@ export default async function TransactionsPage({
       <Panel className="overflow-hidden p-0">
         <div className="flex items-center gap-2 border-b border-stone-200 p-5">
           <Landmark className="h-5 w-5 text-primary" />
-          <h2 className="font-bold">Lịch sử giao dịch {formatMonth(selectedMonth, selectedYear)}</h2>
+          <h2 className="font-bold">Tiền về trong {formatMonth(selectedMonth, selectedYear)}</h2>
+          <span className="text-xs text-stone-500">· theo ngày giao dịch, gồm cả tiền của kỳ khác</span>
         </div>
         {tx.total === 0 ? (
           <div className="p-5">

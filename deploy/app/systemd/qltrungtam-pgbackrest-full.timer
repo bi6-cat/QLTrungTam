@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly full pgBackRest backup for QLTrungTam
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00 Asia/Ho_Chi_Minh
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=1m
+Unit=qltrungtam-pgbackrest@full.service
+
+[Install]
+WantedBy=timers.target

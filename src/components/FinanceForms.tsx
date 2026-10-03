@@ -1,50 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
-import { AlertTriangle, CheckCircle2, Plus, Wand2 } from "lucide-react";
-import { createExpenseAction, generateTeacherSalaryAction } from "@/lib/actions";
+import { useActionState, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { AlertTriangle, Plus } from "lucide-react";
+import { createExpenseAction } from "@/lib/actions/finance";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { MoneyInput } from "@/components/MoneyInput";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { EXPENSE_CATEGORIES } from "@/lib/schedule";
-
-function Alert({ tone, children }: { tone: "error" | "success"; children: React.ReactNode }) {
-  const isError = tone === "error";
-  return (
-    <div
-      className={`flex items-start gap-2 rounded-xl border p-3 text-sm font-medium ${
-        isError
-          ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-emerald-200 bg-emerald-50 text-emerald-700"
-      }`}
-    >
-      {isError ? (
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-      ) : (
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-      )}
-      <span>{children}</span>
-    </div>
-  );
-}
-
-export function GenerateSalaryButton({ month, year }: { month: number; year: number }) {
-  const [state, action, pending] = useActionState(generateTeacherSalaryAction, {
-    error: "",
-    success: ""
-  });
-
-  return (
-    <form action={action} className="grid gap-3">
-      <input type="hidden" name="month" value={month} />
-      <input type="hidden" name="year" value={year} />
-      <Button type="submit" variant="accent" disabled={pending}>
-        <Wand2 className="h-4 w-4" />
-        {pending ? "Đang tính..." : `Tính lương giáo viên tháng ${month}/${year}`}
-      </Button>
-      {state.error ? <Alert tone="error">{state.error}</Alert> : null}
-      {state.success ? <Alert tone="success">{state.success}</Alert> : null}
-    </form>
-  );
-}
 
 export function AddExpenseForm({
   month,
@@ -55,10 +19,23 @@ export function AddExpenseForm({
   year: number;
   classes: Array<{ id: string; name: string }>;
 }) {
-  const [state, action, pending] = useActionState(createExpenseAction, { error: "", ok: false });
+  const [state, action, pending] = useActionState(createExpenseAction, EMPTY_RESULT_STATE);
+  const [category, setCategory] = useState("other");
+  const [resetKey, setResetKey] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
+  const isSalary = category === "teacher_salary";
+  useResultToast(state);
+
+  // Thêm xong thì dọn form để nhập tiếp khoản khác.
+  useEffect(() => {
+    if (!state.success) return;
+    formRef.current?.reset();
+    setCategory("other");
+    setResetKey((value) => value + 1);
+  }, [state]);
 
   return (
-    <form action={action} className="grid gap-3 lg:grid-cols-6">
+    <form ref={formRef} action={action} className="grid gap-3 lg:grid-cols-6">
       <input type="hidden" name="month" value={month} />
       <input type="hidden" name="year" value={year} />
       <div className="lg:col-span-2">
@@ -67,38 +44,49 @@ export function AddExpenseForm({
         </Field>
       </div>
       <Field label="Loại chi phí">
-        <Select name="category" defaultValue="other">
-          {EXPENSE_CATEGORIES.map((category) => (
-            <option key={category.value} value={category.value}>
-              {category.label}
+        <Select name="category" value={category} onChange={(event) => setCategory(event.target.value)}>
+          {EXPENSE_CATEGORIES.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
             </option>
           ))}
         </Select>
       </Field>
       <Field label="Số tiền">
-        <Input name="amount" type="number" min="1" required inputMode="numeric" />
+        <MoneyInput key={resetKey} name="amount" required placeholder="0" />
       </Field>
       <div className="lg:col-span-2">
-        <Field label="Gắn với lớp" hint="Không bắt buộc">
-          <Select name="classId" defaultValue="">
-            <option value="">Chi phí chung</option>
-            {classes.map((classRoom) => (
-              <option key={classRoom.id} value={classRoom.id}>
-                {classRoom.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {isSalary ? (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            Lương theo lớp ghi ở trang{" "}
+            <Link href="/admin/salary" className="font-semibold underline">
+              Lương GV
+            </Link>
+            . Ở đây chỉ nhập khoản lương chung không gắn lớp (vd lương cố định).
+          </p>
+        ) : (
+          <Field label="Gắn với lớp" hint="Không bắt buộc">
+            <Select name="classId" defaultValue="">
+              <option value="">Chi phí chung</option>
+              {classes.map((classRoom) => (
+                <option key={classRoom.id} value={classRoom.id}>
+                  {classRoom.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
       <div className="lg:col-span-6">
-        <Field label="Ghi chú">
+        <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea name="note" className="min-h-16" />
         </Field>
       </div>
 
       {state.error ? (
-        <div className="lg:col-span-6">
-          <Alert tone="error">{state.error}</Alert>
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700 lg:col-span-6">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{state.error}</span>
         </div>
       ) : null}
 

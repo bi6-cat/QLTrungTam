@@ -1,14 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Archive, RotateCcw } from "lucide-react";
-import {
-  archiveClassAction,
-  archiveStudentAction,
-  restoreClassAction,
-  restoreStudentAction
-} from "@/lib/actions";
+import { archiveClassAction, restoreClassAction } from "@/lib/actions/classes";
+import { archiveStudentAction, restoreStudentAction } from "@/lib/actions/students";
+import { toast } from "@/components/Toaster";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -27,7 +23,6 @@ export function ArchiveEntityButton({
   archived: boolean;
   compact?: boolean;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -50,12 +45,13 @@ export function ArchiveEntityButton({
     startTransition(async () => {
       try {
         const result = await action(formData);
-        if (!result.ok) {
+        if (result.error) {
           setError(result.error);
           return;
         }
+        toast.success(result.success);
+        // Action đã revalidatePath và trả kèm dữ liệu mới, không cần router.refresh().
         setOpen(false);
-        router.refresh();
       } catch (actionError) {
         setError(actionError instanceof Error ? actionError.message : `Không thể ${label.toLowerCase()} ${entityLabel}.`);
       }
@@ -95,10 +91,9 @@ export function ArchiveEntityButton({
               )}
             </p>
             <input type="hidden" name="id" value={entityId} />
-            <Field label="Lý do">
+            <Field label="Lý do" hint="Không bắt buộc">
               <Textarea
                 name="reason"
-                required
                 maxLength={500}
                 disabled={pending}
                 autoFocus

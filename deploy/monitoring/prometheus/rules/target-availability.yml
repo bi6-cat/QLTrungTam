@@ -1,0 +1,46 @@
+groups:
+  - name: target-availability
+    rules:
+      - alert: ExporterDown
+        expr: up{job=~"node|postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: monitoring
+          owner: sre
+        annotations:
+          summary: "Exporter {{ $labels.job }} is unavailable"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: PostgresExporterCannotConnect
+        expr: pg_up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: postgresql
+          owner: sre
+        annotations:
+          summary: "Postgres exporter cannot connect to PostgreSQL"
+          description: "The exporter HTTP endpoint is reachable, but its database connection is failing."
+
+      - alert: BlackboxExporterDown
+        expr: up{job="blackbox"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: monitoring
+          owner: sre
+        annotations:
+          summary: "Blackbox exporter is unavailable"
+          description: "Prometheus cannot scrape the blackbox exporter for more than 2 minutes."
+
+      - alert: ApplicationEndpointDown
+        expr: probe_success{job="app-probe"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: qltrungtam
+          owner: sre
+        annotations:
+          summary: "QLTrungTam public health endpoint is unavailable"
+          description: "The external probe to {{ $labels.instance }} has failed for more than 2 minutes."

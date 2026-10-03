@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
 import { buildMemo } from "../src/lib/payment";
-import { generatePublicToken } from "../src/lib/publicToken";
+import { generatePublicToken, TEACHER_TOKEN_LENGTH } from "../src/lib/publicToken";
 
 const prisma = new PrismaClient();
 
@@ -125,9 +125,12 @@ function buildEnrollments(students: StudentSeed[]): EnrollmentSeed[] {
 }
 
 async function main() {
-  // SEED_DEMO=false (đặt trên production) → CHỈ tạo admin + cấu hình, KHÔNG xoá dữ liệu, KHÔNG chèn demo.
-  // Mặc định (dev) vẫn seed đầy đủ dữ liệu demo.
-  const seedDemo = process.env.SEED_DEMO !== "false";
+  // Dữ liệu demo XOÁ SẠCH lớp/học sinh/hoá đơn/giao dịch nên phải bật rõ ràng bằng
+  // SEED_DEMO=true (chỉ dùng ở máy dev). Thiếu biến hoặc giá trị khác → chỉ tạo admin + cấu hình.
+  const seedDemo = process.env.SEED_DEMO === "true";
+  if (seedDemo && process.env.NODE_ENV === "production") {
+    throw new Error("Từ chối seed dữ liệu demo khi NODE_ENV=production: thao tác này xoá toàn bộ dữ liệu thật.");
+  }
 
   // -------------------------------------------------------------------------
   // 1. Admin + cấu hình ứng dụng — LUÔN chạy, idempotent (an toàn cho production).
@@ -139,9 +142,12 @@ async function main() {
       ? configuredHash
       : hashPassword(process.env.ADMIN_PASSWORD || "admin123");
 
+  // Không ghi đè mật khẩu admin đã có (admin có thể đã đổi trên giao diện).
+  // Muốn đặt lại mật khẩu theo .env thì chạy seed với SEED_RESET_ADMIN_PASSWORD=true.
+  const resetAdminPassword = process.env.SEED_RESET_ADMIN_PASSWORD === "true";
   await prisma.adminUser.upsert({
     where: { username: adminUsername },
-    update: { passwordHash },
+    update: resetAdminPassword ? { passwordHash } : {},
     create: { username: adminUsername, passwordHash }
   });
 
@@ -159,7 +165,7 @@ async function main() {
 
   if (!seedDemo) {
     console.log(
-      `✅ Bootstrap hoàn tất: đã tạo/cập nhật admin "${adminUsername}" + cấu hình. Bỏ qua dữ liệu demo (SEED_DEMO=false).`
+      `✅ Bootstrap hoàn tất: đã tạo/cập nhật admin "${adminUsername}" + cấu hình. Bỏ qua dữ liệu demo (chỉ chạy khi SEED_DEMO=true).`
     );
     return;
   }
@@ -184,9 +190,9 @@ async function main() {
 
   // Sinh mã công khai ngắn, duy nhất cho từng lớp demo.
   const usedTokens = new Set<string>();
-  const uniqueToken = () => {
-    let token = generatePublicToken();
-    while (usedTokens.has(token)) token = generatePublicToken();
+  const uniqueToken = (length?: number) => {
+    let token = generatePublicToken(length);
+    while (usedTokens.has(token)) token = generatePublicToken(length);
     usedTokens.add(token);
     return token;
   };
@@ -198,7 +204,8 @@ async function main() {
       teacherName: c.teacherName,
       pricePerSession: c.pricePerSession,
       sessionsPerMonthDefault: c.sessionsPerMonthDefault,
-      publicToken: uniqueToken()
+      publicToken: uniqueToken(),
+      teacherToken: uniqueToken(TEACHER_TOKEN_LENGTH)
     }))
   });
 

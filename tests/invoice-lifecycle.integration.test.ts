@@ -130,27 +130,23 @@ describe("invoice lifecycle and monthly enrollment integration", { concurrency: 
     assert.equal(jsonObject(restoreAudit.metadata).targetStatus, "unpaid");
   });
 
-  test("waives an unpaid invoice and rejects unsupported or reasonless transitions", async () => {
+  test("waives an unpaid invoice without a reason and rejects unsupported transitions", async () => {
     const fixture = await harness.createFixture();
     const invoice = await harness.createInvoice(fixture);
-
-    await expectLifecycleError(
-      () =>
-        changeInvoiceLifecycle({
-          invoiceId: invoice.id,
-          targetStatus: "waived",
-          actor: harness.actor,
-          reason: "   "
-        }),
-      "REASON_REQUIRED"
-    );
 
     await changeInvoiceLifecycle({
       invoiceId: invoice.id,
       targetStatus: "waived",
       actor: harness.actor,
-      reason: "Miễn học phí theo chính sách trung tâm"
+      reason: "   "
     });
+    const [waived, waiveAudit] = await Promise.all([
+      prisma.monthlyInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+      prisma.auditLog.findFirstOrThrow({ where: { action: "invoice.waived", entityId: invoice.id } })
+    ]);
+    // DB bắt hóa đơn miễn/hủy phải có lý do: để trống thì lưu lý do mặc định, nhật ký ghi là không có lý do.
+    assert.equal(waived.statusReason, "Miễn học phí");
+    assert.equal(waiveAudit.reason, null);
 
     await expectLifecycleError(
       () =>

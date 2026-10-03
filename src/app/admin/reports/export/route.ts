@@ -71,6 +71,7 @@ export async function GET(request: Request) {
     { key: "sessions", width: 10 },
     { key: "pricePerSession", width: 14 },
     { key: "amount", width: 14 },
+    { key: "paidAmount", width: 14 },
     { key: "status", width: 13 },
     { key: "statusReason", width: 28 },
     { key: "memo", width: 28 }
@@ -94,6 +95,7 @@ export async function GET(request: Request) {
     "Số buổi",
     "Đơn giá",
     "Thành tiền",
+    "Thực thu",
     "Trạng thái",
     "Lý do trạng thái",
     "Memo"
@@ -113,6 +115,7 @@ export async function GET(request: Request) {
       sessions: invoice.sessions,
       pricePerSession: invoice.pricePerSession,
       amount: invoice.amount,
+      paidAmount: invoice.status === "paid" ? invoice.paidAmount ?? invoice.amount : null,
       status: INVOICE_STATUS_LABEL[invoice.status],
       statusReason: invoice.statusReason ?? "-",
       memo: invoice.memoContent
@@ -127,7 +130,7 @@ export async function GET(request: Request) {
   const unpaidInvoices = invoices.filter((invoice) => invoice.status === "unpaid");
   const waivedInvoices = invoices.filter((invoice) => invoice.status === "waived");
   const voidInvoices = invoices.filter((invoice) => invoice.status === "void");
-  const totalPaid = paidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const totalPaid = paidInvoices.reduce((sum, invoice) => sum + (invoice.paidAmount ?? invoice.amount), 0);
   const totalUnpaid = unpaidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
   const totalCollectible = totalPaid + totalUnpaid;
   const totalWaived = waivedInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
@@ -138,7 +141,7 @@ export async function GET(request: Request) {
     className: "Đã phát hành có thể thu",
     amount: totalCollectible
   });
-  const paidRow = sheet.addRow({ className: "Tổng đã thu", amount: totalPaid });
+  const paidRow = sheet.addRow({ className: "Tổng đã thu (thực thu)", amount: totalPaid });
   const remainingRow = sheet.addRow({ className: "Công nợ chưa thu", amount: totalUnpaid });
   const waivedRow = sheet.addRow({ className: "Đã miễn", amount: totalWaived });
   const voidRow = sheet.addRow({ className: "Đã hủy", amount: totalVoid });
@@ -148,6 +151,7 @@ export async function GET(request: Request) {
   });
 
   sheet.getColumn("amount").numFmt = '#,##0 "₫"';
+  sheet.getColumn("paidAmount").numFmt = '#,##0 "₫"';
   sheet.getColumn("pricePerSession").numFmt = '#,##0 "₫"';
   sheet.views = [{ state: "frozen", ySplit: headerStartRow }];
 

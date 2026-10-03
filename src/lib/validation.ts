@@ -1,22 +1,53 @@
 import { z } from "zod";
+import { SALARY_CUTOFF_PATTERN } from "@/lib/salary-cutoff";
 
 // ---------------------------------------------------------------------------
 // Các schema trường dùng lại.
 // ---------------------------------------------------------------------------
 const id = z.string().trim().min(1, "ID không hợp lệ").max(64);
 
+// Mã lớp nằm trong nội dung chuyển khoản; nhiều ngân hàng bỏ/đổi ký tự đặc biệt nên chỉ cho chữ và số.
 const shortCode = z
   .string()
   .trim()
   .min(1, "Thiếu mã lớp")
   .max(20)
   .transform((v) => v.toUpperCase())
-  .refine((v) => /^[A-Z0-9_-]+$/.test(v), "Mã lớp chỉ gồm chữ, số, _ hoặc -");
+  .refine((v) => /^[A-Z0-9]+$/.test(v), "Mã lớp chỉ gồm chữ không dấu và số (không dấu cách, -, _)");
 
 const phone = z
   .string()
   .transform((v) => v.replace(/\D/g, ""))
   .refine((v) => v.length >= 8 && v.length <= 12, "Số điện thoại phải có 8–12 chữ số");
+
+// Ô % để trống không được ngầm thành 0 (lương giáo viên về 0 mà không ai hay).
+const sharePercent = z
+  .string({ message: "Nhập % lương giáo viên (0 nếu không chia)" })
+  .trim()
+  .min(1, "Nhập % lương giáo viên (0 nếu không chia)")
+  .pipe(
+    z.coerce
+      .number({ message: "Phần trăm phải là số" })
+      .int("Phần trăm phải là số nguyên")
+      .min(0, "Phần trăm không được âm")
+      .max(100, "Phần trăm tối đa là 100")
+  );
+
+const salaryCutoffCode = z
+  .string()
+  .trim()
+  .regex(SALARY_CUTOFF_PATTERN, "Ngày chốt lương không hợp lệ");
+
+/** Ngày chốt riêng của lớp: để trống = theo cài đặt chung. */
+const classSalaryCutoff = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v ? v : null))
+  .refine((v) => v === null || SALARY_CUTOFF_PATTERN.test(v), "Ngày chốt lương không hợp lệ");
+
+const dateInput = (message: string) =>
+  z.string({ message }).trim().regex(/^\d{4}-\d{2}-\d{2}$/, message);
 
 const money = z.coerce
   .number({ message: "Phải là số" })
@@ -24,7 +55,6 @@ const money = z.coerce
   .min(0, "Không được âm")
   .max(1_000_000_000, "Giá trị quá lớn");
 
-const sessionCount = z.coerce.number().int().min(0, "Số buổi không được âm").max(60, "Số buổi quá lớn");
 
 // month/year: sai/thiếu -> 0 để action tự lấy mặc định theo thời điểm hiện tại.
 const monthOpt = z.coerce.number().int().min(1).max(12).catch(0);
@@ -92,12 +122,8 @@ export const createClassSchema = z.object({
   teacherName: looseText(120),
   pricePerSession: money,
   sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60),
-  teacherSharePercent: z.coerce
-    .number({ message: "Phần trăm phải là số" })
-    .int("Phần trăm phải là số nguyên")
-    .min(0, "Phần trăm không được âm")
-    .max(100, "Phần trăm tối đa là 100")
-    .catch(0)
+  teacherSharePercent: sharePercent,
+  salaryCutoff: classSalaryCutoff
 });
 
 export const updateClassSchema = z.object({
@@ -106,12 +132,8 @@ export const updateClassSchema = z.object({
   teacherName: looseText(120),
   pricePerSession: money,
   sessionsPerMonthDefault: z.coerce.number().int().min(1).max(60),
-  teacherSharePercent: z.coerce
-    .number({ message: "Phần trăm phải là số" })
-    .int("Phần trăm phải là số nguyên")
-    .min(0, "Phần trăm không được âm")
-    .max(100, "Phần trăm tối đa là 100")
-    .catch(0)
+  teacherSharePercent: sharePercent,
+  salaryCutoff: classSalaryCutoff
 });
 
 export const idSchema = z.object({ id });
@@ -159,9 +181,48 @@ export const expenseSchema = z.object({
   note: optionalText(500)
 });
 
-export const generateSalarySchema = z.object({
+const salaryPayoutLine = z.object({
+  classId: id,
+  month: z.number().int().min(1).max(12),
+  year: z.number().int().min(2000).max(2100),
+  amount: z
+    .number({ message: "Số tiền phải là số" })
+    .int("Số tiền phải là số nguyên")
+    .refine((v) => v !== 0, "Số tiền chuyển phải khác 0")
+    .refine((v) => Math.abs(v) <= 1_000_000_000, "Số tiền quá lớn"),
+  method: z.enum(["bank_transfer", "cash"]).default("bank_transfer")
+});
+
+export const salaryPayoutSchema = z.object({
+  paidAt: dateInput("Chọn ngày chuyển tiền"),
+  note: optionalText(300),
+  lines: z
+    .string({ message: "Chọn ít nhất một lớp để ghi" })
+    .transform((value, ctx) => {
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Danh sách lớp không hợp lệ" });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(salaryPayoutLine).min(1, "Chọn ít nhất một lớp để ghi").max(60, "Quá nhiều dòng trong một lần ghi"))
+});
+
+export const salaryMonthCutoffSchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
-  year: z.coerce.number().int().min(2000).max(2100)
+  year: z.coerce.number().int().min(2000).max(2100),
+  /** Để trống = bỏ ngày đặt riêng, quay về ngày chốt chung. */
+  cutoffDate: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null))
+    .refine((v) => v === null || /^\d{4}-\d{2}-\d{2}$/.test(v), "Ngày chốt không hợp lệ"),
+  intent: z
+    .string()
+    .optional()
+    .transform((v) => (v === "reset" ? "reset" : "save"))
 });
 
 export const enrollmentSchema = z
@@ -180,7 +241,8 @@ export const enrollmentSchema = z
         (v) => v === null || (Number.isInteger(v) && v >= 0 && v <= 60),
         "Số buổi ghi đè không hợp lệ"
       ),
-    status: enrollmentStatus
+    status: enrollmentStatus,
+    startDate: dateInput("Chọn ngày bắt đầu học")
   })
   .superRefine((data, ctx) => {
     if (data.status === "active" && data.sessionsOverride === 0) {
@@ -191,21 +253,6 @@ export const enrollmentSchema = z
       });
     }
   });
-
-export const updateEnrollmentStatusSchema = z.object({ id, status: enrollmentStatus });
-
-export const generateInvoicesSchema = z.object({
-  classId: id,
-  month: monthOpt,
-  year: yearOpt
-});
-
-export const updateInvoiceSchema = z.object({
-  invoiceId: id,
-  sessions: sessionCount,
-  pricePerSession: money,
-  amount: money.optional()
-});
 
 export const updateClassDetailsSchema = z.object({
   classId: id,
@@ -223,12 +270,9 @@ export const updateSettingsSchema = z.object({
   bankAccountNumber: requiredText("Thiếu số tài khoản", 40),
   bankAccountName: requiredText("Thiếu tên tài khoản", 120),
   bankBin: requiredText("Thiếu mã ngân hàng", 20),
-  appUrl: looseText(200)
-});
-
-export const markCashSchema = z.object({
-  invoiceId: id,
-  returnTo: looseText(300)
+  appUrl: looseText(200),
+  debtReminderTemplate: requiredText("Thiếu mẫu tin nhắn nhắc nợ", 5000),
+  salaryCutoff: salaryCutoffCode
 });
 
 export const assignTransactionSchema = z.object({
@@ -243,17 +287,17 @@ export const assignTransactionSchema = z.object({
 
 export const resolveTransactionSchema = z.object({
   transactionId: id,
-  reason: requiredText("Vui lòng nhập lý do xử lý giao dịch", 500)
+  reason: looseText(500)
 });
 
 export const unassignTransactionSchema = z.object({
   transactionId: id,
-  reason: requiredText("Vui lòng nhập lý do bỏ gán", 500)
+  reason: looseText(500)
 });
 
 export const reverseTransactionSchema = z.object({
   transactionId: id,
-  reason: requiredText("Vui lòng nhập lý do hoàn tác", 500)
+  reason: looseText(500)
 });
 
 // ---------------------------------------------------------------------------

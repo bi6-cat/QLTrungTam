@@ -110,7 +110,7 @@ export async function GET(request: Request) {
             invoice.classShortCodeSnapshot ||
             invoice.teacherNameSnapshot
         ) ?? invoices[0];
-      const paidAmount = paid.reduce((sum, invoice) => sum + invoice.amount, 0);
+      const paidAmount = paid.reduce((sum, invoice) => sum + (invoice.paidAmount ?? invoice.amount), 0);
       const unpaidAmount = unpaid.reduce((sum, invoice) => sum + invoice.amount, 0);
 
       return {

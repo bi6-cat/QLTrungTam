@@ -59,8 +59,8 @@ const COURSES = [
   { name: "Ngữ văn 9", teacherName: "Cô Hương", pricePerSession: 40000, sessionsPerMonthDefault: 8 },
   { name: "Tiếng Anh 9", teacherName: "Cô Lệ", pricePerSession: 40000, sessionsPerMonthDefault: 8 },
   { name: "Toán 12", teacherName: "Cô Hằng", pricePerSession: 50000, sessionsPerMonthDefault: 8 },
-  { name: "Tiếng Anh 10", teacherName: "Thầy Thắng", pricePerSession: 40000, sessionsPerMonthDefault: 8 },
-  { name: "Lịch sử 12", teacherName: "Cô Hoan", pricePerSession: 50000, sessionsPerMonthDefault: 8 }
+  { name: "Tiếng Anh 10", teacherName: "Cô Lệ", pricePerSession: 50000, sessionsPerMonthDefault: 8 },
+  { name: "Toán 10", teacherName: "Cô Hằng", pricePerSession: 50000, sessionsPerMonthDefault: 8 }
 ] as const;
 
 // Các môn / khối lớp trung tâm đang giảng dạy (dùng cho lưới "Môn học").

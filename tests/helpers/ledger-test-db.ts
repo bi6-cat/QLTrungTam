@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { buildMemo } from "../../src/lib/payment";
 import { prisma } from "../../src/lib/prisma";
 
 const NON_TEST_DATABASE_CONFIRMATION_ENV = "LEDGER_INTEGRATION_DATABASE_CONFIRMATION";
@@ -41,10 +42,17 @@ export type LedgerFixture = {
   classId: string;
   studentId: string;
   enrollmentId: string;
+  shortCode: string;
+  phone: string;
 };
 
 type CreateInvoiceOptions = {
   amount?: number;
+  /**
+   * Dùng memo thật (buildMemo) như lúc phát hành hóa đơn. Mặc định lưu kèm
+   * studentPhoneSnapshot; truyền null để giả lập hóa đơn cũ chưa có snapshot.
+   */
+  realMemo?: { phoneSnapshot: string | null };
 };
 
 type CreateBankTransactionOptions = {
@@ -85,12 +93,16 @@ export class LedgerTestHarness {
     const classId = `${this.entityPrefix}class_${suffix}`;
     const studentId = `${this.entityPrefix}student_${suffix}`;
     const enrollmentId = `${this.entityPrefix}enrollment_${suffix}`;
+    // Viết hoa: memo chuyển khoản được so khớp theo mã lớp viết hoa.
+    const shortCode = `LIT-${this.runKey.slice(0, 12).toUpperCase()}-${suffix}`;
+    const phone = `0900${suffix.padStart(6, "0")}`;
 
     await prisma.classRoom.create({
       data: {
         id: classId,
         name: `Ledger integration class ${suffix}`,
-        shortCode: `LIT-${this.runKey.slice(0, 12)}-${suffix}`,
+        shortCode,
+        teacherToken: `${this.runKey}t${suffix}`,
         teacherName: "Ledger Test",
         pricePerSession: 100_000,
         sessionsPerMonthDefault: 8
@@ -100,7 +112,7 @@ export class LedgerTestHarness {
       data: {
         id: studentId,
         fullName: `Ledger integration student ${suffix}`,
-        phone: `0900${suffix.padStart(6, "0")}`,
+        phone,
         address: "Ledger integration test address"
       }
     });
@@ -108,7 +120,7 @@ export class LedgerTestHarness {
       data: { id: enrollmentId, classId, studentId }
     });
 
-    return { classId, studentId, enrollmentId };
+    return { classId, studentId, enrollmentId, shortCode, phone };
   }
 
   async createInvoice(fixture: LedgerFixture, options: CreateInvoiceOptions = {}) {
@@ -127,7 +139,10 @@ export class LedgerTestHarness {
         sessions: 1,
         pricePerSession: amount,
         amount,
-        memoContent: `LEDGER IT ${this.runKey} ${this.invoiceSequence}`
+        memoContent: options.realMemo
+          ? buildMemo(fixture.shortCode, options.realMemo.phoneSnapshot ?? fixture.phone, month, year)
+          : `LEDGER IT ${this.runKey} ${this.invoiceSequence}`,
+        studentPhoneSnapshot: options.realMemo ? options.realMemo.phoneSnapshot : undefined
       }
     });
   }
@@ -190,6 +205,10 @@ export class LedgerTestHarness {
     });
     await prisma.enrollment.deleteMany({
       where: { id: { startsWith: this.entityPrefix } }
+    });
+    // Chi phí (lương) giữ lại khi xóa lớp (SET NULL) nên phải xóa trước theo lớp của test.
+    await prisma.expense.deleteMany({
+      where: { classId: { startsWith: this.entityPrefix } }
     });
     await prisma.classRoom.deleteMany({
       where: { id: { startsWith: this.entityPrefix } }

@@ -1,14 +1,27 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, GraduationCap, Users } from "lucide-react";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
-import { Badge, Button, EmptyState, Field, Input } from "@/components/ui";
+import { Badge, EmptyState } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import {
+  enrollmentVisibleInPeriodWhere,
+  latestMonthUpToPeriodArgs,
+  resolveMonthPlan
+} from "@/lib/enrollment-period";
+import { resolveClassLink } from "@/lib/class-link-resolver";
+import { teacherPath } from "@/lib/class-links";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
+import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false }
+};
 
 export default async function TeacherClassPage({
   params,
@@ -19,35 +32,27 @@ export default async function TeacherClassPage({
 }) {
   const { short_code } = await params;
   const query = await searchParams;
+  const resolved = await resolveClassLink(short_code, "teacher");
+  if (!resolved) notFound();
+  if (resolved.kind === "redirect") {
+    // Link cũ: chuyển sang link giáo viên mới, giữ nguyên tháng/năm đang xem.
+    const search = new URLSearchParams();
+    if (query.month) search.set("month", query.month);
+    if (query.year) search.set("year", query.year);
+    const queryString = search.toString();
+    redirect(queryString ? `${resolved.redirectTo}?${queryString}` : resolved.redirectTo);
+  }
   const now = new Date();
   const month = Math.min(12, Math.max(1, Number(query.month) || now.getMonth() + 1));
   const year = Number(query.year) || now.getFullYear();
   const requestedPage = Math.max(1, Number(query.page) || 1);
-  const periodEnd = new Date(year, month, 1);
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
 
   const classRoom = await prisma.classRoom.findUnique({
-    where: { publicToken: short_code },
+    where: { id: resolved.classId },
     include: {
       enrollments: {
-        where: {
-          AND: [
-            {
-              OR: [
-                { createdAt: { lt: periodEnd } },
-                { months: { some: { month, year } } },
-                { invoices: { some: { month, year } } }
-              ]
-            },
-            {
-              OR: [
-                { student: { archivedAt: null } },
-                { months: { some: { month, year } } },
-                { invoices: { some: { month, year } } }
-              ]
-            }
-          ]
-        },
+        where: enrollmentVisibleInPeriodWhere(month, year),
         orderBy: { student: { fullName: "asc" } },
         include: {
           student: true,
@@ -55,7 +60,7 @@ export default async function TeacherClassPage({
             where: { month, year },
             orderBy: { createdAt: "desc" }
           },
-          months: { where: { month, year }, take: 1 }
+          months: latestMonthUpToPeriodArgs(month, year)
         }
       }
     }
@@ -65,25 +70,32 @@ export default async function TeacherClassPage({
     notFound();
   }
 
-  const visibleEnrollments = classRoom.archivedAt
-    ? classRoom.enrollments.filter(
-        (enrollment) => enrollment.months.length > 0 || enrollment.invoices.length > 0
-      )
-    : classRoom.enrollments;
-  const rows = visibleEnrollments.map((enrollment) => {
+  const planned = classRoom.enrollments.map((enrollment) => ({
+    enrollment,
+    plan: resolveMonthPlan({
+      month,
+      year,
+      latestMonth: enrollment.months[0],
+      invoice: enrollment.invoices[0],
+      enrollment,
+      classRoom
+    })
+  }));
+  const visible = classRoom.archivedAt ? planned.filter((item) => item.plan.initialized) : planned;
+  const rows = visible.map(({ enrollment, plan }) => {
     const invoice = enrollment.invoices[0] ?? null;
-    const period = enrollment.months[0] ?? null;
-    const periodInitialized = Boolean(period || invoice);
+    const periodInitialized = plan.initialized;
+    // Kỳ đã qua mà chưa có kế hoạch thì không đoán tình trạng học.
     const monthlyStatus =
-      period?.status ??
-      (invoice
-        ? "active"
-        : isPastPeriod || classRoom.archivedAt || enrollment.student.archivedAt
-          ? null
-          : enrollment.status);
-    const sessions = invoice?.sessions ?? period?.sessions ?? (monthlyStatus ? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault : 0);
-    const pricePerSession = invoice?.pricePerSession ?? period?.pricePerSession ?? classRoom.pricePerSession;
-    const amount = invoice?.amount ?? (monthlyStatus === "active" ? sessions * pricePerSession : 0);
+      periodInitialized || !(isPastPeriod || classRoom.archivedAt || enrollment.student.archivedAt)
+        ? plan.status
+        : null;
+    const sessions = monthlyStatus ? plan.sessions : 0;
+    const pricePerSession = plan.pricePerSession;
+    const amount =
+      invoice?.status === "paid"
+        ? invoice.paidAmount ?? invoice.amount
+        : invoice?.amount ?? (monthlyStatus === "active" ? sessions * pricePerSession : 0);
     return {
       enrollment,
       invoice,
@@ -129,17 +141,7 @@ export default async function TeacherClassPage({
                   {classRoom.sessionsPerMonthDefault} buổi mặc định
                 </p>
               </div>
-              <form action={`/teacher/classes/${classRoom.publicToken}`} method="GET" className="grid gap-2 sm:grid-cols-[110px_140px_auto]">
-                <Field label="Tháng">
-                  <Input name="month" type="number" min="1" max="12" defaultValue={month} />
-                </Field>
-                <Field label="Năm">
-                  <Input name="year" type="number" min="2020" defaultValue={year} />
-                </Field>
-                <Button type="submit" variant="secondary" className="self-end">
-                  Xem tháng
-                </Button>
-              </form>
+              <MonthSwitcher basePath={teacherPath(classRoom)} month={month} year={year} />
             </div>
           </div>
         </header>
@@ -308,7 +310,7 @@ export default async function TeacherClassPage({
               </p>
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/teacher/classes/${classRoom.publicToken}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
+                  href={`${teacherPath(classRoom)}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
                   className={[
                     "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
                     currentPage <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
@@ -321,7 +323,7 @@ export default async function TeacherClassPage({
                   {currentPage}/{totalPages}
                 </span>
                 <Link
-                  href={`/teacher/classes/${classRoom.publicToken}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
+                  href={`${teacherPath(classRoom)}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
                   className={[
                     "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
                     currentPage >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-stone-50"

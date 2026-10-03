@@ -10,9 +10,17 @@ export function buildMemo(shortCode: string, phone: string, month: number, year:
 }
 
 export function parseMemo(content: string) {
-  const match = content
-    .toUpperCase()
-    .match(/\bHP\s+([A-Z0-9_-]+)\s+(\d{8,12})\s+(?:(\d{2})T|T)(1[0-2]|[1-9])\b/);
+  const normalizedContent = content.toUpperCase();
+  const match =
+    normalizedContent.match(
+      /\bHP\s+([A-Z0-9_-]+)\s+(\d{8,12})\s+(?:(\d{2})T|T)(1[0-2]|[1-9])\b/
+    ) ??
+    // Một số ngân hàng loại bỏ khoảng trắng trong phần đầu nội dung chuyển khoản,
+    // ví dụ: "HP LS12A 0987787878 26T8" -> "HPLS12A0987787878 26T8".
+    // Ưu tiên dạng số Việt Nam để xác định đúng ranh giới giữa mã lớp và SĐT.
+    normalizedContent.match(
+      /\bHP\s*([A-Z0-9_-]+?)\s*(0\d{9}|84\d{9})\s*(?:(\d{2})T|T)(1[0-2]|[1-9])\b/
+    );
 
   if (!match) return null;
 
@@ -54,10 +62,14 @@ export async function matchInvoiceFromTransaction(args: {
       month: parsed.month,
       ...(parsed.year ? { year: parsed.year } : {}),
       status: "unpaid",
-      enrollment: {
-        classRoom: { shortCode: parsed.shortCode },
-        student: { phone: parsed.phone }
-      }
+      enrollment: { classRoom: { shortCode: parsed.shortCode } },
+      // Memo của hóa đơn được tạo theo SĐT lúc phát hành (lưu ở studentPhoneSnapshot), nên
+      // so với SĐT đó chứ không phải SĐT hiện tại — admin có thể đã sửa SĐT sau khi tạo hóa đơn.
+      // Hóa đơn rất cũ chưa có snapshot thì mới so với SĐT hiện tại của học sinh.
+      OR: [
+        { studentPhoneSnapshot: parsed.phone },
+        { studentPhoneSnapshot: null, enrollment: { student: { phone: parsed.phone } } }
+      ]
     },
     include: {
       enrollment: { include: { classRoom: true, student: true } }

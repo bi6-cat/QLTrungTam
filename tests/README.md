@@ -25,7 +25,7 @@ Test sẽ từ chối chạy trước khi kết nối nếu tên database không
 Phạm vi hiện có:
 
 - Gán giao dịch đúng tiền và dual-write hai liên kết.
-- Chặn lệch tiền; force-match bắt buộc lý do.
+- Chặn lệch tiền; force-match lưu lý do (để trống thì dùng lý do mặc định).
 - Chặn dùng lại giao dịch hoặc hóa đơn.
 - Unassign, reversal, resolve và audit log.
 - Thu tiền mặt, phân loại bản ghi do app cũ tạo và DB state guard.

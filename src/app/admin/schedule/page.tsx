@@ -1,14 +1,17 @@
-import { CalendarDays, Clock, MapPin, Trash2 } from "lucide-react";
-import { deleteScheduleAction } from "@/lib/actions";
+import { CalendarDays, Clock, MapPin } from "lucide-react";
+import { deleteScheduleAction } from "@/lib/actions/schedule";
+import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { AddScheduleForm } from "@/components/AddScheduleForm";
-import { Badge, Button, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
+import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { WEEKDAYS, countScheduledSessions, sortSchedules, weekdayLabel } from "@/lib/schedule";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function SchedulePage() {
+  await requireAdmin();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -55,7 +58,7 @@ export default async function SchedulePage() {
     <div className="grid gap-6">
       <PageHeader
         title="Thời khóa biểu"
-        description="Lịch học cố định lặp theo tuần. Số buổi mỗi tháng được suy ra từ đây để tính lương giáo viên."
+        description="Lịch học cố định lặp theo tuần. Số buổi mỗi tháng được suy ra từ đây để gợi ý số buổi học."
       />
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -183,7 +186,7 @@ export default async function SchedulePage() {
 
                 {classRoom.schedules.length === 0 ? (
                   <p className="self-center text-sm text-stone-500">
-                    Chưa xếp lịch. Số buổi sẽ dùng mặc định của lớp khi tính lương.
+                    Chưa xếp lịch. Số buổi mỗi tháng dùng mặc định của lớp.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -202,17 +205,17 @@ export default async function SchedulePage() {
                             </p>
                           ) : null}
                         </div>
-                        <form action={deleteScheduleAction}>
-                          <input type="hidden" name="id" value={slot.id} />
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            className="h-8 w-8 px-0 text-stone-400 hover:bg-rose-50 hover:text-warning"
-                            title="Xóa buổi học"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </form>
+                        <ConfirmDeleteButton
+                          id={slot.id}
+                          action={deleteScheduleAction}
+                          title="Xóa buổi học"
+                          description={
+                            <>
+                              Xóa buổi <strong>{weekdayLabel(slot.weekday)} {slot.startTime}–{slot.endTime}</strong> của
+                              lớp {classRoom.name}?
+                            </>
+                          }
+                        />
                       </div>
                     ))}
                   </div>

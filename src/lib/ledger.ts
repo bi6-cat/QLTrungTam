@@ -1,11 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
 
 export type LedgerErrorCode =
   | "INVALID_ACTOR"
-  | "REASON_REQUIRED"
-  | "FORCE_REASON_REQUIRED"
   | "TRANSACTION_NOT_FOUND"
   | "INVOICE_NOT_FOUND"
   | "TRANSACTION_ALREADY_MATCHED"
@@ -38,8 +35,8 @@ export type AssignTransactionInput = {
   invoiceId: string;
   actor: LedgerActor;
   /**
-   * Strict amount matching is the default. Setting force to true always requires
-   * a reason, even when the amounts happen to be equal.
+   * Strict amount matching is the default. Setting force to true always stores an
+   * override reason (a default one when left blank) so the mismatch stays visible.
    */
   force?: boolean;
   reason?: string;
@@ -47,12 +44,6 @@ export type AssignTransactionInput = {
 
 export type TransactionReasonInput = {
   transactionId: string;
-  actor: LedgerActor;
-  reason: string;
-};
-
-export type RecordCashPaymentInput = {
-  invoiceId: string;
   actor: LedgerActor;
   reason?: string;
 };
@@ -68,7 +59,6 @@ export type AssignTransactionResult = LedgerMutationResult & {
   amountDifference: number;
 };
 
-const MAX_SERIALIZABLE_ATTEMPTS = 3;
 const MAX_REASON_LENGTH = 1_000;
 
 function assertActor(actor: LedgerActor) {
@@ -83,54 +73,19 @@ function optionalReason(reason: string | undefined) {
   return normalized.slice(0, MAX_REASON_LENGTH);
 }
 
-function requiredReason(reason: string | undefined, code: "REASON_REQUIRED" | "FORCE_REASON_REQUIRED") {
-  const normalized = optionalReason(reason);
-  if (!normalized) {
-    throw new LedgerError(
-      code,
-      code === "FORCE_REASON_REQUIRED"
-        ? "Cần nhập lý do khi cưỡng chế gán giao dịch."
-        : "Cần nhập lý do cho thao tác này."
-    );
-  }
-  return normalized;
-}
+const NO_OVERRIDE_REASON = "Không ghi lý do";
 
-function isKnownPrismaError(error: unknown, code: string) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
-}
-
-async function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-  for (let attempt = 1; attempt <= MAX_SERIALIZABLE_ATTEMPTS; attempt += 1) {
-    try {
-      return await prisma.$transaction(work, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      });
-    } catch (error) {
-      if (error instanceof LedgerError) throw error;
-
-      if (isKnownPrismaError(error, "P2034")) {
-        if (attempt < MAX_SERIALIZABLE_ATTEMPTS) continue;
-        throw new LedgerError(
-          "CONCURRENT_MODIFICATION",
-          "Dữ liệu vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
-        );
-      }
-
-      // The unique invoice/transaction links are the final safety net if two
-      // requests race between their reads and conditional updates.
-      if (isKnownPrismaError(error, "P2002")) {
-        throw new LedgerError(
-          "CONCURRENT_MODIFICATION",
-          "Giao dịch hoặc hóa đơn đã được xử lý bởi thao tác khác."
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  throw new LedgerError("CONCURRENT_MODIFICATION", "Không thể hoàn tất thao tác do xung đột dữ liệu.");
+function runSerializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  // Unique link giữa hóa đơn và giao dịch là lớp chặn cuối nếu hai request cùng đua.
+  return runSerializableTransaction(work, {
+    onConflict: () =>
+      new LedgerError(
+        "CONCURRENT_MODIFICATION",
+        "Dữ liệu vừa được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại."
+      ),
+    onUniqueViolation: () =>
+      new LedgerError("CONCURRENT_MODIFICATION", "Giao dịch hoặc hóa đơn đã được xử lý bởi thao tác khác.")
+  });
 }
 
 function assertTransactionAvailable(transaction: {
@@ -197,9 +152,9 @@ export async function assignTransactionToInvoice(
   input: AssignTransactionInput
 ): Promise<AssignTransactionResult> {
   assertActor(input.actor);
-  const overrideReason = input.force
-    ? requiredReason(input.reason, "FORCE_REASON_REQUIRED")
-    : null;
+  const reason = optionalReason(input.reason);
+  // Trang Giao dịch dựa vào matchOverrideReason để hiện "Gán lệch", nên luôn có giá trị khi cưỡng chế gán.
+  const overrideReason = input.force ? reason ?? NO_OVERRIDE_REASON : null;
 
   return runSerializable(async (tx) => {
     const [transaction, invoice] = await Promise.all([
@@ -237,7 +192,7 @@ export async function assignTransactionToInvoice(
     if (amountDifference !== 0 && !input.force) {
       throw new LedgerError(
         "AMOUNT_MISMATCH",
-        "Số tiền giao dịch không khớp hóa đơn. Hãy kiểm tra lại hoặc cưỡng chế gán kèm lý do."
+        "Số tiền giao dịch không khớp hóa đơn. Hãy kiểm tra lại hoặc chọn gán lệch tiền."
       );
     }
 
@@ -269,7 +224,9 @@ export async function assignTransactionToInvoice(
       data: {
         status: "paid",
         paidAt: transaction.transferredAt,
-        transactionId: transaction.id
+        transactionId: transaction.id,
+        // Gán lệch tiền (force): doanh thu ghi theo số tiền thực nhận, không theo hóa đơn.
+        paidAmount: transaction.amount
       }
     });
 
@@ -285,7 +242,7 @@ export async function assignTransactionToInvoice(
       action: "transaction.assigned",
       entityType: "Transaction",
       entityId: transaction.id,
-      reason: overrideReason,
+      reason,
       metadata: {
         invoiceId: invoice.id,
         transactionAmount: transaction.amount,
@@ -311,7 +268,7 @@ export async function assignTransactionToInvoice(
 /** Removes a valid match while preserving both records and the audit trail. */
 export async function unassignTransaction(input: TransactionReasonInput): Promise<LedgerMutationResult> {
   assertActor(input.actor);
-  const reason = requiredReason(input.reason, "REASON_REQUIRED");
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const transaction = await tx.transaction.findUnique({
@@ -358,7 +315,7 @@ export async function unassignTransaction(input: TransactionReasonInput): Promis
 
     const releasedInvoice = await tx.monthlyInvoice.updateMany({
       where: { id: invoice.id, status: "paid", transactionId: transaction.id },
-      data: { status: "unpaid", paidAt: null, transactionId: null }
+      data: { status: "unpaid", paidAt: null, transactionId: null, paidAmount: null }
     });
     if (releasedInvoice.count !== 1) {
       throw new LedgerError(
@@ -415,7 +372,7 @@ export async function unassignTransaction(input: TransactionReasonInput): Promis
  */
 export async function reverseTransaction(input: TransactionReasonInput): Promise<LedgerMutationResult> {
   assertActor(input.actor);
-  const reason = requiredReason(input.reason, "REASON_REQUIRED");
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const transaction = await tx.transaction.findUnique({
@@ -456,7 +413,7 @@ export async function reverseTransaction(input: TransactionReasonInput): Promise
 
       const releasedInvoice = await tx.monthlyInvoice.updateMany({
         where: { id: invoice.id, status: "paid", transactionId: transaction.id },
-        data: { status: "unpaid", paidAt: null, transactionId: null }
+        data: { status: "unpaid", paidAt: null, transactionId: null, paidAmount: null }
       });
       if (releasedInvoice.count !== 1) {
         throw new LedgerError(
@@ -481,7 +438,7 @@ export async function reverseTransaction(input: TransactionReasonInput): Promise
         // Giữ giao dịch khỏi hàng đợi unmatched nếu phải rollback tạm về app cũ,
         // vì phiên bản cũ chưa hiểu cột reversedAt.
         resolvedAt: reversedAt,
-        resolvedNote: `Hoàn tác: ${reason}`,
+        resolvedNote: reason ? `Hoàn tác: ${reason}` : "Hoàn tác",
         reversedAt,
         reversalReason: reason
       }
@@ -520,7 +477,7 @@ export async function resolveUnmatchedTransaction(
   input: TransactionReasonInput
 ): Promise<LedgerMutationResult> {
   assertActor(input.actor);
-  const reason = requiredReason(input.reason, "REASON_REQUIRED");
+  const reason = optionalReason(input.reason);
 
   return runSerializable(async (tx) => {
     const transaction = await tx.transaction.findUnique({
@@ -570,92 +527,5 @@ export async function resolveUnmatchedTransaction(
     });
 
     return { transactionId: transaction.id, invoiceId: null, occurredAt: resolvedAt };
-  });
-}
-
-/** Records a cash receipt and claims the invoice without exposing a race window. */
-export async function recordCashPayment(input: RecordCashPaymentInput): Promise<LedgerMutationResult> {
-  assertActor(input.actor);
-  const reason = optionalReason(input.reason);
-
-  return runSerializable(async (tx) => {
-    const invoice = await tx.monthlyInvoice.findUnique({
-      where: { id: input.invoiceId },
-      select: {
-        id: true,
-        amount: true,
-        status: true,
-        transactionId: true,
-        month: true,
-        year: true,
-        enrollment: {
-          select: {
-            student: { select: { fullName: true } },
-            classRoom: { select: { shortCode: true } }
-          }
-        }
-      }
-    });
-    if (!invoice) {
-      throw new LedgerError("INVOICE_NOT_FOUND", "Không tìm thấy hóa đơn.");
-    }
-    assertInvoiceAvailable(invoice);
-
-    const paidAt = new Date();
-    const claimedInvoice = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "unpaid", transactionId: null },
-      data: { status: "paid", paidAt }
-    });
-    if (claimedInvoice.count !== 1) {
-      throw new LedgerError(
-        "CONCURRENT_MODIFICATION",
-        "Hóa đơn vừa được thanh toán hoặc thay đổi bởi thao tác khác."
-      );
-    }
-
-    const transaction = await tx.transaction.create({
-      data: {
-        gatewayRef: `CASH-${invoice.id}-${randomUUID()}`,
-        amount: invoice.amount,
-        rawContent: `Thu tiền mặt: ${invoice.enrollment.student.fullName} - ${invoice.enrollment.classRoom.shortCode} - T${invoice.month}/${invoice.year}`,
-        transferredAt: paidAt,
-        paymentMethod: "cash",
-        matchedInvoiceId: invoice.id,
-        matchedAt: paidAt,
-        matchReason: "manual_cash_payment",
-        rawPayload: {
-          method: "cash",
-          source: "admin_manual_cash",
-          invoiceId: invoice.id
-        }
-      },
-      select: { id: true }
-    });
-
-    const linkedInvoice = await tx.monthlyInvoice.updateMany({
-      where: { id: invoice.id, status: "paid", transactionId: null },
-      data: { transactionId: transaction.id }
-    });
-    if (linkedInvoice.count !== 1) {
-      throw new LedgerError(
-        "CONCURRENT_MODIFICATION",
-        "Không thể hoàn tất liên kết giao dịch tiền mặt với hóa đơn."
-      );
-    }
-
-    await writeAudit(tx, {
-      actor: input.actor,
-      action: "transaction.cash_recorded",
-      entityType: "Transaction",
-      entityId: transaction.id,
-      reason,
-      metadata: {
-        invoiceId: invoice.id,
-        amount: invoice.amount,
-        paymentMethod: "cash"
-      }
-    });
-
-    return { transactionId: transaction.id, invoiceId: invoice.id, occurredAt: paidAt };
   });
 }

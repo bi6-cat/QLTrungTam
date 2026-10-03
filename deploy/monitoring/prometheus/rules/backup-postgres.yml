@@ -1,0 +1,86 @@
+groups:
+  - name: backup-and-postgres
+    rules:
+      - alert: BackupMetricsMissing
+        expr: |
+          absent(qltrungtam_pgbackrest_backup_last_run_success{
+            job="node",
+            type="full"
+          })
+          or
+          absent(qltrungtam_pgbackrest_backup_last_run_success{
+            job="node",
+            type="diff"
+          })
+        for: 10m
+        labels:
+          severity: critical
+          service: backup
+          owner: sre
+        annotations:
+          summary: "pgBackRest backup metrics are missing"
+          description: "Node exporter has not exposed pgBackRest backup metrics for at least 10 minutes."
+
+      - alert: BackupLastRunFailed
+        expr: qltrungtam_pgbackrest_backup_last_exit_code{job="node"} != 0
+        for: 2m
+        labels:
+          severity: critical
+          service: backup
+          owner: sre
+        annotations:
+          summary: "Latest {{ $labels.type }} pgBackRest backup failed"
+          description: "The latest backup attempt failed with exit code {{ $value }}. Check the systemd journal on the App EC2."
+
+      - alert: BackupStale
+        expr: |
+          time() -
+          max(qltrungtam_pgbackrest_backup_last_success_timestamp_seconds{job="node"})
+          > 129600
+        for: 15m
+        labels:
+          severity: critical
+          service: backup
+          owner: sre
+        annotations:
+          summary: "No successful pgBackRest backup in 36 hours"
+          description: "Neither a full nor differential backup has completed successfully within the expected daily window."
+
+      - alert: FullBackupStale
+        expr: |
+          time() -
+          qltrungtam_pgbackrest_backup_last_success_timestamp_seconds{
+            job="node",
+            type="full"
+          }
+          > 691200
+        for: 30m
+        labels:
+          severity: warning
+          service: backup
+          owner: sre
+        annotations:
+          summary: "Weekly full pgBackRest backup is stale"
+          description: "The latest successful full backup is older than 8 days."
+
+      - alert: NodeTextfileCollectorError
+        expr: node_textfile_scrape_error{job="node"} != 0
+        for: 2m
+        labels:
+          severity: warning
+          service: monitoring
+          owner: sre
+        annotations:
+          summary: "Node exporter cannot parse a textfile metric"
+          description: "Check files under /var/lib/qltrungtam-pgbackrest on the App EC2."
+
+      - alert: WALArchiveFailuresIncreasing
+        expr: increase(pg_stat_archiver_failed_count{job="postgres"}[15m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: postgresql
+          owner: sre
+        annotations:
+          summary: "PostgreSQL WAL archive failures are increasing"
+          description: "PostgreSQL recorded new WAL archive failures during the last 15 minutes."

@@ -2,11 +2,14 @@
 
 import { useActionState } from "react";
 import { KeyRound } from "lucide-react";
-import { changePasswordAction } from "@/lib/actions";
+import { changePasswordAction } from "@/lib/actions/auth";
+import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 
 export function ChangePasswordForm() {
-  const [state, action, pending] = useActionState(changePasswordAction, { error: "", success: "" });
+  const [state, action, pending] = useActionState(changePasswordAction, EMPTY_RESULT_STATE);
+  useResultToast(state);
 
   return (
     <form action={action} className="grid gap-4">
@@ -22,7 +25,6 @@ export function ChangePasswordForm() {
         </Field>
       </div>
       {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}
-      {state.success ? <p className="text-sm font-medium text-success">{state.success}</p> : null}
       <div>
         <Button type="submit" disabled={pending}>
           <KeyRound className="h-4 w-4" />

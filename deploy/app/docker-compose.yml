@@ -29,10 +29,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      PGBACKREST_PG1_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
     command:
       - postgres
       - -c
-      - archive_mode=on
+      - "archive_mode=${PG_ARCHIVE_MODE:-on}"
       - -c
       - "archive_command=pgbackrest --stanza=qltrungtam archive-push %p"
       - -c
@@ -61,10 +62,12 @@ services:
     command:
       - --path.rootfs=/host
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
+      - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
     ports:
       - "10.77.0.1:9100:9100"
     volumes:
       - /:/host:ro
+      - /var/lib/qltrungtam-pgbackrest:/var/lib/node_exporter/textfile_collector:ro
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -105,23 +108,6 @@ services:
     volumes:
       - ../..:/app
       - node_modules_tools:/app/node_modules
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db-dump-backup:
-    image: postgres:16
-    profiles: ["backup"]
-    environment:
-      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-hoctro}
-      POSTGRES_USER: ${POSTGRES_USER:-hoctro}
-    volumes:
-      - ../../backups:/backups
-    command: >
-      sh -c 'mkdir -p /backups &&
-      pg_dump -h db -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -F c
-      -f "/backups/$${POSTGRES_DB}-$$(date +%Y%m%d-%H%M%S).dump"'
     depends_on:
       db:
         condition: service_healthy
