@@ -10,6 +10,7 @@ import { toast } from "@/components/Toaster";
 import { LeaveClassButton } from "@/components/LeaveClassButton";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
+import { NOTE_MAX_LENGTH } from "@/lib/validation";
 
 type InvoiceRow = {
   enrollmentId: string;
@@ -41,6 +42,8 @@ type InvoiceRow = {
   joinHint: { joinedOn: string; sessions: number } | null;
   pricePerSession: number;
   memoContent: string;
+  /** Ghi chú của học sinh trong lớp cho kỳ đang xem. */
+  note: string;
 };
 
 const PAGE_SIZE = 10;
@@ -72,6 +75,7 @@ export function ClassInvoiceEditor({
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [saveState, saveAction, saving] = useActionState(
     async (prevState: ResultState, formData: FormData) => {
       const result = await updateClassDetailsAction(prevState, formData);
@@ -79,6 +83,7 @@ export function ClassInvoiceEditor({
       if (result.success) {
         setEditing(false);
         setSessionDrafts({});
+        setNoteDrafts({});
         toast.success(result.success);
       }
       return result;
@@ -89,6 +94,7 @@ export function ClassInvoiceEditor({
     if (!billingLocked) return;
     setEditing(false);
     setSessionDrafts({});
+    setNoteDrafts({});
   }, [billingLocked]);
   const summary = useMemo(
     () =>
@@ -175,6 +181,7 @@ export function ClassInvoiceEditor({
                 disabled={saving}
                 onClick={() => {
                   setSessionDrafts({});
+                  setNoteDrafts({});
                   setEditing(false);
                 }}
             >
@@ -214,6 +221,9 @@ export function ClassInvoiceEditor({
                 <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
                 <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
                 <input type="hidden" name={`sessions:${row.enrollmentId}`} value={sessions} />
+                {noteDrafts[row.enrollmentId] !== undefined ? (
+                  <input type="hidden" name={`note:${row.enrollmentId}`} value={noteDrafts[row.enrollmentId]} />
+                ) : null}
               </div>
             );
           })}
@@ -237,7 +247,7 @@ export function ClassInvoiceEditor({
                 <th className="px-2 py-3">Số buổi</th>
                 <th className="px-2 py-3">Đơn giá</th>
                 <th className="px-2 py-3">Số tiền</th>
-                <th className="px-2 py-3">Memo</th>
+                <th className="px-2 py-3">Ghi chú</th>
                 <th className="px-2 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -392,12 +402,24 @@ export function ClassInvoiceEditor({
                       ) : null}
                     </td>
                     <td className="px-2 py-3">
-                      <code
-                        className="inline-block max-w-full truncate rounded bg-stone-100 px-2 py-1 align-bottom text-xs"
-                        title={invoice?.memoContent ?? row.memoContent}
-                      >
-                        {invoice?.memoContent ?? row.memoContent}
-                      </code>
+                      {editing && !billingLocked && !row.studentArchived ? (
+                        <Input
+                          name={`note:${row.enrollmentId}`}
+                          value={noteDrafts[row.enrollmentId] ?? row.note}
+                          maxLength={NOTE_MAX_LENGTH}
+                          placeholder="Ghi chú"
+                          onChange={(event) =>
+                            setNoteDrafts((current) => ({ ...current, [row.enrollmentId]: event.target.value }))
+                          }
+                          className="w-full min-w-0"
+                        />
+                      ) : row.note ? (
+                        <p className="line-clamp-2 whitespace-normal text-xs text-stone-600" title={row.note}>
+                          {row.note}
+                        </p>
+                      ) : (
+                        <span className="text-xs text-stone-400">-</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3 text-right">
                       <div className="flex flex-nowrap items-center justify-end gap-1">

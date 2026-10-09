@@ -51,14 +51,15 @@ export default async function AdminHomePage({
   const trendMax = Math.max(1, ...trend.map((point) => point.collected + point.outstanding));
 
   const actionItems = [
-    totals.unissued > 0
+    // Tạo hóa đơn là việc của chủ trung tâm; quản lý phụ chỉ nhập số buổi.
+    isOwner && totals.unissued > 0
       ? {
           key: "unissued",
           tone: "warning" as const,
           icon: <FilePlus2 className="h-4 w-4" />,
           text: `${totals.unissued} học sinh đang học chưa có hóa đơn ${formatMonth(month, year)}.`,
-          href: classesHref,
-          cta: isOwner ? "Tạo hóa đơn" : "Nhập số buổi"
+          href: "/admin/classes",
+          cta: "Tạo hóa đơn"
         }
       : null,
     alerts.unmatchedTransactions > 0

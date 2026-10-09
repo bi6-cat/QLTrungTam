@@ -154,6 +154,8 @@ model EnrollmentMonth {
   status          EnrollmentStatus @default(active)
   sessions        Int
   pricePerSession Int
+  /// Ghi chú của học sinh trong lớp cho tháng này (chủ trung tâm hoặc quản lý phụ nhập).
+  note            String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   enrollment      Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)

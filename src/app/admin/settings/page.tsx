@@ -60,7 +60,7 @@ export default async function SettingsPage() {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-neutralText">Tài khoản quản lý phụ</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Quản lý phụ xem Tổng quan, nhập số buổi ở mục Lớp học, xem và copy tin nhắc nợ ở Công nợ, xem Giao
+            Quản lý phụ xem Tổng quan, nhập số buổi và ghi chú ở mục Lớp học (không tạo hóa đơn), xem và copy tin nhắc nợ ở Công nợ, xem Giao
             dịch và xuất Báo cáo. Không thêm/sửa/xóa lớp, học sinh, hóa đơn hay giao dịch.
           </p>
         </div>

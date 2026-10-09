@@ -7,7 +7,7 @@ import { isEnrollmentActiveInPeriod, latestMonthUpToPeriodArgs, resolveMonthPlan
 import { changeInvoiceLifecycle, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
-import { safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
+import { NOTE_MAX_LENGTH, safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
 
 function clampSessions(value: FormDataEntryValue | null) {
   const parsed = Math.floor(Number(String(value ?? "").replace(/[^\d.-]/g, "")));
@@ -18,11 +18,13 @@ function clampSessions(value: FormDataEntryValue | null) {
 // Không redirect sau khi lưu: redirect về chính URL đang xem dễ đua với request
 // prefetch của <Link> và làm vùng nội dung trắng. revalidatePath đã gửi kèm dữ
 // liệu mới trong response của action; client tự thoát chế độ sửa khi thành công.
-// Quản lý phụ cũng dùng action này nhưng chỉ đổi được số buổi (xem saveClassDetails).
+// Quản lý phụ cũng dùng action này nhưng chỉ đổi được số buổi và ghi chú, không tạo hóa đơn
+// (xem saveClassDetails).
 export async function updateClassDetailsAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
   const actor = await requireStaff();
-  const { data: parsed, error } = safeParseForm(updateClassDetailsSchema, formData);
-  if (error || !parsed) return errorState(error ?? "Dữ liệu không hợp lệ.");
+  const { data, error } = safeParseForm(updateClassDetailsSchema, formData);
+  if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
+  const parsed = actor.role === "owner" ? data : { ...data, intent: "save" as const };
 
   let summary: { created: number; updated: number; voided: number };
   try {
@@ -85,32 +87,61 @@ async function saveClassDetails(
       if (enrollment.startDate >= periodEnd && !existingMonth && !existingInvoice) {
         throw new Error(`${enrollment.student.fullName} chưa bắt đầu học lớp trong tháng ${month}/${year}.`);
       }
-      if (existingInvoice && existingInvoice.status !== "unpaid") continue;
+      // Kế hoạch hiện hành của kỳ (kể cả trạng thái kế thừa từ tháng trước): dùng khi form không
+      // gửi trạng thái/số buổi, và luôn dùng cho trạng thái của quản lý phụ.
+      const plan = resolveMonthPlan({
+        month,
+        year,
+        latestMonth:
+          existingMonth ??
+          (await tx.enrollmentMonth.findFirst({
+            where: { enrollmentId, ...latestMonthUpToPeriodArgs(month, year).where },
+            orderBy: latestMonthUpToPeriodArgs(month, year).orderBy
+          })),
+        invoice: existingInvoice,
+        enrollment,
+        classRoom: enrollment.classRoom
+      });
+      // Ghi chú: không gửi ô thì giữ nguyên; ô trống thì xóa.
+      const noteField = formData.get(`note:${enrollmentId}`);
+      const note = noteField === null ? undefined : String(noteField).trim().slice(0, NOTE_MAX_LENGTH) || null;
+      const noteChanged = note !== undefined && note !== (existingMonth?.note ?? null);
 
-      // Quản lý phụ không đổi được tình trạng học (bảo lưu sẽ hủy hóa đơn): giữ đúng kế hoạch
-      // hiện hành của kỳ, kể cả trạng thái kế thừa từ tháng trước, bất kể form gửi gì.
+      // Quản lý phụ không đổi được tình trạng học (bảo lưu sẽ hủy hóa đơn), bất kể form gửi gì.
+      const statusField = formData.get(`status:${enrollmentId}`);
       const status =
-        actor.role === "owner"
-          ? String(formData.get(`status:${enrollmentId}`)) === "on_leave"
+        actor.role === "owner" && statusField !== null
+          ? String(statusField) === "on_leave"
             ? "on_leave"
             : "active"
-          : resolveMonthPlan({
+          : plan.status;
+
+      // Hóa đơn đã đóng/hủy/miễn, hoặc học sinh bảo lưu với quản lý phụ: kế hoạch bị khóa, chỉ
+      // lưu ghi chú. Quản lý phụ vì vậy không bao giờ đi vào nhánh hủy hóa đơn bên dưới.
+      const planLocked =
+        (existingInvoice && existingInvoice.status !== "unpaid") || (actor.role !== "owner" && status === "on_leave");
+      if (planLocked) {
+        if (noteChanged) {
+          await tx.enrollmentMonth.upsert({
+            where: { enrollmentId_month_year: { enrollmentId, month, year } },
+            update: { note },
+            create: {
+              enrollmentId,
               month,
               year,
-              latestMonth:
-                existingMonth ??
-                (await tx.enrollmentMonth.findFirst({
-                  where: { enrollmentId, ...latestMonthUpToPeriodArgs(month, year).where },
-                  orderBy: latestMonthUpToPeriodArgs(month, year).orderBy
-                })),
-              invoice: existingInvoice,
-              enrollment,
-              classRoom: enrollment.classRoom
-            }).status;
-      // Học sinh bảo lưu không có số buổi để nhập; bỏ qua để quản lý phụ không bao giờ đi vào
-      // nhánh hủy hóa đơn bên dưới.
-      if (actor.role !== "owner" && status === "on_leave") continue;
-      const requestedSessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
+              status: plan.status,
+              sessions: plan.sessions,
+              pricePerSession: plan.pricePerSession,
+              note
+            }
+          });
+          summary.updated += 1;
+        }
+        continue;
+      }
+
+      const sessionsField = formData.get(`sessions:${enrollmentId}`);
+      const requestedSessions = sessionsField === null ? plan.sessions : clampSessions(sessionsField);
       // Học sinh đang bảo lưu có số buổi bằng 0, nên ô nhập trên form cũng là 0.
       // Khi admin bật lại "Đang học" mà chưa kịp sửa số buổi thì tự khôi phục
       // mức mặc định thay vì chặn thao tác — admin sửa lại sau nếu cần.
@@ -120,11 +151,11 @@ async function saveClassDetails(
         existingMonth?.pricePerSession ?? existingInvoice?.pricePerSession ?? enrollment.classRoom.pricePerSession;
 
       const monthChanged =
-        !existingMonth || existingMonth.status !== status || existingMonth.sessions !== sessions;
+        !existingMonth || existingMonth.status !== status || existingMonth.sessions !== sessions || noteChanged;
       await tx.enrollmentMonth.upsert({
         where: { enrollmentId_month_year: { enrollmentId, month, year } },
-        update: { status, sessions },
-        create: { enrollmentId, month, year, status, sessions, pricePerSession: periodPricePerSession }
+        update: { status, sessions, note },
+        create: { enrollmentId, month, year, status, sessions, pricePerSession: periodPricePerSession, note }
       });
 
       // Tình trạng hiện hành của ghi danh = tình trạng của tháng có kế hoạch mới nhất,

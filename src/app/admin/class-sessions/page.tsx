@@ -15,8 +15,8 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 /**
- * Mục "Lớp học" của quản lý phụ: chỉ xem lớp và nhập số buổi theo tháng (kèm tạo hóa đơn còn
- * thiếu). Không có thêm/sửa/xóa lớp, học sinh, bảo lưu hay đổi trạng thái hóa đơn.
+ * Mục "Lớp học" của quản lý phụ: chỉ xem lớp, nhập số buổi và ghi chú theo tháng. Không tạo hóa
+ * đơn, không thêm/sửa/xóa lớp, học sinh, bảo lưu hay đổi trạng thái hóa đơn.
  */
 export default async function ClassSessionsPage({
   searchParams
@@ -46,7 +46,16 @@ export default async function ClassSessionsPage({
         where: enrollmentVisibleInPeriodWhere(month, year),
         orderBy: { student: { fullName: "asc" } },
         include: {
-          student: true,
+          student: {
+            include: {
+              // Các lớp học sinh đang theo học (chưa nghỉ, lớp chưa lưu trữ).
+              enrollments: {
+                where: { leftAt: null, classRoom: { archivedAt: null } },
+                orderBy: { classRoom: { name: "asc" } },
+                select: { classRoom: { select: { id: true, name: true } } }
+              }
+            }
+          },
           invoices: { where: { month, year }, orderBy: { createdAt: "desc" } },
           months: latestMonthUpToPeriodArgs(month, year)
         }
@@ -66,6 +75,7 @@ export default async function ClassSessionsPage({
         classRoom
       });
       const studentArchived = Boolean(enrollment.student.archivedAt);
+      const currentMonth = enrollment.months[0];
       const remainingSessions = plan.initialized
         ? null
         : remainingScheduledSessions(classRoom.schedules, enrollment.startDate, month, year);
@@ -79,6 +89,12 @@ export default async function ClassSessionsPage({
         editable:
           !studentArchived && plan.status === "active" && (!invoice || invoice.status === "unpaid"),
         sessions: plan.sessions,
+        // months[0] có thể là tháng trước (để kế thừa trạng thái): ghi chú chỉ lấy của đúng kỳ.
+        note: currentMonth?.month === month && currentMonth.year === year ? currentMonth.note ?? "" : "",
+        enrolledClasses: enrollment.student.enrollments.map((item) => ({
+          name: item.classRoom.name,
+          current: item.classRoom.id === classRoom.id
+        })),
         pricePerSession: plan.pricePerSession,
         joinHint:
           plan.status === "active" && remainingSessions !== null && remainingSessions < plan.defaultSessions
@@ -90,12 +106,7 @@ export default async function ClassSessionsPage({
         invoice: invoice ? { status: invoice.status, amount: invoice.amount } : null
       };
     });
-    return {
-      classRoom,
-      rows,
-      missingInvoices: rows.filter((row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active")
-        .length
-    };
+    return { classRoom, rows };
   });
 
   const selected = classRows.find((item) => item.classRoom.id === params.classId) ?? classRows[0] ?? null;
@@ -105,7 +116,7 @@ export default async function ClassSessionsPage({
     <div className="grid gap-5">
       <PageHeader
         title="Lớp học"
-        description="Chọn lớp và tháng, nhập số buổi học của từng học sinh rồi lưu."
+        description="Chọn lớp và tháng, nhập số buổi học và ghi chú của từng học sinh rồi lưu."
         actions={
           <MonthSwitcher
             basePath="/admin/class-sessions"
@@ -123,7 +134,7 @@ export default async function ClassSessionsPage({
           {/* Cuộn ngang trên điện thoại, xuống dòng trên màn hình rộng. */}
           <nav aria-label="Chọn lớp" className="-mx-4 overflow-x-auto px-4 pb-1 lg:mx-0 lg:px-0">
             <div className="flex w-max gap-2 lg:w-auto lg:flex-wrap">
-              {classRows.map(({ classRoom, missingInvoices }) => {
+              {classRows.map(({ classRoom }) => {
                 const active = classRoom.id === selected?.classRoom.id;
                 return (
                   <Link
@@ -135,16 +146,14 @@ export default async function ClassSessionsPage({
                     }`}
                   >
                     {classRoom.name}
-                    {missingInvoices > 0 ? (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                          active ? "bg-white/20 text-white" : "bg-amber-50 text-amber-700"
-                        }`}
-                        title={`${missingInvoices} học sinh chưa có hóa đơn tháng này`}
-                      >
-                        {missingInvoices}
-                      </span>
-                    ) : null}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        active ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"
+                      }`}
+                      title="Số học sinh trong tháng"
+                    >
+                      {classRoom.enrollments.length}
+                    </span>
                   </Link>
                 );
               })}

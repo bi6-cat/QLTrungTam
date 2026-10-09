@@ -271,6 +271,9 @@ export const enrollmentSchema = z
     }
   });
 
+/** Độ dài tối đa ghi chú tháng của học sinh trong lớp (EnrollmentMonth.note). */
+export const NOTE_MAX_LENGTH = 300;
+
 export const updateClassDetailsSchema = z.object({
   classId: id,
   month: monthOpt,

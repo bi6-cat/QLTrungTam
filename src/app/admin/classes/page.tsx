@@ -339,6 +339,11 @@ export default async function ClassesPage({
                       fallbackSessions: plan.defaultSessions,
                       pricePerSession: plan.pricePerSession,
                       memoContent: buildMemo(selectedClass.shortCode, enrollment.student.phone, month, year),
+                      // months[0] có thể là tháng trước (để kế thừa trạng thái): ghi chú chỉ lấy của đúng kỳ.
+                      note:
+                        enrollment.months[0]?.month === month && enrollment.months[0]?.year === year
+                          ? enrollment.months[0].note ?? ""
+                          : "",
                       invoice: invoice
                         ? {
                             id: invoice.id,
