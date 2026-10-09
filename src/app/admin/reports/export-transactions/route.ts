@@ -4,6 +4,7 @@ import { getAuthorizedUser } from "@/lib/auth";
 import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/lib/excel-report";
 import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { describeTransaction } from "@/lib/transaction-report";
 
 export async function GET(request: Request) {
   const session = await getAuthorizedUser(["owner", "manager"]);
@@ -80,29 +81,7 @@ export async function GET(request: Request) {
 
   const firstDataRow = headerStartRow + 1;
   for (const transaction of transactions) {
-    const status = transaction.reversedAt
-      ? "Đã hoàn tác"
-      : transaction.matchedInvoiceId
-        ? "Đã khớp"
-        : transaction.resolvedAt
-          ? "Đã xử lý"
-          : "Chưa khớp";
-    const matched = transaction.reversedAt
-      ? "Liên kết đã được hoàn tác"
-      : transaction.matchedInvoice
-        ? `${transaction.matchedInvoice.classShortCodeSnapshot ?? transaction.matchedInvoice.enrollment.classRoom.shortCode} · ${transaction.matchedInvoice.studentNameSnapshot ?? transaction.matchedInvoice.enrollment.student.fullName} · ${formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}`
-        : transaction.matchedInvoiceId
-          ? "Liên kết hóa đơn không còn khả dụng"
-          : transaction.resolvedAt
-            ? "Đã xử lý thủ công (không gán hóa đơn)"
-            : "-";
-    const reason = transaction.reversedAt
-      ? transaction.reversalReason ?? transaction.resolvedNote
-      : transaction.matchedInvoiceId
-        ? transaction.matchOverrideReason ?? transaction.matchReason
-        : transaction.resolvedAt
-          ? transaction.resolvedNote
-          : transaction.matchReason;
+    const { status, matched, reason } = describeTransaction(transaction);
 
     sheet.addRow({
       time: transaction.transferredAt.toLocaleString("vi-VN"),
@@ -111,7 +90,7 @@ export async function GET(request: Request) {
       amount: transaction.amount,
       status,
       matched,
-      reason: reason ?? "-",
+      reason,
       content: transaction.rawContent
     });
   }

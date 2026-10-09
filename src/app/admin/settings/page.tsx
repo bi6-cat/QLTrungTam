@@ -1,10 +1,12 @@
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { ManagerAccounts } from "@/components/ManagerAccounts";
 import { SettingsForm } from "@/components/SettingsForm";
+import { SheetSyncPanel } from "@/components/SheetSyncPanel";
 import { Panel, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings, maskSecret } from "@/lib/settings";
 import { requireStaff } from "@/lib/auth";
+import { getSheetSyncConfig, NIGHTLY_SYNC_HOUR } from "@/lib/sheet-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +26,9 @@ export default async function SettingsPage() {
     );
   }
 
-  const [settings, managers] = await Promise.all([
+  const [settings, sheetSync, managers] = await Promise.all([
     getAppSettings(),
+    getSheetSyncConfig(),
     prisma.adminUser.findMany({
       where: { role: "manager" },
       orderBy: { createdAt: "asc" },
@@ -53,6 +56,24 @@ export default async function SettingsPage() {
             sepayApiKeyHint: maskSecret(settings.sepayApiKey),
             sepayWebhookSecretHint: maskSecret(settings.sepayWebhookSecret)
           }}
+        />
+      </Panel>
+
+      <Panel>
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-neutralText">Lưu trữ lên Google Sheet</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Mỗi tháng một tab gồm tổng hợp, học phí và số buổi, giao dịch, lương giáo viên và chi phí. Sheet chỉ là bản sao để
+            lưu trữ: mỗi lần đồng bộ ghi đè cả tab, sửa trên sheet không đổi dữ liệu trong hệ thống.
+          </p>
+        </div>
+        {/* Không gửi key thật xuống trình duyệt, chỉ gửi email của Service Account. */}
+        <SheetSyncPanel
+          spreadsheetId={sheetSync.spreadsheetId}
+          clientEmail={sheetSync.clientEmail}
+          configured={sheetSync.configured}
+          nightlyHour={NIGHTLY_SYNC_HOUR}
+          status={sheetSync.status}
         />
       </Panel>
 
