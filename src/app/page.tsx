@@ -179,16 +179,16 @@ export default function LandingPage() {
     <div className="min-h-screen">
       {/* NAV */}
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <Link href="/" className="focus-ring flex items-center gap-3 rounded-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-3">
+          <Link href="/" className="focus-ring flex min-w-0 items-center gap-2 rounded-xl sm:gap-3">
             <img
               src="/logo.jpg"
               alt="APLUS ACADEMY"
-              className="h-10 w-10 rounded-xl border border-stone-200 bg-white object-cover shadow-sm"
+              className="h-10 w-10 shrink-0 rounded-xl border border-stone-200 bg-white object-cover shadow-sm"
             />
-            <div className="leading-tight">
-              <p className="text-sm font-extrabold tracking-tight text-primary">APLUS ACADEMY</p>
-              <p className="text-xs text-stone-500">Dạy thêm cấp 2 &amp; cấp 3</p>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-sm font-extrabold tracking-tight text-primary">APLUS ACADEMY</p>
+              <p className="truncate text-xs text-stone-500">Dạy thêm cấp 2 &amp; cấp 3</p>
             </div>
           </Link>
           <nav className="hidden items-center gap-1 text-sm font-semibold text-stone-600 md:flex">
@@ -208,16 +208,21 @@ export default function LandingPage() {
               Liên hệ
             </a>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Điện thoại: chỉ hiện icon để vừa hàng với nút Đăng ký học. */}
             <Link
               href="/admin"
-              className="focus-ring hidden h-11 items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-neutralText shadow-sm hover:border-stone-400 hover:bg-stone-50 sm:inline-flex"
+              aria-label="Trang quản trị"
+              title="Trang quản trị"
+              className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-neutralText shadow-sm hover:border-stone-400 hover:bg-stone-50 sm:w-auto sm:px-4"
             >
               <Shield className="h-4 w-4" />
-              Trang quản trị
+              <span className="hidden sm:inline">Trang quản trị</span>
             </Link>
             <a href="#contact">
-              <Button variant="accent">Đăng ký học</Button>
+              <Button variant="accent" className="px-3 sm:px-4">
+                Đăng ký học
+              </Button>
             </a>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/auth";
+import { getAuthorizedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const searchSchema = z.object({
@@ -39,7 +39,7 @@ function escapeLikePattern(value: string) {
 }
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await getAuthorizedUser(["owner"]);
   if (!session) {
     return noStoreJson({ error: "Bạn cần đăng nhập lại." }, { status: 401 });
   }

@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAuthorizedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   coerceStudentImportRows,
@@ -32,7 +32,7 @@ class ImportPreviewError extends Error {
 const MAX_ATTEMPTS = 3;
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getAuthorizedUser(["owner"]);
   if (!session) {
     return NextResponse.json({ error: "Bạn cần đăng nhập lại." }, { status: 401 });
   }

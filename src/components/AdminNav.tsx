@@ -16,8 +16,9 @@ import {
   Wallet
 } from "lucide-react";
 import { clsx } from "clsx";
+import type { AdminRole } from "@/lib/roles";
 
-const nav = [
+const ownerNav = [
   { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/admin/classes", label: "Lớp học", icon: BookOpen },
   { href: "/admin/students", label: "Học sinh", icon: Users },
@@ -30,7 +31,18 @@ const nav = [
   { href: "/admin/settings", label: "Cài đặt", icon: Settings }
 ];
 
-export function AdminNav() {
+// Phải khớp với canAccessAdminPath trong @/lib/roles.
+const managerNav = [
+  { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
+  { href: "/admin/class-sessions", label: "Lớp học", icon: BookOpen },
+  { href: "/admin/debts", label: "Công nợ", icon: Wallet },
+  { href: "/admin/transactions", label: "Giao dịch", icon: ReceiptText },
+  { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
+  { href: "/admin/settings", label: "Tài khoản", icon: Settings }
+];
+
+export function AdminNav({ role }: { role: AdminRole }) {
+  const nav = role === "manager" ? managerNav : ownerNav;
   const pathname = usePathname();
   const [optimisticHref, setOptimisticHref] = useState<string | null>(null);
   const isNavigating = optimisticHref !== null;
@@ -45,7 +57,7 @@ export function AdminNav() {
       .filter((item) => pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href)))
       .sort((a, b) => b.href.length - a.href.length)[0];
     return match?.href ?? "/admin";
-  }, [optimisticHref, pathname]);
+  }, [nav, optimisticHref, pathname]);
 
   return (
     <>

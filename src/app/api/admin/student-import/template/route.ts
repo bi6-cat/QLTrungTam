@@ -1,12 +1,12 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAuthorizedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const session = await getSession();
+  const session = await getAuthorizedUser(["owner"]);
   if (!session) {
     return NextResponse.json({ error: "Bạn cần đăng nhập lại." }, { status: 401 });
   }

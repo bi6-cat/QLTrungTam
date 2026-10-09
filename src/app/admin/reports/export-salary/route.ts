@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAuthorizedUser } from "@/lib/auth";
 import { periodIndex } from "@/lib/enrollment-period";
 import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/lib/excel-report";
 import { formatDayMonth, formatMonth } from "@/lib/format";
@@ -49,7 +49,7 @@ const sum = (lines: SalaryLine[], pick: (line: SalaryLine) => number) =>
   lines.reduce((total, line) => total + pick(line), 0);
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await getAuthorizedUser(["owner", "manager"]);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

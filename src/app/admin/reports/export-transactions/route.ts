@@ -1,12 +1,12 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAuthorizedUser } from "@/lib/auth";
 import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/lib/excel-report";
 import { formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await getAuthorizedUser(["owner", "manager"]);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

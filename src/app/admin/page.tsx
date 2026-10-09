@@ -12,7 +12,7 @@ import {
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { getDashboard } from "@/lib/dashboard";
 import { formatCurrency, formatMonth } from "@/lib/format";
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,10 @@ export default async function AdminHomePage({
 }: {
   searchParams: Promise<{ month?: string; year?: string }>;
 }) {
-  await requireAdmin();
+  const user = await requireStaff();
+  const isOwner = user.role === "owner";
+  // Quản lý phụ nhập số buổi ở trang Lớp học riêng, không mở được trang Lớp học của chủ.
+  const classesHref = isOwner ? "/admin/classes" : "/admin/class-sessions";
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);
@@ -54,8 +57,8 @@ export default async function AdminHomePage({
           tone: "warning" as const,
           icon: <FilePlus2 className="h-4 w-4" />,
           text: `${totals.unissued} học sinh đang học chưa có hóa đơn ${formatMonth(month, year)}.`,
-          href: "/admin/classes",
-          cta: "Tạo hóa đơn"
+          href: classesHref,
+          cta: isOwner ? "Tạo hóa đơn" : "Nhập số buổi"
         }
       : null,
     alerts.unmatchedTransactions > 0
@@ -65,7 +68,7 @@ export default async function AdminHomePage({
           icon: <AlertTriangle className="h-4 w-4" />,
           text: `${alerts.unmatchedTransactions} giao dịch chưa khớp cần đối soát.`,
           href: "/admin/transactions",
-          cta: "Đối soát"
+          cta: isOwner ? "Đối soát" : "Xem giao dịch"
         }
       : null,
     outstandingAllTime.olderThanThisMonth > 0
@@ -78,7 +81,7 @@ export default async function AdminHomePage({
           cta: "Nhắc nợ"
         }
       : null,
-    alerts.classesWithoutSchedule > 0
+    isOwner && alerts.classesWithoutSchedule > 0
       ? {
           key: "schedule",
           tone: "neutral" as const,
@@ -88,7 +91,7 @@ export default async function AdminHomePage({
           cta: "Xếp lịch"
         }
       : null,
-    alerts.salaryPending > 0
+    isOwner && alerts.salaryPending > 0
       ? {
           key: "salary",
           tone: "neutral" as const,
@@ -259,9 +262,13 @@ export default async function AdminHomePage({
 
       {dashboard.classes.length === 0 ? (
         <EmptyState title="Chưa có lớp học nào" icon={<Users className="h-6 w-6" />}>
-          <Link href="/admin/classes" className="font-semibold text-primary hover:underline">
-            Tạo lớp đầu tiên
-          </Link>
+          {isOwner ? (
+            <Link href="/admin/classes" className="font-semibold text-primary hover:underline">
+              Tạo lớp đầu tiên
+            </Link>
+          ) : (
+            "Chủ trung tâm chưa tạo lớp nào."
+          )}
         </EmptyState>
       ) : (
         <Panel className="overflow-hidden p-0">
@@ -338,7 +345,7 @@ export default async function AdminHomePage({
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link
-                        href={`/admin/classes?classId=${classRoom.id}&month=${month}&year=${year}`}
+                        href={`${classesHref}?classId=${classRoom.id}&month=${month}&year=${year}`}
                         className="focus-ring inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-primary transition-colors hover:bg-indigo-50"
                       >
                         Chi tiết

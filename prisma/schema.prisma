@@ -219,10 +219,17 @@ model Transaction {
   @@index([matchedInvoiceId, resolvedAt, reversedAt, transferredAt, id], map: "Transaction_open_match_lookup_idx")
 }
 
+/// owner = chủ trung tâm (toàn quyền); manager = quản lý phụ (xem số liệu, nhập số buổi, xuất báo cáo).
+enum AdminRole {
+  owner
+  manager
+}
+
 model AdminUser {
   id           String     @id @default(cuid())
   username     String     @unique
   passwordHash String
+  role         AdminRole  @default(owner)
   createdAt    DateTime   @default(now())
   auditLogs    AuditLog[]
 }

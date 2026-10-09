@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getAuthorizedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   coerceStudentImportRows,
@@ -22,7 +22,7 @@ function errorResponse(error: unknown, status = 400) {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getAuthorizedUser(["owner"]);
   if (!session) {
     return NextResponse.json({ error: "Bạn cần đăng nhập lại." }, { status: 401 });
   }

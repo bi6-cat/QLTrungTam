@@ -1,12 +1,12 @@
 import { Banknote, BarChart3, Download, Landmark, ReceiptText } from "lucide-react";
 import { Button, Field, Input, Panel, PageHeader, Select } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
-  await requireAdmin();
+  await requireStaff();
   const now = new Date();
   const defaultMonth = now.getMonth() + 1;
   const defaultYear = now.getFullYear();

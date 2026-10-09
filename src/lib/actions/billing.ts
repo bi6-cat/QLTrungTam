@@ -2,8 +2,8 @@
 
 import { errorState, successState, type ResultState } from "@/lib/action-states";
 import { actionFailure, revalidateFinancialPaths, runSerializableAction } from "@/lib/actions/shared";
-import { requireAdmin } from "@/lib/auth";
-import { isEnrollmentActiveInPeriod } from "@/lib/enrollment-period";
+import { requireAdmin, requireStaff, type StaffUser } from "@/lib/auth";
+import { isEnrollmentActiveInPeriod, latestMonthUpToPeriodArgs, resolveMonthPlan } from "@/lib/enrollment-period";
 import { changeInvoiceLifecycle, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
 import { buildMemo } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
@@ -18,8 +18,9 @@ function clampSessions(value: FormDataEntryValue | null) {
 // Không redirect sau khi lưu: redirect về chính URL đang xem dễ đua với request
 // prefetch của <Link> và làm vùng nội dung trắng. revalidatePath đã gửi kèm dữ
 // liệu mới trong response của action; client tự thoát chế độ sửa khi thành công.
+// Quản lý phụ cũng dùng action này nhưng chỉ đổi được số buổi (xem saveClassDetails).
 export async function updateClassDetailsAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  const actor = await requireAdmin();
+  const actor = await requireStaff();
   const { data: parsed, error } = safeParseForm(updateClassDetailsSchema, formData);
   if (error || !parsed) return errorState(error ?? "Dữ liệu không hợp lệ.");
 
@@ -42,7 +43,7 @@ export async function updateClassDetailsAction(_prevState: ResultState, formData
 async function saveClassDetails(
   parsed: { classId: string; month: number; year: number; intent: "create" | "save" },
   formData: FormData,
-  actor: { userId: string; username: string }
+  actor: StaffUser
 ) {
   const month = parsed.month || new Date().getMonth() + 1;
   const year = parsed.year || new Date().getFullYear();
@@ -86,7 +87,29 @@ async function saveClassDetails(
       }
       if (existingInvoice && existingInvoice.status !== "unpaid") continue;
 
-      const status = String(formData.get(`status:${enrollmentId}`)) === "on_leave" ? "on_leave" : "active";
+      // Quản lý phụ không đổi được tình trạng học (bảo lưu sẽ hủy hóa đơn): giữ đúng kế hoạch
+      // hiện hành của kỳ, kể cả trạng thái kế thừa từ tháng trước, bất kể form gửi gì.
+      const status =
+        actor.role === "owner"
+          ? String(formData.get(`status:${enrollmentId}`)) === "on_leave"
+            ? "on_leave"
+            : "active"
+          : resolveMonthPlan({
+              month,
+              year,
+              latestMonth:
+                existingMonth ??
+                (await tx.enrollmentMonth.findFirst({
+                  where: { enrollmentId, ...latestMonthUpToPeriodArgs(month, year).where },
+                  orderBy: latestMonthUpToPeriodArgs(month, year).orderBy
+                })),
+              invoice: existingInvoice,
+              enrollment,
+              classRoom: enrollment.classRoom
+            }).status;
+      // Học sinh bảo lưu không có số buổi để nhập; bỏ qua để quản lý phụ không bao giờ đi vào
+      // nhánh hủy hóa đơn bên dưới.
+      if (actor.role !== "owner" && status === "on_leave") continue;
       const requestedSessions = clampSessions(formData.get(`sessions:${enrollmentId}`));
       // Học sinh đang bảo lưu có số buổi bằng 0, nên ô nhập trên form cũng là 0.
       // Khi admin bật lại "Đang học" mà chưa kịp sửa số buổi thì tự khôi phục

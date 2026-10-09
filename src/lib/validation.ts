@@ -116,6 +116,23 @@ export const changePasswordSchema = z
     path: ["confirmPassword"]
   });
 
+// Tên đăng nhập của quản lý phụ: chữ thường không dấu, số, dấu chấm/gạch để dễ gõ trên điện thoại.
+const username = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "Tên đăng nhập tối thiểu 3 ký tự")
+  .max(40, "Tên đăng nhập tối đa 40 ký tự")
+  .refine((v) => /^[a-z0-9._-]+$/.test(v), "Tên đăng nhập chỉ gồm chữ không dấu, số, dấu . _ -");
+
+const newPassword = z.string().min(8, "Mật khẩu tối thiểu 8 ký tự").max(200);
+
+export const createManagerSchema = z.object({ username, password: newPassword });
+
+export const resetManagerPasswordSchema = z.object({ userId: id, password: newPassword });
+
+export const deleteManagerSchema = z.object({ userId: id });
+
 export const createClassSchema = z.object({
   name: requiredText("Thiếu tên lớp", 120),
   shortCode,

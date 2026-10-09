@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import type { AdminRole } from "@/lib/roles";
 
 // Không import next/headers hay prisma ở đây: file này dùng chung cho middleware.
 
@@ -8,6 +9,8 @@ export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 export type SessionPayload = {
   userId: string;
   username: string;
+  /** Chỉ dùng để middleware chuyển hướng sớm; quyền thật đọc lại từ DB ở mỗi request. */
+  role?: AdminRole;
   exp: number;
 };
 

@@ -8,7 +8,7 @@ import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui"
 import { periodIndex } from "@/lib/enrollment-period";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,9 @@ export default async function TransactionsPage({
     unmatchedPage?: string;
   }>;
 }) {
-  await requireAdmin();
+  const user = await requireStaff();
+  // Quản lý phụ chỉ xem: ẩn gán/hoàn tác giao dịch và liên kết hồ sơ học sinh.
+  const isOwner = user.role === "owner";
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);
@@ -386,12 +388,16 @@ export default async function TransactionsPage({
                     </td>
                     <td className="overflow-hidden px-3 py-3">
                       <div className="truncate whitespace-nowrap" title={`${studentName} · ${studentPhone}`}>
-                        <Link
-                          href={`/admin/students/${invoice.enrollment.student.id}`}
-                          className="font-semibold text-primary hover:underline"
-                        >
-                          {studentName}
-                        </Link>
+                        {isOwner ? (
+                          <Link
+                            href={`/admin/students/${invoice.enrollment.student.id}`}
+                            className="font-semibold text-primary hover:underline"
+                          >
+                            {studentName}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold">{studentName}</span>
+                        )}
                         <span className="text-xs text-stone-500"> · {studentPhone}</span>
                       </div>
                     </td>
@@ -551,13 +557,20 @@ export default async function TransactionsPage({
                             <>
                               {transaction.matchedInvoice.classShortCodeSnapshot ??
                                 transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
-                              <Link
-                                href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
-                                className="font-semibold text-primary hover:underline"
-                              >
-                                {transaction.matchedInvoice.studentNameSnapshot ??
-                                  transaction.matchedInvoice.enrollment.student.fullName}
-                              </Link>{" "}·{" "}
+                              {isOwner ? (
+                                <Link
+                                  href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
+                                  className="font-semibold text-primary hover:underline"
+                                >
+                                  {transaction.matchedInvoice.studentNameSnapshot ??
+                                    transaction.matchedInvoice.enrollment.student.fullName}
+                                </Link>
+                              ) : (
+                                <span className="font-semibold">
+                                  {transaction.matchedInvoice.studentNameSnapshot ??
+                                    transaction.matchedInvoice.enrollment.student.fullName}
+                                </span>
+                              )}{" "}·{" "}
                               {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
                             </>
                           ) : (
@@ -572,7 +585,7 @@ export default async function TransactionsPage({
                       </td>
                       <td className="overflow-hidden px-2 py-3">
                         <div className="flex justify-center">
-                          {transaction.matchedInvoice && !transaction.reversedAt ? (
+                          {isOwner && transaction.matchedInvoice && !transaction.reversedAt ? (
                             <TransactionReviewActions transactionId={transaction.id} />
                           ) : (
                             "-"
@@ -623,7 +636,7 @@ export default async function TransactionsPage({
                   <th className="whitespace-nowrap px-3 py-3">Mã GD</th>
                   <th className="whitespace-nowrap px-3 py-3">Số tiền</th>
                   <th className="whitespace-nowrap px-3 py-3">Nội dung</th>
-                  <th className="whitespace-nowrap px-3 py-3">Gán thủ công</th>
+                  <th className="whitespace-nowrap px-3 py-3">{isOwner ? "Gán thủ công" : "Xử lý"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
@@ -656,10 +669,14 @@ export default async function TransactionsPage({
                       </div>
                     </td>
                     <td className="overflow-hidden px-3 py-3">
-                      <TransactionMatchForm
-                        transactionId={transaction.id}
-                        transactionAmount={transaction.amount}
-                      />
+                      {isOwner ? (
+                        <TransactionMatchForm
+                          transactionId={transaction.id}
+                          transactionAmount={transaction.amount}
+                        />
+                      ) : (
+                        <span className="text-xs text-stone-500">Chủ trung tâm đối soát</span>
+                      )}
                     </td>
                   </tr>
                 ))}

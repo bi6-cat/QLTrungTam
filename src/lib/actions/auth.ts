@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { login, logout, requireAdmin } from "@/lib/auth";
+import { login, logout, requireStaff } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
@@ -46,8 +46,9 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+// Mỗi tài khoản (kể cả quản lý phụ) tự đổi mật khẩu của chính mình.
 export async function changePasswordAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  const session = await requireAdmin();
+  const session = await requireStaff();
   const { data, error } = safeParseForm(changePasswordSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
 
