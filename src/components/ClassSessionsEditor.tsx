@@ -36,9 +36,22 @@ const STATUS_DOT = {
   waived: { label: "Đã miễn", className: "bg-indigo-400" }
 } as const;
 
+// Từ màn hình vừa (md) trở lên là bảng có cột cố định; điện thoại giữ bố cục một dòng gọn.
+const TABLE_COLUMNS =
+  "md:grid md:grid-cols-[minmax(0,1.5fr)_112px_minmax(0,1.2fr)_minmax(0,2fr)_112px_96px] md:items-center md:gap-4";
+
 function statusKey(row: SessionRow): keyof typeof STATUS_DOT {
   if (row.monthlyStatus === "on_leave") return "on_leave";
   return row.invoice?.status ?? "none";
+}
+
+function classListNodes(row: SessionRow) {
+  return row.enrolledClasses.map((item, index) => (
+    <span key={`${item.name}-${index}`}>
+      {index > 0 ? ", " : ""}
+      <span className={item.current ? "font-semibold text-primary" : undefined}>{item.name}</span>
+    </span>
+  ));
 }
 
 function clamp(value: number) {
@@ -132,6 +145,17 @@ export function ClassSessionsEditor({
         </div>
       </div>
 
+      <div
+        className={`hidden border-b border-stone-100 bg-stone-50/70 px-6 py-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500 ${TABLE_COLUMNS}`}
+      >
+        <span>Học sinh</span>
+        <span>SĐT</span>
+        <span>Lớp đang học</span>
+        <span>Ghi chú</span>
+        <span className="text-center">Số buổi</span>
+        <span className="text-right">Thành tiền</span>
+      </div>
+
       <ul className="divide-y divide-stone-100">
         {rows.map((row) => {
           const sessions = sessionsOf(row);
@@ -140,7 +164,7 @@ export function ClassSessionsEditor({
           return (
             <li
               key={row.enrollmentId}
-              className={`flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-6 ${dirty ? "bg-amber-50/50" : ""}`}
+              className={`flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-6 ${TABLE_COLUMNS} ${dirty ? "bg-amber-50/50" : ""}`}
             >
               {/* Học sinh đã lưu trữ thì không gửi lên: server cũng bỏ qua. */}
               {!row.studentArchived ? <input type="hidden" name="enrollmentId" value={row.enrollmentId} /> : null}
@@ -166,21 +190,19 @@ export function ClassSessionsEditor({
                     Vào {row.joinHint.joinedOn} · dùng {row.joinHint.sessions} buổi
                   </button>
                 ) : (
-                  <p
-                    className="truncate text-[11px] text-stone-500"
-                    title={row.enrolledClasses.map((item) => item.name).join(", ")}
-                  >
-                    {row.enrolledClasses.map((item, index) => (
-                      <span key={`${item.name}-${index}`}>
-                        {index > 0 ? ", " : ""}
-                        <span className={item.current ? "font-semibold text-primary" : undefined}>{item.name}</span>
-                      </span>
-                    ))}
-                  </p>
+                  <p className="truncate text-[11px] text-stone-500 md:hidden">{classListNodes(row)}</p>
                 )}
               </div>
 
-              <div className="w-28 shrink-0 sm:w-auto sm:flex-1">
+              <span className="hidden truncate text-sm text-stone-600 md:block">{row.phone}</span>
+              <p
+                className="hidden truncate text-sm text-stone-600 md:block"
+                title={row.enrolledClasses.map((item) => item.name).join(", ")}
+              >
+                {classListNodes(row)}
+              </p>
+
+              <div className="w-28 shrink-0 sm:w-auto sm:flex-1 md:min-w-0">
                 {row.studentArchived ? (
                   <p className="truncate text-xs text-stone-500" title={row.note}>{row.note || "-"}</p>
                 ) : (
@@ -197,7 +219,7 @@ export function ClassSessionsEditor({
                 )}
               </div>
 
-              <div className="shrink-0">
+              <div className="shrink-0 md:justify-self-center">
                 {row.editable ? (
                   <div className="flex items-center">
                     <button
@@ -243,7 +265,7 @@ export function ClassSessionsEditor({
                 )}
               </div>
 
-              <span className="hidden w-24 shrink-0 text-right text-sm font-semibold text-stone-700 sm:block">
+              <span className="hidden w-24 shrink-0 text-right text-sm font-semibold text-stone-700 sm:block md:w-auto">
                 {formatCurrency(amount)}
               </span>
             </li>
