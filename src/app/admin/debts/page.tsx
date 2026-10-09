@@ -39,9 +39,8 @@ export default async function DebtsPage({
 }: {
   searchParams: Promise<{ classId?: string; sort?: string; period?: string }>;
 }) {
-  const user = await requireStaff();
-  // Quản lý phụ chỉ xem và copy tin nhắc nợ, không mở hồ sơ học sinh.
-  const isOwner = user.role === "owner";
+  // Quản lý phụ chỉ xem hồ sơ học sinh và copy tin nhắc nợ.
+  await requireStaff();
   const params = await searchParams;
   const classId = (params.classId || "").trim();
   const sort = parseDebtSort(params.sort);
@@ -202,16 +201,12 @@ export default async function DebtsPage({
                   return (
                     <tr key={row.studentId} className="align-top transition-colors hover:bg-indigo-50/40">
                       <td className="px-4 py-3">
-                        {isOwner ? (
-                          <Link
-                            href={`/admin/students/${row.studentId}`}
-                            className="font-semibold text-primary hover:underline"
-                          >
-                            {row.studentName}
-                          </Link>
-                        ) : (
-                          <span className="font-semibold text-neutralText">{row.studentName}</span>
-                        )}
+                        <Link
+                          href={`/admin/students/${row.studentId}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {row.studentName}
+                        </Link>
                         {row.studentArchived ? (
                           <div className="mt-1">
                             <Badge tone="neutral">Đã lưu trữ</Badge>

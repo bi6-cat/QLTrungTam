@@ -24,7 +24,7 @@ import { EditStudentButton } from "@/components/EditStudentButton";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatCurrency, formatEnrollmentStatus, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 const TIMELINE_PAGE_SIZE = 40;
@@ -135,7 +135,9 @@ export default async function Student360Page({
   params: Promise<{ studentId: string }>;
   searchParams: Promise<{ historyPage?: string }>;
 }) {
-  await requireAdmin();
+  // Quản lý phụ chỉ xem: không có nút sửa, lưu trữ hay danh sách học sinh.
+  const viewer = await requireStaff();
+  const isOwner = viewer.role === "owner";
   const { studentId } = await params;
   const query = await searchParams;
   const student = await prisma.student.findUnique({
@@ -417,13 +419,19 @@ export default async function Student360Page({
         actions={
           <>
             <Link
-              href={student.archivedAt ? "/admin/students?archived=1" : "/admin/students"}
+              href={
+                isOwner
+                  ? student.archivedAt
+                    ? "/admin/students?archived=1"
+                    : "/admin/students"
+                  : "/admin/classes"
+              }
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
             >
               <ArrowLeft className="h-4 w-4" />
-              Danh sách học sinh
+              {isOwner ? "Danh sách học sinh" : "Lớp học"}
             </Link>
-            {!student.archivedAt ? (
+            {isOwner && !student.archivedAt ? (
               <EditStudentButton
                 student={{
                   id: student.id,
@@ -435,12 +443,14 @@ export default async function Student360Page({
                 }}
               />
             ) : null}
-            <ArchiveEntityButton
-              kind="student"
-              entityId={student.id}
-              entityName={student.fullName}
-              archived={Boolean(student.archivedAt)}
-            />
+            {isOwner ? (
+              <ArchiveEntityButton
+                kind="student"
+                entityId={student.id}
+                entityName={student.fullName}
+                archived={Boolean(student.archivedAt)}
+              />
+            ) : null}
           </>
         }
       />

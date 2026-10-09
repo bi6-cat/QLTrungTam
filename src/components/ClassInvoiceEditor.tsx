@@ -59,19 +59,22 @@ export function ClassInvoiceEditor({
   month,
   year,
   rows,
-  billingLocked = false
+  billingLocked = false,
+  canManage = true
 }: {
   classId: string;
   month: number;
   year: number;
   rows: InvoiceRow[];
   billingLocked?: boolean;
+  /** false = quản lý phụ: chỉ sửa số buổi và ghi chú, không tạo hóa đơn, đổi tình trạng học hay thao tác hóa đơn. */
+  canManage?: boolean;
 }) {
   const hasAnyInvoice = rows.some((row) => row.invoice);
   const missingInvoiceCount = rows.filter(
     (row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active"
   ).length;
-  const hasMissingInvoice = missingInvoiceCount > 0;
+  const hasMissingInvoice = canManage && missingInvoiceCount > 0;
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
@@ -165,7 +168,7 @@ export function ClassInvoiceEditor({
               <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Cần tạo {missingInvoiceCount} hóa đơn
               </span>
-            ) : !hasAnyInvoice ? (
+            ) : canManage && !hasAnyInvoice ? (
               <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Dự thảo
               </span>
@@ -192,7 +195,7 @@ export function ClassInvoiceEditor({
           ) : !billingLocked ? (
             <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
-              {hasMissingInvoice ? "Sửa trước khi tạo" : hasAnyInvoice ? "Sửa" : "Sửa dự thảo"}
+              {!canManage ? "Sửa số buổi" : hasMissingInvoice ? "Sửa trước khi tạo" : hasAnyInvoice ? "Sửa" : "Sửa dự thảo"}
             </Button>
           ) : null}
         </div>
@@ -230,14 +233,28 @@ export function ClassInvoiceEditor({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[780px] table-fixed text-left text-sm">
             <colgroup>
-              <col className="w-[16%]" />
-              <col className="w-[13%]" />
-              <col className="w-[10%]" />
-              <col className="w-[8%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
-              <col className="w-[13%]" />
-              <col className="w-[18%]" />
+              {canManage ? (
+                <>
+                  <col className="w-[16%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[18%]" />
+                </>
+              ) : (
+                <>
+                  <col className="w-[20%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[20%]" />
+                </>
+              )}
             </colgroup>
             <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
@@ -248,7 +265,7 @@ export function ClassInvoiceEditor({
                 <th className="px-2 py-3">Đơn giá</th>
                 <th className="px-2 py-3">Số tiền</th>
                 <th className="px-2 py-3">Ghi chú</th>
-                <th className="px-2 py-3 text-right">Thao tác</th>
+                {canManage ? <th className="px-2 py-3 text-right">Thao tác</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -308,7 +325,7 @@ export function ClassInvoiceEditor({
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       <div className="grid gap-1">
-                        {editing && !planningLocked ? (
+                        {canManage && editing && !planningLocked ? (
                           <Select
                             name={`status:${row.enrollmentId}`}
                             defaultValue={row.monthlyStatus}
@@ -421,6 +438,7 @@ export function ClassInvoiceEditor({
                         <span className="text-xs text-stone-400">-</span>
                       )}
                     </td>
+                    {canManage ? (
                     <td className="whitespace-nowrap px-2 py-3 text-right">
                       <div className="flex flex-nowrap items-center justify-end gap-1">
                       {!billingLocked && !row.studentArchived ? (
@@ -448,6 +466,7 @@ export function ClassInvoiceEditor({
                       )}
                       </div>
                     </td>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -491,7 +510,9 @@ export function ClassInvoiceEditor({
           <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50/95 px-5 py-4 shadow-[0_-8px_20px_rgba(0,0,0,0.04)] backdrop-blur">
             <p className="text-sm text-stone-600">
               {editing
-                ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền hay đổi trạng thái hóa đơn."
+                ? canManage
+                  ? "Lưu hoặc hủy bản nháp trước khi ghi nhận tiền hay đổi trạng thái hóa đơn."
+                  : "Sửa số buổi và ghi chú rồi bấm Lưu. Hóa đơn đã đóng, hủy, miễn hoặc học sinh bảo lưu không sửa được số buổi."
                 : hasMissingInvoice
                 ? "Tạo hóa đơn cho các học sinh đang học chưa có hóa đơn trong tháng này. Có thể sửa số buổi trước khi tạo."
                 : "Chỉ sửa số buổi và trạng thái học cho hóa đơn chưa đóng. Hóa đơn đã đóng, hủy hoặc miễn được khóa để giữ đúng lịch sử."}

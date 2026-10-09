@@ -32,7 +32,6 @@ export function actionFailure(error: unknown, fallback: string): ResultState {
 export function revalidateFinancialPaths() {
   revalidatePath("/admin");
   revalidatePath("/admin/classes");
-  revalidatePath("/admin/class-sessions");
   revalidatePath("/admin/debts");
   revalidatePath("/admin/transactions");
   revalidatePath("/admin/finance");
@@ -44,7 +43,6 @@ export function revalidateFinancialPaths() {
 export function revalidateRosterPaths() {
   revalidatePath("/admin");
   revalidatePath("/admin/classes");
-  revalidatePath("/admin/class-sessions");
   revalidatePath("/admin/students", "layout");
   revalidatePath("/admin/transactions");
   revalidatePath("/pay/[short_code]", "page");

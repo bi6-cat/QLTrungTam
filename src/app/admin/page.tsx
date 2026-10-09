@@ -32,7 +32,7 @@ export default async function AdminHomePage({
   const user = await requireStaff();
   const isOwner = user.role === "owner";
   // Quản lý phụ nhập số buổi ở trang Lớp học riêng, không mở được trang Lớp học của chủ.
-  const classesHref = isOwner ? "/admin/classes" : "/admin/class-sessions";
+  const classesHref = "/admin/classes";
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);

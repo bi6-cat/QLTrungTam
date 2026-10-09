@@ -34,7 +34,7 @@ const ownerNav = [
 // Phải khớp với canAccessAdminPath trong @/lib/roles.
 const managerNav = [
   { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/admin/class-sessions", label: "Lớp học", icon: BookOpen },
+  { href: "/admin/classes", label: "Lớp học", icon: BookOpen },
   { href: "/admin/debts", label: "Công nợ", icon: Wallet },
   { href: "/admin/transactions", label: "Giao dịch", icon: ReceiptText },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },

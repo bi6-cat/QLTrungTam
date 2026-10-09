@@ -20,7 +20,7 @@ import {
 } from "@/lib/enrollment-period";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
 import { CreateClassForm } from "@/components/CreateClassForm";
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,10 @@ export default async function ClassesPage({
 }: {
   searchParams: Promise<{ classId?: string; month?: string; year?: string; archived?: string }>;
 }) {
-  await requireAdmin();
+  // Quản lý phụ dùng chính trang này nhưng chỉ đổi được số buổi và ghi chú: không tạo/sửa/lưu trữ
+  // lớp, không thêm/xóa học sinh, không tạo hóa đơn. Server action của các thao tác đó đều đòi chủ.
+  const viewer = await requireStaff();
+  const canManage = viewer.role === "owner";
   const params = await searchParams;
   const now = new Date();
   const parsedMonth = Number(params.month);
@@ -43,7 +46,7 @@ export default async function ClassesPage({
     Number.isInteger(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100
       ? parsedYear
       : now.getFullYear();
-  const showArchived = params.archived === "1";
+  const showArchived = canManage && params.archived === "1";
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
   const [classes, students, settings] = await Promise.all([
     prisma.classRoom.findMany({
@@ -69,7 +72,9 @@ export default async function ClassesPage({
         }
       }
     }),
-    prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } }),
+    canManage
+      ? prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } })
+      : Promise.resolve([]),
     getAppSettings()
   ]);
   const defaultCutoffLabel = describeSalaryCutoff(parseSalaryCutoff(settings.salaryCutoff) ?? DEFAULT_SALARY_CUTOFF);
@@ -121,8 +126,13 @@ export default async function ClassesPage({
     <div className="grid gap-6">
       <PageHeader
         title="Lớp học"
-        description="Quản lý lớp, giáo viên, học sinh trong lớp và hóa đơn theo tháng."
+        description={
+          canManage
+            ? "Quản lý lớp, giáo viên, học sinh trong lớp và hóa đơn theo tháng."
+            : "Chọn lớp và tháng, bấm Sửa để nhập số buổi và ghi chú của từng học sinh."
+        }
         actions={
+          canManage ? (
           <>
             {selectedClass ? (
               <>
@@ -175,6 +185,7 @@ export default async function ClassesPage({
               {showArchived ? "Đang hoạt động" : "Đã lưu trữ"}
             </Link>
           </>
+          ) : null
         }
       />
 
@@ -223,13 +234,15 @@ export default async function ClassesPage({
                         </span>
                       ) : null}
                     </Link>
-                    <ArchiveEntityButton
-                      kind="class"
-                      entityId={classRoom.id}
-                      entityName={classRoom.name}
-                      archived={Boolean(classRoom.archivedAt)}
-                      compact
-                    />
+                    {canManage ? (
+                      <ArchiveEntityButton
+                        kind="class"
+                        entityId={classRoom.id}
+                        entityName={classRoom.name}
+                        archived={Boolean(classRoom.archivedAt)}
+                        compact
+                      />
+                    ) : null}
                     </div>
                   );
                 })}
@@ -237,7 +250,7 @@ export default async function ClassesPage({
             )}
           </Panel>
 
-          {!showArchived ? <Panel>
+          {canManage && !showArchived ? <Panel>
             <h2 className="font-bold">Tạo lớp mới</h2>
             <CreateClassForm defaultCutoffLabel={defaultCutoffLabel} />
           </Panel> : null}
@@ -280,7 +293,7 @@ export default async function ClassesPage({
             <div className="p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-bold">Học sinh trong lớp</h3>
-                {selectedClass.archivedAt ? (
+                {!canManage ? null : selectedClass.archivedAt ? (
                   <p className="text-xs font-medium text-stone-500">Khôi phục lớp trước khi thay đổi danh sách học sinh.</p>
                 ) : isPastPeriod ? (
                   <p className="text-xs font-medium text-stone-500">Chuyển về tháng hiện tại để thêm học sinh mới.</p>
@@ -312,6 +325,7 @@ export default async function ClassesPage({
                   month={month}
                   year={year}
                   billingLocked={Boolean(selectedClass.archivedAt)}
+                  canManage={canManage}
                   rows={selectedClass.enrollments.map((enrollment) => {
                     const invoice = enrollment.invoices[0];
                     const plan = planOf(enrollment);

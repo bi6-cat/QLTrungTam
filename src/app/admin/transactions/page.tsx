@@ -388,16 +388,12 @@ export default async function TransactionsPage({
                     </td>
                     <td className="overflow-hidden px-3 py-3">
                       <div className="truncate whitespace-nowrap" title={`${studentName} · ${studentPhone}`}>
-                        {isOwner ? (
-                          <Link
-                            href={`/admin/students/${invoice.enrollment.student.id}`}
-                            className="font-semibold text-primary hover:underline"
-                          >
-                            {studentName}
-                          </Link>
-                        ) : (
-                          <span className="font-semibold">{studentName}</span>
-                        )}
+                        <Link
+                          href={`/admin/students/${invoice.enrollment.student.id}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {studentName}
+                        </Link>
                         <span className="text-xs text-stone-500"> · {studentPhone}</span>
                       </div>
                     </td>
@@ -557,20 +553,13 @@ export default async function TransactionsPage({
                             <>
                               {transaction.matchedInvoice.classShortCodeSnapshot ??
                                 transaction.matchedInvoice.enrollment.classRoom.shortCode} ·{" "}
-                              {isOwner ? (
-                                <Link
-                                  href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
-                                  className="font-semibold text-primary hover:underline"
-                                >
-                                  {transaction.matchedInvoice.studentNameSnapshot ??
-                                    transaction.matchedInvoice.enrollment.student.fullName}
-                                </Link>
-                              ) : (
-                                <span className="font-semibold">
-                                  {transaction.matchedInvoice.studentNameSnapshot ??
-                                    transaction.matchedInvoice.enrollment.student.fullName}
-                                </span>
-                              )}{" "}·{" "}
+                              <Link
+                                href={`/admin/students/${transaction.matchedInvoice.enrollment.student.id}`}
+                                className="font-semibold text-primary hover:underline"
+                              >
+                                {transaction.matchedInvoice.studentNameSnapshot ??
+                                  transaction.matchedInvoice.enrollment.student.fullName}
+                              </Link>{" "}·{" "}
                               {formatMonth(transaction.matchedInvoice.month, transaction.matchedInvoice.year)}
                             </>
                           ) : (
