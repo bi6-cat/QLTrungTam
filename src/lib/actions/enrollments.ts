@@ -8,7 +8,7 @@ import {
   revalidateRosterPaths,
   runSerializableAction
 } from "@/lib/actions/shared";
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { periodIndex, periodStartDate } from "@/lib/enrollment-period";
 import { formatMonth } from "@/lib/format";
 import { enrollmentSchema, safeParseForm } from "@/lib/validation";
@@ -16,14 +16,14 @@ import { enrollmentSchema, safeParseForm } from "@/lib/validation";
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
 
 /**
- * Thêm một học sinh vào lớp kèm ngày bắt đầu học.
+ * Thêm một học sinh vào lớp kèm ngày vào lớp (chủ hoặc quản lý phụ).
  *
  * Học sinh từng nghỉ lớp này quay lại: dùng lại ghi danh cũ, đặt ngày bắt đầu mới và xóa
  * mốc nghỉ. Các tháng đã nghỉ (không có kế hoạch/hóa đơn) không "sống lại" vì đều trước
  * ngày bắt đầu mới; các tháng đã học trước đó vẫn hiện nhờ dữ liệu hóa đơn của chúng.
  */
 export async function createEnrollmentAction(formData: FormData): Promise<ResultState> {
-  const actor = await requireAdmin();
+  const actor = await requireStaff();
   const { data, error } = safeParseForm(enrollmentSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   const startDate = parseDateInput(data.startDate);
@@ -106,10 +106,10 @@ export type LeaveClassInput = {
 /**
  * Cho học sinh nghỉ một lớp từ đầu tháng chỉ định. Hóa đơn chưa đóng từ tháng đó trở đi
  * bị hủy kèm lý do; nếu đã đóng tiền tháng đó thì chặn để admin chọn tháng sau hoặc
- * hoàn giao dịch trước. Học sinh vẫn học các lớp khác bình thường.
+ * hoàn giao dịch trước. Học sinh vẫn học các lớp khác bình thường. Quản lý phụ cũng dùng được.
  */
 export async function leaveClassAction(input: LeaveClassInput): Promise<ResultState> {
-  const actor = await requireAdmin();
+  const actor = await requireStaff();
   const enrollmentId = String(input.enrollmentId ?? "");
   const fromMonth = Number(input.fromMonth);
   const fromYear = Number(input.fromYear);

@@ -231,28 +231,14 @@ export function ClassInvoiceEditor({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[780px] table-fixed text-left text-sm">
             <colgroup>
-              {canManage ? (
-                <>
-                  <col className="w-[16%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[18%]" />
-                </>
-              ) : (
-                <>
-                  <col className="w-[20%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[20%]" />
-                </>
-              )}
+              <col className="w-[16%]" />
+              <col className="w-[13%]" />
+              <col className="w-[10%]" />
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
+              <col className="w-[12%]" />
+              <col className="w-[13%]" />
+              <col className="w-[18%]" />
             </colgroup>
             <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
@@ -263,7 +249,7 @@ export function ClassInvoiceEditor({
                 <th className="px-2 py-3">Đơn giá</th>
                 <th className="px-2 py-3">Số tiền</th>
                 <th className="px-2 py-3">Ghi chú</th>
-                {canManage ? <th className="px-2 py-3 text-right">Thao tác</th> : null}
+                <th className="px-2 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -420,7 +406,7 @@ export function ClassInvoiceEditor({
                         <span className="text-xs text-stone-400">-</span>
                       )}
                     </td>
-                    {canManage ? (
+                    {/* Quản lý phụ cũng cho nghỉ lớp được; miễn/hủy hóa đơn chỉ của chủ. */}
                     <td className="whitespace-nowrap px-2 py-3 text-right">
                       <div className="flex flex-nowrap items-center justify-end gap-1">
                       {!billingLocked && !row.studentArchived ? (
@@ -434,7 +420,7 @@ export function ClassInvoiceEditor({
                           disabled={editing}
                         />
                       ) : null}
-                      {invoice?.status === "unpaid" ? (
+                      {!canManage ? null : invoice?.status === "unpaid" ? (
                         <InvoiceLifecycleActions invoiceId={invoice.id} status="unpaid" disabled={editing} />
                       ) : invoice?.status === "paid" ? (
                         <span className="inline-flex items-center justify-end gap-1 text-xs font-semibold text-success">
@@ -448,7 +434,6 @@ export function ClassInvoiceEditor({
                       )}
                       </div>
                     </td>
-                    ) : null}
                   </tr>
                 );
               })}

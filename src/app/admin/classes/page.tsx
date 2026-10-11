@@ -29,8 +29,8 @@ export default async function ClassesPage({
 }: {
   searchParams: Promise<{ classId?: string; month?: string; year?: string; archived?: string }>;
 }) {
-  // Quản lý phụ dùng chính trang này nhưng chỉ đổi được số buổi, ghi chú và lấy link nộp tiền: không
-  // tạo/sửa/lưu trữ lớp, không thêm/xóa học sinh, không tạo hóa đơn. Server action các thao tác đó đòi chủ.
+  // Quản lý phụ dùng chính trang này để nhập số buổi, ghi chú, thêm học sinh vào lớp / cho nghỉ lớp và
+  // lấy link nộp tiền; không tạo/sửa/lưu trữ lớp, không tạo/miễn/hủy hóa đơn (server action các việc đó đòi chủ).
   const viewer = await requireStaff();
   const canManage = viewer.role === "owner";
   const params = await searchParams;
@@ -70,9 +70,7 @@ export default async function ClassesPage({
         }
       }
     }),
-    canManage
-      ? prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } })
-      : Promise.resolve([]),
+    prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } }),
     getAppSettings()
   ]);
   const defaultCutoffLabel = describeSalaryCutoff(parseSalaryCutoff(settings.salaryCutoff) ?? DEFAULT_SALARY_CUTOFF);
@@ -127,7 +125,7 @@ export default async function ClassesPage({
         description={
           canManage
             ? "Quản lý lớp, giáo viên, học sinh trong lớp và hóa đơn theo tháng."
-            : "Chọn lớp và tháng, bấm Sửa để nhập số buổi và ghi chú; bấm Xem DS & gửi link để lấy link nộp tiền."
+            : "Chọn lớp và tháng để thêm học sinh, nhập số buổi, ghi chú; bấm Xem DS & gửi link để lấy link nộp tiền."
         }
         actions={
           <>
@@ -291,7 +289,7 @@ export default async function ClassesPage({
             <div className="p-6">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h3 className="font-bold">Học sinh trong lớp</h3>
-                {!canManage ? null : selectedClass.archivedAt ? (
+                {selectedClass.archivedAt ? (
                   <p className="text-xs font-medium text-stone-500">Khôi phục lớp trước khi thay đổi danh sách học sinh.</p>
                 ) : isPastPeriod ? (
                   <p className="text-xs font-medium text-stone-500">Chuyển về tháng hiện tại để thêm học sinh mới.</p>
