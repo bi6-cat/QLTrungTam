@@ -38,8 +38,6 @@ type InvoiceRow = {
   fallbackSessions: number;
   /** Hóa đơn chưa đóng của các tháng trước trong lớp này. */
   olderDebts: Array<{ month: number; year: number; amount: number }>;
-  /** Vào lớp giữa tháng: gợi ý số buổi còn lại theo lịch. */
-  joinHint: { joinedOn: string; sessions: number } | null;
   pricePerSession: number;
   memoContent: string;
   /** Ghi chú của học sinh trong lớp cho kỳ đang xem. */
@@ -306,22 +304,6 @@ export function ClassInvoiceEditor({
                           Còn nợ T{debt.month}/{debt.year}: {formatCurrency(debt.amount)}
                         </Link>
                       ))}
-                      {row.joinHint && !planningLocked ? (
-                        <div className="whitespace-normal text-[11px] font-medium text-amber-700">
-                          Vào lớp {row.joinHint.joinedOn} · lịch còn {row.joinHint.sessions} buổi
-                          {editing ? (
-                            <button
-                              type="button"
-                              className="ml-1 underline hover:text-amber-900"
-                              onClick={() =>
-                                setSessionDrafts((current) => ({ ...current, [draftKey]: row.joinHint!.sessions }))
-                              }
-                            >
-                              Dùng {row.joinHint.sessions} buổi
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       <div className="grid gap-1">

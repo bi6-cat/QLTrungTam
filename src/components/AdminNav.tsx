@@ -35,6 +35,7 @@ const ownerNav = [
 const managerNav = [
   { href: "/admin", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/admin/classes", label: "Lớp học", icon: BookOpen },
+  { href: "/admin/students", label: "Học sinh", icon: Users },
   { href: "/admin/debts", label: "Công nợ", icon: Wallet },
   { href: "/admin/transactions", label: "Giao dịch", icon: ReceiptText },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },

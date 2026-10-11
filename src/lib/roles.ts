@@ -13,19 +13,16 @@ export const ROLE_LABEL: Record<AdminRole, string> = {
  */
 const MANAGER_PATHS = [
   "/admin/classes",
+  "/admin/students",
   "/admin/debts",
   "/admin/transactions",
   "/admin/reports",
   "/admin/settings"
 ];
 
-/** Hồ sơ một học sinh (chỉ xem). Danh sách học sinh /admin/students vẫn chỉ của chủ trung tâm. */
-const STUDENT_PROFILE = /^\/admin\/students\/[^/]+\/?$/;
-
 export function canAccessAdminPath(role: AdminRole, pathname: string) {
   if (role === "owner") return true;
   if (pathname === "/admin" || pathname === "/admin/") return true;
-  if (STUDENT_PROFILE.test(pathname)) return true;
   return MANAGER_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 

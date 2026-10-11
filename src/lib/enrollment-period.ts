@@ -1,5 +1,4 @@
 import type { EnrollmentStatus, Prisma } from "@prisma/client";
-import { isoWeekday } from "@/lib/schedule";
 
 export function periodStartDate(month: number, year: number) {
   return new Date(year, month - 1, 1);
@@ -89,27 +88,4 @@ export function resolveMonthPlan(input: {
     defaultSessions,
     initialized: Boolean(current || invoice)
   };
-}
-
-/**
- * Số buổi theo lịch cố định từ ngày vào lớp tới hết tháng, dùng để gợi ý khi học sinh
- * vào giữa tháng. Null khi lớp chưa xếp lịch hoặc ngày vào lớp không thuộc kỳ.
- */
-export function remainingScheduledSessions(
-  schedules: Array<{ weekday: number }>,
-  joinedAt: Date,
-  month: number,
-  year: number
-) {
-  if (schedules.length === 0) return null;
-  if (joinedAt.getFullYear() !== year || joinedAt.getMonth() + 1 !== month) return null;
-
-  const weekdays = schedules.map((slot) => slot.weekday);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  let count = 0;
-  for (let day = joinedAt.getDate(); day <= daysInMonth; day += 1) {
-    const weekday = isoWeekday(new Date(year, month - 1, day));
-    count += weekdays.filter((value) => value === weekday).length;
-  }
-  return count;
 }

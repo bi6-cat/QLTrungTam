@@ -135,9 +135,8 @@ export default async function Student360Page({
   params: Promise<{ studentId: string }>;
   searchParams: Promise<{ historyPage?: string }>;
 }) {
-  // Quản lý phụ chỉ xem: không có nút sửa, lưu trữ hay danh sách học sinh.
-  const viewer = await requireStaff();
-  const isOwner = viewer.role === "owner";
+  // Chủ trung tâm và quản lý phụ đều sửa/lưu trữ được hồ sơ học sinh.
+  await requireStaff();
   const { studentId } = await params;
   const query = await searchParams;
   const student = await prisma.student.findUnique({
@@ -419,19 +418,13 @@ export default async function Student360Page({
         actions={
           <>
             <Link
-              href={
-                isOwner
-                  ? student.archivedAt
-                    ? "/admin/students?archived=1"
-                    : "/admin/students"
-                  : "/admin/classes"
-              }
+              href={student.archivedAt ? "/admin/students?archived=1" : "/admin/students"}
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
             >
               <ArrowLeft className="h-4 w-4" />
-              {isOwner ? "Danh sách học sinh" : "Lớp học"}
+              Danh sách học sinh
             </Link>
-            {isOwner && !student.archivedAt ? (
+            {!student.archivedAt ? (
               <EditStudentButton
                 student={{
                   id: student.id,
@@ -443,14 +436,12 @@ export default async function Student360Page({
                 }}
               />
             ) : null}
-            {isOwner ? (
-              <ArchiveEntityButton
-                kind="student"
-                entityId={student.id}
-                entityName={student.fullName}
-                archived={Boolean(student.archivedAt)}
-              />
-            ) : null}
+            <ArchiveEntityButton
+              kind="student"
+              entityId={student.id}
+              entityName={student.fullName}
+              archived={Boolean(student.archivedAt)}
+            />
           </>
         }
       />
@@ -561,7 +552,7 @@ export default async function Student360Page({
                   <th className="px-4 py-3">Giáo viên</th>
                   <th className="px-4 py-3">Trạng thái hiện tại</th>
                   <th className="px-4 py-3">Số buổi mặc định</th>
-                  <th className="px-4 py-3">Ngày bắt đầu học</th>
+                  <th className="px-4 py-3">Ngày vào lớp</th>
                   <th className="px-4 py-3">Lịch sử</th>
                 </tr>
               </thead>

@@ -190,7 +190,7 @@ export function StudentEnrollmentPicker({
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-[170px_140px_150px_auto]">
-        <Field label="Ngày bắt đầu học">
+        <Field label="Ngày vào lớp" hint="Ghi chép">
           <Input name="startDate" type="date" defaultValue={todayInputValue()} required />
         </Field>
         <Field label="Buổi riêng">

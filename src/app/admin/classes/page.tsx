@@ -15,7 +15,6 @@ import { absoluteUrl, payPath, teacherPath } from "@/lib/class-links";
 import {
   enrollmentVisibleInPeriodWhere,
   latestMonthUpToPeriodArgs,
-  remainingScheduledSessions,
   resolveMonthPlan
 } from "@/lib/enrollment-period";
 import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
@@ -30,8 +29,8 @@ export default async function ClassesPage({
 }: {
   searchParams: Promise<{ classId?: string; month?: string; year?: string; archived?: string }>;
 }) {
-  // Quản lý phụ dùng chính trang này nhưng chỉ đổi được số buổi và ghi chú: không tạo/sửa/lưu trữ
-  // lớp, không thêm/xóa học sinh, không tạo hóa đơn. Server action của các thao tác đó đều đòi chủ.
+  // Quản lý phụ dùng chính trang này nhưng chỉ đổi được số buổi, ghi chú và lấy link nộp tiền: không
+  // tạo/sửa/lưu trữ lớp, không thêm/xóa học sinh, không tạo hóa đơn. Server action các thao tác đó đòi chủ.
   const viewer = await requireStaff();
   const canManage = viewer.role === "owner";
   const params = await searchParams;
@@ -53,7 +52,6 @@ export default async function ClassesPage({
       where: { archivedAt: showArchived ? { not: null } : null },
       orderBy: { createdAt: "asc" },
       include: {
-        schedules: { select: { weekday: true } },
         enrollments: {
           where: showArchived
             ? {
@@ -129,14 +127,13 @@ export default async function ClassesPage({
         description={
           canManage
             ? "Quản lý lớp, giáo viên, học sinh trong lớp và hóa đơn theo tháng."
-            : "Chọn lớp và tháng, bấm Sửa để nhập số buổi và ghi chú của từng học sinh."
+            : "Chọn lớp và tháng, bấm Sửa để nhập số buổi và ghi chú; bấm Xem DS & gửi link để lấy link nộp tiền."
         }
         actions={
-          canManage ? (
           <>
             {selectedClass ? (
               <>
-              {!selectedClass.archivedAt ? (
+              {canManage && !selectedClass.archivedAt ? (
                 <EditClassButton
                   classRoom={{
                     id: selectedClass.id,
@@ -151,7 +148,7 @@ export default async function ClassesPage({
                   defaultCutoffLabel={defaultCutoffLabel}
                 />
               ) : null}
-              {!selectedClass.archivedAt ? (
+              {canManage && !selectedClass.archivedAt ? (
                 <CopyTeacherLinkButton
                   className={selectedClass.name}
                   teacherUrl={`${absoluteUrl(settings.appUrl, teacherPath(selectedClass))}?month=${month}&year=${year}`}
@@ -177,15 +174,16 @@ export default async function ClassesPage({
               />
               </>
             ) : null}
-            <Link
-              href={showArchived ? "/admin/classes" : "/admin/classes?archived=1"}
-              className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
-            >
-              {showArchived ? <Layers3 className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-              {showArchived ? "Đang hoạt động" : "Đã lưu trữ"}
-            </Link>
+            {canManage ? (
+              <Link
+                href={showArchived ? "/admin/classes" : "/admin/classes?archived=1"}
+                className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
+              >
+                {showArchived ? <Layers3 className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                {showArchived ? "Đang hoạt động" : "Đã lưu trữ"}
+              </Link>
+            ) : null}
           </>
-          ) : null
         }
       />
 
@@ -329,10 +327,6 @@ export default async function ClassesPage({
                   rows={selectedClass.enrollments.map((enrollment) => {
                     const invoice = enrollment.invoices[0];
                     const plan = planOf(enrollment);
-                    // Bắt đầu học giữa tháng: gợi ý số buổi còn lại theo lịch từ ngày bắt đầu học.
-                    const remainingSessions = plan.initialized
-                      ? null
-                      : remainingScheduledSessions(selectedClass.schedules, enrollment.startDate, month, year);
                     return {
                       enrollmentId: enrollment.id,
                       studentId: enrollment.student.id,
@@ -342,13 +336,6 @@ export default async function ClassesPage({
                       monthlyStatus: plan.status,
                       periodInitialized: plan.initialized,
                       olderDebts: olderDebtsByEnrollment.get(enrollment.id) ?? [],
-                      joinHint:
-                        plan.status === "active" && remainingSessions !== null && remainingSessions < plan.defaultSessions
-                          ? {
-                              joinedOn: `${enrollment.startDate.getDate()}/${enrollment.startDate.getMonth() + 1}`,
-                              sessions: remainingSessions
-                            }
-                          : null,
                       defaultSessions: plan.sessions,
                       fallbackSessions: plan.defaultSessions,
                       pricePerSession: plan.pricePerSession,

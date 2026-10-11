@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { errorState, successState, type CreateStudentState, type ResultState } from "@/lib/action-states";
 import { actionFailure, revalidateRosterPaths } from "@/lib/actions/shared";
 import { changeArchiveState, parseArchiveInput } from "@/lib/archive";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createStudentSchema, safeParseForm, updateStudentSchema } from "@/lib/validation";
 
@@ -20,7 +20,7 @@ export async function createStudentAction(
   _prevState: CreateStudentState,
   formData: FormData
 ): Promise<CreateStudentState> {
-  await requireAdmin();
+  await requireStaff();
   const { data, error } = safeParseForm(createStudentSchema, formData);
   if (error || !data) {
     return { warning: "", success: "", error: error ?? "Dữ liệu không hợp lệ." };
@@ -70,7 +70,7 @@ export async function createStudentAction(
 }
 
 export async function updateStudentAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  await requireAdmin();
+  await requireStaff();
   const { data, error } = safeParseForm(updateStudentSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
 
@@ -92,8 +92,9 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
   return successState(`Đã lưu thông tin ${data.fullName}.`);
 }
 
+// Quản lý phụ cũng được thêm/sửa/lưu trữ hồ sơ học sinh (không đụng tới lớp hay hóa đơn).
 async function changeStudentArchive(formData: FormData, mode: "archive" | "restore"): Promise<ResultState> {
-  const actor = await requireAdmin();
+  const actor = await requireStaff();
   try {
     const { id, reason } = parseArchiveInput(formData);
     await changeArchiveState({ entity: "student", mode, id, reason, actor });
