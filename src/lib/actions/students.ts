@@ -6,6 +6,7 @@ import { actionFailure, revalidateRosterPaths } from "@/lib/actions/shared";
 import { changeArchiveState, parseArchiveInput } from "@/lib/archive";
 import { requireAdmin, requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncUnpaidInvoicesWithStudent } from "@/lib/student-invoice-sync";
 import { createStudentSchema, safeParseForm, updateStudentSchema } from "@/lib/validation";
 
 /**
@@ -72,26 +73,38 @@ export async function createStudentAction(
 }
 
 export async function updateStudentAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  await requireStaff();
+  const actor = await requireStaff();
   const { data, error } = safeParseForm(updateStudentSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
 
-  const updated = await prisma.student.updateMany({
-    where: { id: data.id, archivedAt: null },
-    data: {
-      fullName: data.fullName,
-      phone: data.phone,
-      address: data.address,
-      parentName: data.parentName,
-      note: data.note
-    }
-  });
-  if (updated.count !== 1) {
-    return errorState("Học sinh đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục hồ sơ trước khi sửa.");
+  let changedMemos: Array<{ from: string; to: string }>;
+  try {
+    changedMemos = await prisma.$transaction(async (tx) => {
+      const updated = await tx.student.updateMany({
+        where: { id: data.id, archivedAt: null },
+        data: {
+          fullName: data.fullName,
+          phone: data.phone,
+          address: data.address,
+          parentName: data.parentName,
+          note: data.note
+        }
+      });
+      if (updated.count !== 1) {
+        throw new Error("Học sinh đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục hồ sơ trước khi sửa.");
+      }
+      // Trang lớp hiển thị tên/SĐT/memo theo bản chụp trên hóa đơn, nên phải đồng bộ hóa đơn chưa đóng.
+      return syncUnpaidInvoicesWithStudent(tx, { id: data.id, fullName: data.fullName, phone: data.phone }, actor);
+    });
+  } catch (updateError) {
+    return actionFailure(updateError, "Không thể lưu thông tin học sinh.");
   }
-  revalidatePath("/admin/students", "layout");
-  revalidatePath("/admin/classes");
-  return successState(`Đã lưu thông tin ${data.fullName}.`);
+  revalidateRosterPaths();
+  return successState(
+    changedMemos.length > 0
+      ? `Đã lưu thông tin ${data.fullName}. Memo đã đổi: ${changedMemos.map((item) => `${item.from} → ${item.to}`).join("; ")}. Nhớ báo phụ huynh memo mới.`
+      : `Đã lưu thông tin ${data.fullName}.`
+  );
 }
 
 // Quản lý phụ cũng được thêm/sửa/lưu trữ hồ sơ học sinh (không đụng tới lớp hay hóa đơn).
