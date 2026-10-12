@@ -383,7 +383,8 @@ function MonthView({
                 <th
                   key={day}
                   className={clsx(
-                    "border-b border-stone-200 px-0.5 py-1 text-center font-semibold",
+                    "border-b border-l border-stone-200 px-0.5 py-1 text-center font-semibold",
+                    weekday === 1 ? "border-l-stone-300" : "border-l-stone-100",
                     weekday >= 6 && "bg-stone-50",
                     day === today && "bg-indigo-50 text-primary"
                   )}
@@ -432,7 +433,8 @@ function MonthView({
                   <td
                     key={day}
                     className={clsx(
-                      "border-b border-stone-100 px-0.5 py-1 text-center align-middle",
+                      "border-b border-l border-stone-100 px-0.5 py-1 text-center align-middle",
+                      isoWeekdayOf(day) === 1 && "border-l-stone-300",
                       isoWeekdayOf(day) >= 6 && "bg-stone-50/70",
                       day === today && "bg-indigo-50/60"
                     )}

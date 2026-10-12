@@ -134,14 +134,14 @@ export function Panel({
 }
 
 const statTone = {
-  primary: { chip: "bg-indigo-50 text-primary", value: "text-primary", bar: "from-indigo-400 to-primary" },
-  success: { chip: "bg-emerald-50 text-success", value: "text-success", bar: "from-emerald-400 to-success" },
-  warning: { chip: "bg-rose-50 text-warning", value: "text-warning", bar: "from-rose-400 to-warning" },
-  neutral: { chip: "bg-stone-100 text-stone-600", value: "text-neutralText", bar: "from-stone-300 to-stone-400" },
-  info: { chip: "bg-sky-50 text-sky-600", value: "text-sky-700", bar: "from-sky-400 to-sky-600" },
-  accent: { chip: "bg-amber-50 text-amber-600", value: "text-amber-700", bar: "from-amber-300 to-amber-500" },
-  violet: { chip: "bg-violet-50 text-violet-600", value: "text-violet-700", bar: "from-violet-400 to-violet-600" },
-  teal: { chip: "bg-teal-50 text-teal-600", value: "text-teal-700", bar: "from-teal-400 to-teal-600" }
+  primary: { chip: "bg-indigo-50 text-primary", value: "text-primary" },
+  success: { chip: "bg-emerald-50 text-success", value: "text-success" },
+  warning: { chip: "bg-rose-50 text-warning", value: "text-warning" },
+  neutral: { chip: "bg-stone-100 text-stone-600", value: "text-neutralText" },
+  info: { chip: "bg-sky-50 text-sky-600", value: "text-sky-700" },
+  accent: { chip: "bg-amber-50 text-amber-600", value: "text-amber-700" },
+  violet: { chip: "bg-violet-50 text-violet-600", value: "text-violet-700" },
+  teal: { chip: "bg-teal-50 text-teal-600", value: "text-teal-700" }
 } as const;
 
 export function StatCard({
@@ -160,7 +160,7 @@ export function StatCard({
   const t = statTone[tone];
   return (
     <Panel interactive className="relative overflow-hidden">
-      <span className={cn("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", t.bar)} />
+      <span className="absolute inset-x-0 top-0 h-1 bg-primary" />
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-stone-500">{label}</p>
         {icon ? <span className={cn("grid h-9 w-9 place-items-center rounded-xl", t.chip)}>{icon}</span> : null}
@@ -184,7 +184,7 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex gap-3">
         {/* Vạch màu nhấn cạnh tiêu đề trang. */}
-        <span aria-hidden="true" className="mt-1 w-1.5 shrink-0 self-stretch rounded-full bg-gradient-to-b from-indigo-600 via-violet-500 to-amber-400" />
+        <span aria-hidden="true" className="mt-1 w-1.5 shrink-0 self-stretch rounded-full bg-primary" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-neutralText">{title}</h1>
           {description ? <p className="mt-1 text-sm text-stone-600">{description}</p> : null}

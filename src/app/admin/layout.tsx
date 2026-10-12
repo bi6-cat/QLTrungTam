@@ -13,8 +13,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/80 backdrop-blur-xl">
-        {/* Dải màu thương hiệu mảnh trên cùng. */}
-        <div className="h-1 bg-gradient-to-r from-indigo-600 via-violet-500 to-amber-400" />
+        {/* Dải màu chủ đạo mảnh trên cùng. */}
+        <div className="h-1 bg-primary" />
         <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-4 py-3 lg:px-8">
           <Link href="/" className="focus-ring flex items-center gap-3 rounded-xl">
             <img
@@ -23,9 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               className="h-10 w-10 rounded-xl border border-stone-200 bg-white object-cover shadow-sm"
             />
             <div>
-              <p className="bg-gradient-to-r from-indigo-700 to-violet-600 bg-clip-text text-sm font-extrabold tracking-tight text-transparent">
-                APLUS ACADEMY
-              </p>
+              <p className="text-sm font-extrabold tracking-tight text-primary">APLUS ACADEMY</p>
               <p className="text-xs text-stone-500">
                 Xin chào, {session.username}
                 {session.role === "manager" ? ` · ${ROLE_LABEL.manager}` : ""}

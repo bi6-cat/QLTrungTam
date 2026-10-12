@@ -283,7 +283,7 @@ export default async function ClassesPage({
                         entityId={classRoom.id}
                         entityName={classRoom.name}
                         archived={Boolean(classRoom.archivedAt)}
-                        size="sm"
+                        compact
                       />
                     ) : null}
                     </div>
