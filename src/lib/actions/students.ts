@@ -56,7 +56,9 @@ export async function createStudentAction(
   });
 
   const activeSiblings = samePhone.filter((student) => !student.archivedAt);
-  revalidatePath("/admin/students");
+  // Không revalidatePath ở đây: để form tự router.refresh() sau khi nhận kết quả (xem AddStudentForm),
+  // vì kèm cây RSC của trang trong response của action làm nút "Đang thêm..." treo mãi khi các
+  // Link trong danh sách đã prefetch xong.
   return {
     error: "",
     success: `Đã thêm học sinh ${created.fullName}.`,

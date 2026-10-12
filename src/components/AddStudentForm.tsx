@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Plus, UserPlus } from "lucide-react";
 import { createStudentAction } from "@/lib/actions/students";
 import { useResultToast } from "@/components/Toaster";
@@ -32,12 +33,15 @@ export function AddStudentButton() {
 export function AddStudentForm({ onCancel }: { onCancel?: () => void }) {
   const [state, action, pending] = useActionState(createStudentAction, EMPTY_CREATE_STUDENT_STATE);
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
   useResultToast(state);
 
-  // Thêm xong thì dọn form để nhập tiếp học sinh kế, nhưng vẫn giữ thông báo.
+  // Thêm xong thì dọn form để nhập tiếp học sinh kế, nhưng vẫn giữ thông báo, và nạp lại danh sách.
   useEffect(() => {
-    if (state.success) formRef.current?.reset();
-  }, [state]);
+    if (!state.success) return;
+    formRef.current?.reset();
+    router.refresh();
+  }, [state, router]);
 
   return (
     <form ref={formRef} action={action} className="grid gap-3 sm:grid-cols-2">
