@@ -9,9 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit",
-    "test:unit": "tsx --test tests/class-links.test.ts tests/debts.test.ts tests/enrollment-period.test.ts tests/format.test.ts tests/mcp.test.ts tests/password.test.ts tests/payment.test.ts tests/public-token.test.ts tests/roles.test.ts tests/salary.test.ts tests/schedule.test.ts tests/session-token.test.ts tests/sheet-sync.test.ts tests/student-import.test.ts tests/student-search.test.ts tests/validation.test.ts",
+    "test:unit": "tsx --test tests/class-links.test.ts tests/debts.test.ts tests/enrollment-period.test.ts tests/format.test.ts tests/password.test.ts tests/payment.test.ts tests/public-token.test.ts tests/roles.test.ts tests/salary.test.ts tests/schedule.test.ts tests/session-token.test.ts tests/sheet-sync.test.ts tests/student-import.test.ts tests/student-search.test.ts tests/validation.test.ts",
     "test:integration": "tsx --test --test-concurrency=1 tests/ledger.integration.test.ts tests/invoice-lifecycle.integration.test.ts tests/payment-match.integration.test.ts tests/salary-payout.integration.test.ts",
-    "mcp": "tsx mcp/server.ts",
     "audit:data": "tsx scripts/audit-financial-data.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
@@ -31,7 +30,6 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
