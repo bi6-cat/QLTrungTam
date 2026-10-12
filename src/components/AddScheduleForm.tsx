@@ -9,9 +9,11 @@ import { Button, Field, Input, Select } from "@/components/ui";
 import { WEEKDAYS } from "@/lib/schedule";
 
 export function AddScheduleForm({
-  classes
+  classes,
+  defaultEffectiveFrom
 }: {
   classes: Array<{ id: string; name: string; shortCode: string }>;
+  defaultEffectiveFrom: string;
 }) {
   const [state, action, pending] = useActionState(createScheduleAction, EMPTY_RESULT_STATE);
   useResultToast(state);
@@ -40,8 +42,8 @@ export function AddScheduleForm({
   }
 
   return (
-    <form ref={formRef} action={action} className="grid gap-3 lg:grid-cols-6">
-      <div className="lg:col-span-2">
+    <form ref={formRef} action={action} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+      <div className="sm:col-span-2 lg:col-span-2">
         <Field label="Lớp">
           <Select name="classId" required defaultValue={classes[0]?.id}>
             {classes.map((classRoom) => (
@@ -70,15 +72,18 @@ export function AddScheduleForm({
       <Field label="Phòng">
         <Input name="room" placeholder="P.1" />
       </Field>
+      <Field label="Áp dụng từ">
+        <Input name="effectiveFrom" type="date" defaultValue={defaultEffectiveFrom} />
+      </Field>
 
       {state.error ? (
-        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700 lg:col-span-6">
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700 sm:col-span-2 lg:col-span-7">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{state.error}</span>
         </div>
       ) : null}
 
-      <div className="lg:col-span-6">
+      <div className="sm:col-span-2 lg:col-span-7">
         <Button type="submit" disabled={pending}>
           <CalendarPlus className="h-4 w-4" />
           {pending ? "Đang thêm..." : "Thêm buổi học"}

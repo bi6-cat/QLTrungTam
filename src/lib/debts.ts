@@ -1,6 +1,6 @@
 import { CENTER_INFO } from "@/lib/center";
 import { absoluteUrl, payPath } from "@/lib/class-links";
-import { formatCurrency, formatMonth } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_DEBT_REMINDER_TEMPLATE } from "@/lib/settings";
 
@@ -10,6 +10,8 @@ export type DebtInvoice = {
   year: number;
   amount: number;
   memoContent: string;
+  /** Lý do trừ/cộng buổi lúc tạo hóa đơn (theo thời khóa biểu), rỗng nếu không có. */
+  sessionsNote: string;
   className: string;
   classShortCode: string;
   payUrl: string;
@@ -71,6 +73,7 @@ export async function getOutstandingDebts(options?: {
       year: true,
       amount: true,
       memoContent: true,
+      sessionsNote: true,
       classNameSnapshot: true,
       classShortCodeSnapshot: true,
       enrollment: {
@@ -113,6 +116,7 @@ export async function getOutstandingDebts(options?: {
       year: invoice.year,
       amount: invoice.amount,
       memoContent: invoice.memoContent,
+      sessionsNote: invoice.sessionsNote ?? "",
       className: invoice.classNameSnapshot ?? classRoom.name,
       classShortCode: invoice.classShortCodeSnapshot ?? classRoom.shortCode,
       payUrl,
@@ -258,16 +262,16 @@ export function buildReminderMessage(
   row: DebtRow,
   template = DEFAULT_DEBT_REMINDER_TEMPLATE
 ) {
+  // Gọn: chỉ ghi tên lớp khi em học nhiều lớp; kèm lý do trừ buổi nếu có.
+  const multiClass = row.classes.length > 1;
   const debtDetails = row.invoices.map((invoice) => {
-    const overdueNote = invoice.monthsOverdue > 0 ? ` — quá hạn ${invoice.monthsOverdue} tháng` : "";
-    return `• ${formatMonth(invoice.month, invoice.year)} · ${invoice.className}: ${formatCurrency(invoice.amount)}${overdueNote}`;
+    const label = `T${invoice.month}/${invoice.year}${multiClass ? ` ${invoice.className}` : ""}`;
+    const note = invoice.sessionsNote ? ` (${invoice.sessionsNote})` : "";
+    const overdueNote = invoice.monthsOverdue > 0 ? ` – quá hạn ${invoice.monthsOverdue} tháng` : "";
+    return `• ${label}: ${formatCurrency(invoice.amount)}${note}${overdueNote}`;
   }).join("\n");
   const paymentSection = row.primaryPayUrl
-    ? [
-        "Phụ huynh vui lòng thanh toán tại link sau:",
-        row.primaryPayUrl,
-        "(Mở link là thấy học phí của con, quét mã QR rồi chuyển khoản — không cần sửa nội dung chuyển khoản)"
-      ].join("\n")
+    ? `Thanh toán (quét QR, không cần sửa nội dung): ${row.primaryPayUrl}`
     : "";
   const values: Record<string, string> = {
     studentName: row.studentName,

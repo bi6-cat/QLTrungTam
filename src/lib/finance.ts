@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { periodIndex } from "@/lib/enrollment-period";
-import { countScheduledSessions } from "@/lib/schedule";
+import { countScheduledInRange, monthRange } from "@/lib/class-sessions";
+import { scheduleSlotSelect, toScheduleSlot } from "@/lib/class-sessions-server";
 import { loadSalaryLines, type SalaryLine } from "@/lib/salary";
 
 /**
@@ -79,7 +80,7 @@ export async function getMonthlyFinance(month: number, year: number): Promise<Mo
         shortCode: true,
         teacherName: true,
         archivedAt: true,
-        schedules: { select: { weekday: true } },
+        schedules: { select: scheduleSlotSelect },
         enrollments: {
           select: {
             invoices: {
@@ -174,7 +175,12 @@ export async function getMonthlyFinance(month: number, year: number): Promise<Mo
         teacherCost: classTeacherCost,
         otherCost: classOtherCost,
         margin: classCollected - classTeacherCost - classOtherCost,
-        sessions: countScheduledSessions(classRoom.schedules, month, year),
+        sessions:
+          countScheduledInRange(
+            classRoom.schedules.map(toScheduleSlot),
+            monthRange(month, year).from,
+            monthRange(month, year).to
+          ) || null,
         // Lớp lưu trữ chỉ hiện khi kỳ đó thực sự có phát sinh.
         visible:
           !classRoom.archivedAt || invoices.length > 0 || classTeacherCost !== 0 || classOtherCost !== 0

@@ -2,15 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_SALARY_CUTOFF_CODE, SALARY_CUTOFF_SETTING_KEY } from "@/lib/salary-cutoff";
 
 export const DEFAULT_DEBT_REMINDER_TEMPLATE = `Kính gửi phụ huynh em {{studentName}},
-
-{{centerName}} xin thông báo khoản học phí chưa hoàn thành:
+{{centerName}} nhắc học phí chưa đóng:
 {{debtDetails}}
-
-Tổng cộng: {{totalAmount}}
+Tổng: {{totalAmount}}
 {{paymentSection}}
-
-Nếu phụ huynh đã chuyển khoản, xin bỏ qua tin nhắn này. Mọi thắc mắc xin liên hệ {{centerPhone}}.
-Trân trọng cảm ơn!`;
+Nếu đã chuyển khoản, phụ huynh vui lòng bỏ qua tin này. Liên hệ: {{centerPhone}}. Cảm ơn phụ huynh!`;
 
 export type AppSettings = {
   sepayApiKey: string;

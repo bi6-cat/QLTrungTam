@@ -17,6 +17,7 @@ const debt = (id: string, month: number, amount: number, monthsOverdue: number):
   year: 2026,
   amount,
   memoContent: "",
+  sessionsNote: "",
   className: "Toán 12",
   classShortCode: "T12",
   payUrl: "",

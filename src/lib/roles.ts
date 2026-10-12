@@ -14,6 +14,7 @@ export const ROLE_LABEL: Record<AdminRole, string> = {
 const MANAGER_PATHS = [
   "/admin/classes",
   "/admin/students",
+  "/admin/schedule",
   "/admin/debts",
   "/admin/transactions",
   "/admin/reports",

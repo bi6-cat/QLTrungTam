@@ -5,6 +5,8 @@ import { actionFailure, revalidateFinancialPaths, runSerializableAction } from "
 import { requireAdmin, requireStaff, type StaffUser } from "@/lib/auth";
 import { isEnrollmentActiveInPeriod, latestMonthUpToPeriodArgs, resolveMonthPlan } from "@/lib/enrollment-period";
 import { changeInvoiceLifecycle, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
+import type { SessionSuggestion } from "@/lib/class-sessions";
+import { loadSessionSuggestions } from "@/lib/class-sessions-server";
 import { buildMemo, normalizePhone, pickMemoSuffix, usedMemoSuffixes } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { NOTE_MAX_LENGTH, safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
@@ -63,10 +65,25 @@ async function saveClassDetails(
     const summary = { created: 0, updated: 0, voided: 0, suffixed: [] as string[] };
     const classState = await tx.classRoom.findUnique({
       where: { id: parsed.classId },
-      select: { archivedAt: true }
+      select: { archivedAt: true, sessionsPerMonthDefault: true }
     });
     if (!classState) throw new Error("Không tìm thấy lớp học.");
     if (classState.archivedAt) throw new Error("Không thể tạo hoặc sửa kế hoạch tháng của lớp đã lưu trữ.");
+    // Lý do trừ/cộng buổi theo thời khóa biểu, lưu kèm hóa đơn mới khi số buổi đúng bằng gợi ý.
+    const suggestions =
+      parsed.intent === "create"
+        ? (
+            await loadSessionSuggestions(tx, {
+              classRoom: { id: parsed.classId, sessionsPerMonthDefault: classState.sessionsPerMonthDefault },
+              month,
+              year,
+              enrollments: await tx.enrollment.findMany({
+                where: { id: { in: enrollmentIds }, classId: parsed.classId },
+                select: { id: true, startDate: true, sessionsOverride: true }
+              })
+            })
+          ).byEnrollment
+        : new Map<string, SessionSuggestion>();
 
     for (const enrollmentId of enrollmentIds) {
       const enrollment = await tx.enrollment.findUnique({
@@ -182,7 +199,8 @@ async function saveClassDetails(
               transactionId: null,
               updatedAt: existingInvoice.updatedAt
             },
-            data: { sessions, amount: sessions * existingInvoice.pricePerSession }
+            // Sửa tay số buổi thì lý do trừ buổi lúc tạo không còn đúng.
+            data: { sessions, amount: sessions * existingInvoice.pricePerSession, sessionsNote: null }
           });
           if (updatedInvoice.count !== 1) {
             throw new Error(`Hóa đơn của ${enrollment.student.fullName} vừa được thanh toán hoặc thay đổi. Vui lòng tải lại.`);
@@ -249,6 +267,8 @@ async function saveClassDetails(
           memoSuffix
         );
         if (memoSuffix) summary.suffixed.push(`${enrollment.student.fullName} (${memoContent})`);
+        const suggestion = suggestions.get(enrollmentId);
+        const sessionsNote = suggestion?.note && suggestion.sessions === sessions ? suggestion.note : null;
         await tx.monthlyInvoice.create({
           data: {
             enrollmentId,
@@ -257,6 +277,7 @@ async function saveClassDetails(
             sessions,
             pricePerSession: periodPricePerSession,
             amount: sessions * periodPricePerSession,
+            sessionsNote,
             memoContent,
             studentNameSnapshot: enrollment.student.fullName,
             studentPhoneSnapshot: enrollment.student.phone,

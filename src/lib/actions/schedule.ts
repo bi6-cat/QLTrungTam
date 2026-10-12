@@ -1,12 +1,34 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { requireAdmin } from "@/lib/auth";
+import type { z } from "zod";
+import { successState, errorState, type ResultState } from "@/lib/action-states";
+import { actionFailure, runSerializableAction } from "@/lib/actions/shared";
+import { requireAdmin, requireStaff } from "@/lib/auth";
+import { formatIsoDayMonth, parseIsoDate } from "@/lib/class-sessions";
+import {
+  addMakeupSession,
+  cancelDay,
+  clearSession,
+  createScheduleSlot,
+  markPendingSessionsHeld,
+  markSession,
+  stopScheduleSlot,
+  updateScheduleSlot
+} from "@/lib/class-session-ops";
 import { prisma } from "@/lib/prisma";
 import { weekdayLabel } from "@/lib/schedule";
-import { createScheduleSchema, safeParseForm } from "@/lib/validation";
+import {
+  bulkHeldSchema,
+  cancelDaySchema,
+  createScheduleSchema,
+  makeupSessionSchema,
+  markSessionSchema,
+  safeParseForm,
+  updateScheduleSchema
+} from "@/lib/validation";
+
+// Lịch cố định: chỉ chủ trung tâm. Điểm danh (đã học / lớp nghỉ / học bù): chủ và quản lý phụ.
 
 function revalidateSchedulePaths() {
   revalidatePath("/admin/schedule");
@@ -15,47 +37,133 @@ function revalidateSchedulePaths() {
   revalidatePath("/teacher/classes/[short_code]", "page");
 }
 
+function parseInput<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<T> {
+  const result = schema.safeParse(input);
+  if (!result.success) throw new Error(result.error.issues.map((issue) => issue.message).join("; "));
+  return result.data;
+}
+
 export async function createScheduleAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
   await requireAdmin();
   const { data, error } = safeParseForm(createScheduleSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
-  if (data.endTime <= data.startTime) return errorState("Giờ kết thúc phải sau giờ bắt đầu.");
-
-  const classRoom = await prisma.classRoom.findUnique({
-    where: { id: data.classId },
-    select: { archivedAt: true, name: true }
-  });
-  if (!classRoom) return errorState("Không tìm thấy lớp học.");
-  if (classRoom.archivedAt) return errorState("Không thể xếp lịch cho lớp đã lưu trữ.");
-
   try {
-    await prisma.classSchedule.create({
-      data: {
-        classId: data.classId,
-        weekday: data.weekday,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        room: data.room,
-        note: data.note
-      }
-    });
+    const classRoom = await runSerializableAction((tx) => createScheduleSlot(tx, data));
+    revalidateSchedulePaths();
+    return successState(
+      `Đã thêm buổi ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime} cho lớp ${classRoom.name}.`
+    );
   } catch (createError) {
-    if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === "P2002") {
-      return errorState("Lớp này đã có buổi học trùng thứ và giờ bắt đầu.");
-    }
-    throw createError;
+    return actionFailure(createError, "Không thể thêm buổi học.");
   }
-
-  revalidateSchedulePaths();
-  return successState(
-    `Đã thêm buổi ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime} cho lớp ${classRoom.name}.`
-  );
 }
 
-export async function deleteScheduleAction(scheduleId: string): Promise<ResultState> {
+export async function updateScheduleAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
   await requireAdmin();
-  const deleted = await prisma.classSchedule.deleteMany({ where: { id: String(scheduleId) } });
-  if (deleted.count !== 1) return errorState("Buổi học không còn tồn tại. Vui lòng tải lại trang.");
+  const { data, error } = safeParseForm(updateScheduleSchema, formData);
+  if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
+  try {
+    await runSerializableAction((tx) => updateScheduleSlot(tx, data));
+  } catch (updateError) {
+    return actionFailure(updateError, "Không thể sửa lịch học.");
+  }
   revalidateSchedulePaths();
-  return successState("Đã xóa buổi học.");
+  return successState(`Đã sửa lịch thành ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime}.`);
+}
+
+export async function stopScheduleAction(scheduleId: string, fromDate: string): Promise<ResultState> {
+  await requireAdmin();
+  const date = parseIsoDate(fromDate);
+  if (!date) return errorState("Ngày ngừng không hợp lệ.");
+  try {
+    const result = await stopScheduleSlot(prisma, { id: String(scheduleId), fromDate: date });
+    revalidateSchedulePaths();
+    return successState(result === "deleted" ? "Đã xóa buổi học khỏi lịch." : `Đã ngừng buổi học từ ${formatIsoDayMonth(date)}.`);
+  } catch (stopError) {
+    return actionFailure(stopError, "Không thể ngừng buổi học.");
+  }
+}
+
+export async function markSessionAction(input: {
+  classId: string;
+  date: string;
+  startTime: string;
+  status: "held" | "cancelled";
+  reason?: string;
+}): Promise<ResultState> {
+  const actor = await requireStaff();
+  try {
+    const data = parseInput(markSessionSchema, input);
+    const warning = await runSerializableAction((tx) => markSession(tx, data, actor.username));
+    revalidateSchedulePaths();
+    return successState(
+      `${data.status === "held" ? "Đã điểm danh đã học" : "Đã ghi lớp nghỉ"} buổi ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
+    );
+  } catch (markError) {
+    return actionFailure(markError, "Không thể điểm danh.");
+  }
+}
+
+export async function clearSessionAction(recordId: string): Promise<ResultState> {
+  await requireStaff();
+  try {
+    await clearSession(prisma, String(recordId));
+  } catch (clearError) {
+    return actionFailure(clearError, "Không thể bỏ điểm danh.");
+  }
+  revalidateSchedulePaths();
+  return successState("Đã bỏ điểm danh buổi học.");
+}
+
+export async function addMakeupSessionAction(input: {
+  classId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  room?: string;
+  reason?: string;
+  fromDate?: string;
+  fromStartTime?: string;
+}): Promise<ResultState> {
+  const actor = await requireStaff();
+  try {
+    const data = parseInput(makeupSessionSchema, input);
+    const warning = await runSerializableAction((tx) => addMakeupSession(tx, data, actor.username));
+    revalidateSchedulePaths();
+    return successState(
+      data.fromDate
+        ? `Đã dời buổi ${formatIsoDayMonth(data.fromDate)} sang ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
+        : `Đã thêm buổi học bù ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
+    );
+  } catch (makeupError) {
+    return actionFailure(makeupError, "Không thể thêm buổi học bù.");
+  }
+}
+
+export async function markPendingHeldAction(input: { from: string; to: string; classId?: string }): Promise<ResultState> {
+  const actor = await requireStaff();
+  try {
+    const data = parseInput(bulkHeldSchema, input);
+    const count = await runSerializableAction((tx) => markPendingSessionsHeld(tx, data, actor.username));
+    revalidateSchedulePaths();
+    return successState(count > 0 ? `Đã điểm danh đã học ${count} buổi.` : "Không còn buổi nào chưa điểm danh.");
+  } catch (bulkError) {
+    return actionFailure(bulkError, "Không thể điểm danh hàng loạt.");
+  }
+}
+
+export async function cancelDayAction(input: { date: string; reason: string }): Promise<ResultState> {
+  const actor = await requireStaff();
+  try {
+    const data = parseInput(cancelDaySchema, input);
+    const result = await runSerializableAction((tx) => cancelDay(tx, data, actor.username));
+    revalidateSchedulePaths();
+    return successState(
+      result.count > 0
+        ? `Đã ghi nghỉ ${result.count} buổi ngày ${formatIsoDayMonth(data.date)} (${data.reason}).${result.warning}`
+        : `Ngày ${formatIsoDayMonth(data.date)} không có buổi nào theo lịch.`
+    );
+  } catch (cancelError) {
+    return actionFailure(cancelError, "Không thể ghi nghỉ cả ngày.");
+  }
 }

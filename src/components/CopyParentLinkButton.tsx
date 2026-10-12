@@ -6,6 +6,7 @@ import { Modal } from "@/components/Modal";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { toast } from "@/components/Toaster";
+import { buildParentNotice } from "@/lib/parent-notice";
 
 type OverviewStatus = "unpaid" | "paid" | "waived" | "void" | "not_created" | "on_leave";
 
@@ -35,7 +36,8 @@ export function CopyParentLinkButton({
   payUrl,
   month,
   year,
-  rows
+  rows,
+  adjustmentNote = ""
 }: {
   className: string;
   classShortCode: string;
@@ -43,6 +45,8 @@ export function CopyParentLinkButton({
   month: number;
   year: number;
   rows: OverviewRow[];
+  /** Lý do trừ/cộng buổi của lớp theo thời khóa biểu, vd "đã trừ 1 buổi lớp nghỉ T10: 15/10 (GV ốm)". */
+  adjustmentNote?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -60,6 +64,7 @@ export function CopyParentLinkButton({
           month={month}
           year={year}
           rows={rows}
+          adjustmentNote={adjustmentNote}
           onClose={() => setOpen(false)}
         />
       ) : null}
@@ -74,6 +79,7 @@ function ParentLinkDialog({
   month,
   year,
   rows,
+  adjustmentNote,
   onClose
 }: {
   className: string;
@@ -82,21 +88,12 @@ function ParentLinkDialog({
   month: number;
   year: number;
   rows: OverviewRow[];
+  adjustmentNote: string;
   onClose: () => void;
 }) {
   const defaultMessage = useMemo(
-    () =>
-      [
-        `Kính gửi Quý phụ huynh lớp ${className} (${classShortCode}),`,
-        "",
-        `Trung tâm APLUS ACADEMY gửi link tra cứu và thanh toán học phí ${formatMonth(month, year)}:`,
-        payUrl,
-        "",
-        "Phụ huynh vui lòng chọn đúng tên học sinh, kiểm tra số buổi và số tiền trước khi quét mã QR.",
-        "Khi chuyển khoản, phụ huynh không cần sửa nội dung chuyển khoản.",
-        "Sau khi chuyển khoản thành công, hệ thống sẽ tự cập nhật trạng thái thanh toán."
-      ].join("\n"),
-    [className, classShortCode, month, payUrl, year]
+    () => buildParentNotice({ className, payUrl, month, year, rows, adjustmentNote }),
+    [adjustmentNote, className, month, payUrl, rows, year]
   );
   const [draft, setDraft] = useState(defaultMessage);
   const [copied, setCopied] = useState(false);

@@ -172,13 +172,71 @@ export const updateStudentSchema = z.object({
   note: optionalText(1000)
 });
 
+/** Ngày "YYYY-MM-DD" (ô input type=date). */
+const isoDay = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ")
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
+  }, "Ngày không hợp lệ");
+
 export const createScheduleSchema = z.object({
   classId: id,
   weekday: z.coerce.number().int().min(1, "Chọn thứ").max(7, "Chọn thứ"),
   startTime: timeOfDay,
   endTime: timeOfDay,
   room: looseText(60),
-  note: optionalText(200)
+  note: optionalText(200),
+  /** Áp dụng từ ngày; bỏ trống = không giới hạn. */
+  effectiveFrom: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || null)
+    .pipe(isoDay.nullable())
+});
+
+export const updateScheduleSchema = z.object({
+  id,
+  weekday: z.coerce.number().int().min(1, "Chọn thứ").max(7, "Chọn thứ"),
+  startTime: timeOfDay,
+  endTime: timeOfDay,
+  room: looseText(60)
+});
+
+const sessionReason = optionalText(120);
+
+export const markSessionSchema = z.object({
+  classId: id,
+  date: isoDay,
+  startTime: timeOfDay,
+  status: z.enum(["held", "cancelled"]),
+  reason: sessionReason
+});
+
+export const makeupSessionSchema = z.object({
+  classId: id,
+  date: isoDay,
+  startTime: timeOfDay,
+  endTime: timeOfDay,
+  room: looseText(60),
+  reason: sessionReason,
+  /** Dời buổi: buổi gốc (theo lịch) sẽ được ghi là lớp nghỉ. */
+  fromDate: isoDay.optional(),
+  fromStartTime: timeOfDay.optional()
+});
+
+export const bulkHeldSchema = z.object({
+  from: isoDay,
+  to: isoDay,
+  classId: id.optional()
+});
+
+export const cancelDaySchema = z.object({
+  date: isoDay,
+  reason: z.string().trim().min(1, "Nhập lý do nghỉ").max(120)
 });
 
 export const expenseSchema = z.object({

@@ -1,20 +1,54 @@
-import { CalendarDays, Clock, MapPin } from "lucide-react";
-import { deleteScheduleAction } from "@/lib/actions/schedule";
-import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
-import { AddScheduleForm } from "@/components/AddScheduleForm";
-import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
-import { formatMonth } from "@/lib/format";
+import { AlertTriangle, CalendarCheck2, CalendarDays, CalendarX2 } from "lucide-react";
+import { ScheduleBoard, type BoardClass, type BoardSession } from "@/components/schedule/ScheduleBoard";
+import { FixedScheduleManager } from "@/components/schedule/FixedScheduleManager";
+import { PageHeader, StatCard } from "@/components/ui";
+import { requireStaff } from "@/lib/auth";
+import {
+  addDays,
+  buildCalendar,
+  countScheduledInRange,
+  eachDay,
+  isoParts,
+  isoToDbDate,
+  monthRange,
+  parseIsoDate,
+  previousMonth,
+  startOfWeek,
+  summarizeSessions,
+  todayInVietnam
+} from "@/lib/class-sessions";
+import { scheduleSlotSelect, sessionRecordSelect, toScheduleSlot, toSessionRecord } from "@/lib/class-sessions-server";
 import { prisma } from "@/lib/prisma";
-import { WEEKDAYS, countScheduledSessions, sortSchedules, weekdayLabel } from "@/lib/schedule";
-import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function SchedulePage() {
-  await requireAdmin();
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+export default async function SchedulePage({
+  searchParams
+}: {
+  searchParams: Promise<{ view?: string; date?: string; month?: string; year?: string; classId?: string }>;
+}) {
+  // Chủ và quản lý phụ cùng điểm danh; chỉ chủ sửa lịch cố định.
+  const viewer = await requireStaff();
+  const canManage = viewer.role === "owner";
+  const params = await searchParams;
+  const today = todayInVietnam();
+  const view = params.view === "month" ? "month" : "week";
+
+  const anchor = parseIsoDate(params.date) ?? today;
+  const parsedMonth = Number(params.month);
+  const parsedYear = Number(params.year);
+  const month = Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12 ? parsedMonth : isoParts(anchor).month;
+  const year = Number.isInteger(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100 ? parsedYear : isoParts(anchor).year;
+  const range =
+    view === "week" ? { from: startOfWeek(anchor), to: addDays(startOfWeek(anchor), 6) } : monthRange(month, year);
+
+  // Buổi chưa điểm danh tính từ đầu tháng trước tới hôm qua: đủ để chốt số buổi thu tháng sau.
+  const todayParts = isoParts(today);
+  const previous = previousMonth(todayParts.month, todayParts.year);
+  const pendingFrom = monthRange(previous.month, previous.year).from;
+  const pendingTo = addDays(today, -1);
+  const loadFrom = range.from < pendingFrom ? range.from : pendingFrom;
+  const loadTo = range.to > today ? range.to : today;
 
   const classes = await prisma.classRoom.findMany({
     where: { archivedAt: null },
@@ -24,207 +58,127 @@ export default async function SchedulePage() {
       name: true,
       shortCode: true,
       teacherName: true,
-      teacherSharePercent: true,
-      sessionsPerMonthDefault: true,
-      schedules: {
-        select: {
-          id: true,
-          weekday: true,
-          startTime: true,
-          endTime: true,
-          room: true,
-          note: true
-        }
+      schedules: { select: { ...scheduleSlotSelect, note: true }, orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
+      sessions: {
+        where: { date: { gte: isoToDbDate(loadFrom), lte: isoToDbDate(loadTo) } },
+        select: sessionRecordSelect
       }
     }
   });
 
-  const slots = classes.flatMap((classRoom) =>
-    classRoom.schedules.map((slot) => ({ ...slot, classRoom }))
-  );
-  const byWeekday = new Map<number, typeof slots>();
-  for (const slot of slots) {
-    byWeekday.set(slot.weekday, [...(byWeekday.get(slot.weekday) ?? []), slot]);
-  }
+  const classFilter = classes.some((classRoom) => classRoom.id === params.classId) ? params.classId : undefined;
+  const visibleClasses = classFilter ? classes.filter((classRoom) => classRoom.id === classFilter) : classes;
+  const slots = visibleClasses.flatMap((classRoom) => classRoom.schedules.map(toScheduleSlot));
+  const records = visibleClasses.flatMap((classRoom) => classRoom.sessions.map(toSessionRecord));
 
-  const scheduledClasses = classes.filter((classRoom) => classRoom.schedules.length > 0);
-  const totalSessionsThisMonth = classes.reduce(
-    (sum, classRoom) => sum + (countScheduledSessions(classRoom.schedules, month, year) ?? 0),
-    0
+  const calendar = buildCalendar({ slots, records, from: range.from, to: range.to, today });
+  const pendingSessions = buildCalendar({ slots, records, from: pendingFrom, to: pendingTo, today }).filter(
+    (session) => session.status === "pending"
   );
-  const classesWithoutShare = classes.filter((classRoom) => classRoom.teacherSharePercent <= 0).length;
+  const rangeSummary = summarizeSessions(calendar);
+
+  const classIndex = new Map(classes.map((classRoom, index) => [classRoom.id, index]));
+  const sessions: BoardSession[] = calendar.map((session) => ({ ...session, colorIndex: classIndex.get(session.classId) ?? 0 }));
+
+  // Bảng tháng: thống kê theo lớp + số buổi gợi ý thu tháng sau (lịch tháng sau − nghỉ chưa bù tháng này).
+  const nextMonth = month === 12 ? { month: 1, year: year + 1 } : { month: month + 1, year };
+  const nextRange = monthRange(nextMonth.month, nextMonth.year);
+  const boardClasses: BoardClass[] = visibleClasses.map((classRoom) => {
+    const classSessions = calendar.filter((session) => session.classId === classRoom.id);
+    const summary = summarizeSessions(classSessions);
+    const nextScheduled = countScheduledInRange(classRoom.schedules.map(toScheduleSlot), nextRange.from, nextRange.to);
+    const net = summary.cancelled - summary.makeup;
+    return {
+      id: classRoom.id,
+      name: classRoom.name,
+      shortCode: classRoom.shortCode,
+      teacherName: classRoom.teacherName,
+      colorIndex: classIndex.get(classRoom.id) ?? 0,
+      summary,
+      nextMonthSessions: nextScheduled > 0 ? Math.max(0, nextScheduled - net) : null,
+      nextMonthHint:
+        nextScheduled > 0
+          ? `${nextScheduled} theo lịch T${nextMonth.month}${net > 0 ? ` − ${net} nghỉ` : net < 0 ? ` + ${-net} bù` : ""}`
+          : "Chưa xếp lịch"
+    };
+  });
 
   return (
     <div className="grid gap-6">
       <PageHeader
         title="Thời khóa biểu"
-        description="Lịch học cố định lặp theo tuần. Số buổi mỗi tháng được suy ra từ đây để gợi ý số buổi học."
+        description="Bấm vào buổi học để điểm danh, ghi lớp nghỉ hoặc dời buổi. Buổi lớp nghỉ chưa bù được trừ vào số buổi thu tháng sau."
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Buổi học mỗi tuần"
+          label={view === "week" ? "Buổi trong tuần" : `Buổi trong tháng ${month}`}
           tone="primary"
-          value={slots.length}
-          hint={`${scheduledClasses.length}/${classes.length} lớp đã xếp lịch`}
+          value={rangeSummary.total}
+          hint={`${rangeSummary.held} đã học · ${rangeSummary.upcoming} sắp tới`}
           icon={<CalendarDays className="h-5 w-5" />}
         />
         <StatCard
-          label={`Tổng buổi dạy ${formatMonth(month, year)}`}
-          tone="neutral"
-          value={totalSessionsThisMonth}
-          hint="Cộng dồn theo lịch của mọi lớp"
-          icon={<Clock className="h-5 w-5" />}
+          label="Chưa điểm danh"
+          tone={pendingSessions.length > 0 ? "warning" : "success"}
+          value={pendingSessions.length}
+          hint={`Buổi đã qua từ ${pendingFrom.slice(8, 10)}/${pendingFrom.slice(5, 7)} tới hôm qua`}
+          icon={<AlertTriangle className="h-5 w-5" />}
         />
         <StatCard
-          label="Lớp chưa khai % lương GV"
-          tone={classesWithoutShare > 0 ? "warning" : "success"}
-          value={classesWithoutShare}
-          hint="Lương tính theo % học phí đã thu, khai ở Lớp học → Sửa lớp"
-          icon={<MapPin className="h-5 w-5" />}
+          label="Lớp nghỉ"
+          tone="neutral"
+          value={rangeSummary.cancelled}
+          hint={view === "week" ? "Trong tuần đang xem" : "Trong tháng đang xem"}
+          icon={<CalendarX2 className="h-5 w-5" />}
+        />
+        <StatCard
+          label="Học bù"
+          tone="neutral"
+          value={rangeSummary.makeup}
+          hint={view === "week" ? "Trong tuần đang xem" : "Trong tháng đang xem"}
+          icon={<CalendarCheck2 className="h-5 w-5" />}
         />
       </div>
 
-      <Panel>
-        <h2 className="font-bold">Xếp buổi học mới</h2>
-        <p className="mb-4 mt-1 text-sm text-stone-600">
-          Mỗi lớp có thể có nhiều buổi trong tuần. Trùng thứ và giờ bắt đầu trong cùng một lớp sẽ bị chặn.
-        </p>
-        <AddScheduleForm
+      <ScheduleBoard
+        view={view}
+        anchor={anchor}
+        month={month}
+        year={year}
+        today={today}
+        from={range.from}
+        to={range.to}
+        days={eachDay(range.from, range.to)}
+        classFilter={classFilter ?? ""}
+        classes={boardClasses}
+        allClasses={classes.map((classRoom) => ({
+          id: classRoom.id,
+          name: classRoom.name,
+          teacherName: classRoom.teacherName,
+          colorIndex: classIndex.get(classRoom.id) ?? 0
+        }))}
+        sessions={sessions}
+        hasSchedules={classes.some((classRoom) => classRoom.schedules.length > 0)}
+        pendingInRange={calendar.filter((session) => session.scheduled && !session.recordId && session.date <= today).length}
+        nextMonth={nextMonth.month}
+      />
+
+      {canManage ? (
+        <FixedScheduleManager
+          today={today}
+          defaultEffectiveFrom={monthRange(todayParts.month, todayParts.year).from}
           classes={classes.map((classRoom) => ({
             id: classRoom.id,
             name: classRoom.name,
-            shortCode: classRoom.shortCode
+            shortCode: classRoom.shortCode,
+            colorIndex: classIndex.get(classRoom.id) ?? 0,
+            slots: classRoom.schedules
+              .map((slot) => ({ ...toScheduleSlot(slot), note: slot.note }))
+              .filter((slot) => !slot.effectiveTo || slot.effectiveTo >= today)
           }))}
         />
-      </Panel>
-
-      <Panel className="overflow-hidden p-0">
-        <div className="flex items-center gap-2 border-b border-stone-200 p-5">
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <h2 className="font-bold">Lịch tuần</h2>
-        </div>
-        {slots.length === 0 ? (
-          <div className="p-5">
-            <EmptyState title="Chưa xếp lịch buổi nào">
-              Thêm buổi học ở trên để lịch tuần hiện tại đây.
-            </EmptyState>
-          </div>
-        ) : (
-          <div className="overflow-x-auto p-5">
-            <div className="grid min-w-[900px] grid-cols-7 gap-3">
-              {WEEKDAYS.map((day) => {
-                const daySlots = sortSchedules(byWeekday.get(day.value) ?? []);
-                return (
-                  <div key={day.value} className="grid content-start gap-2">
-                    <div className="flex items-center justify-between rounded-lg bg-stone-100 px-2.5 py-1.5">
-                      <span className="text-xs font-bold uppercase tracking-wide text-stone-600">
-                        {day.short}
-                      </span>
-                      <span className="text-xs font-semibold text-stone-500">{daySlots.length}</span>
-                    </div>
-                    {daySlots.length === 0 ? (
-                      <p className="rounded-lg border border-dashed border-stone-200 px-2 py-3 text-center text-xs text-stone-400">
-                        Trống
-                      </p>
-                    ) : (
-                      daySlots.map((slot) => (
-                        <div
-                          key={slot.id}
-                          className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5 transition-colors hover:bg-indigo-50"
-                        >
-                          <p className="text-xs font-bold text-primary">
-                            {slot.startTime}–{slot.endTime}
-                          </p>
-                          <p className="mt-1 truncate text-sm font-semibold" title={slot.classRoom.name}>
-                            {slot.classRoom.name}
-                          </p>
-                          <p className="truncate text-xs text-stone-500">
-                            {slot.classRoom.teacherName || "Chưa gán GV"}
-                            {slot.room ? ` · ${slot.room}` : ""}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </Panel>
-
-      <Panel className="overflow-hidden p-0">
-        <div className="flex items-center gap-2 border-b border-stone-200 p-5">
-          <Clock className="h-5 w-5 text-primary" />
-          <h2 className="font-bold">Lịch theo lớp</h2>
-        </div>
-        <div className="divide-y divide-stone-100">
-          {classes.map((classRoom) => {
-            const sessions = countScheduledSessions(classRoom.schedules, month, year);
-            return (
-              <div key={classRoom.id} className="grid gap-3 p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-                <div>
-                  <p className="font-semibold">{classRoom.name}</p>
-                  <p className="text-xs text-stone-500">
-                    {classRoom.shortCode}
-                    {classRoom.teacherName ? ` · ${classRoom.teacherName}` : ""}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge tone={sessions === null ? "neutral" : "primary"}>
-                      {sessions === null
-                        ? `Mặc định ${classRoom.sessionsPerMonthDefault} buổi/tháng`
-                        : `${sessions} buổi trong ${formatMonth(month, year)}`}
-                    </Badge>
-                    {classRoom.teacherSharePercent > 0 ? (
-                      <Badge tone="success">GV hưởng {classRoom.teacherSharePercent}% đã thu</Badge>
-                    ) : (
-                      <Badge tone="warning">Chưa khai % lương GV</Badge>
-                    )}
-                  </div>
-                </div>
-
-                {classRoom.schedules.length === 0 ? (
-                  <p className="self-center text-sm text-stone-500">
-                    Chưa xếp lịch. Số buổi mỗi tháng dùng mặc định của lớp.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {sortSchedules(classRoom.schedules).map((slot) => (
-                      <div
-                        key={slot.id}
-                        className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2 shadow-sm"
-                      >
-                        <div className="text-sm">
-                          <p className="font-semibold">
-                            {weekdayLabel(slot.weekday)} · {slot.startTime}–{slot.endTime}
-                          </p>
-                          {slot.room || slot.note ? (
-                            <p className="text-xs text-stone-500">
-                              {[slot.room, slot.note].filter(Boolean).join(" · ")}
-                            </p>
-                          ) : null}
-                        </div>
-                        <ConfirmDeleteButton
-                          id={slot.id}
-                          action={deleteScheduleAction}
-                          title="Xóa buổi học"
-                          description={
-                            <>
-                              Xóa buổi <strong>{weekdayLabel(slot.weekday)} {slot.startTime}–{slot.endTime}</strong> của
-                              lớp {classRoom.name}?
-                            </>
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
+      ) : null}
     </div>
   );
 }

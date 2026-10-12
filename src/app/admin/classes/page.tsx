@@ -21,6 +21,8 @@ import { AddStudentToClassButton } from "@/components/AddStudentToClassButton";
 import { CreateClassForm } from "@/components/CreateClassForm";
 import { requireStaff } from "@/lib/auth";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
+import { describeAdjustment } from "@/lib/class-sessions";
+import { loadSessionSuggestions } from "@/lib/class-sessions-server";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +97,15 @@ export default async function ClassesPage({
     list.push({ month: debt.month, year: debt.year, amount: debt.amount });
     olderDebtsByEnrollment.set(debt.enrollmentId, list);
   }
+  // Số buổi gợi ý theo thời khóa biểu: lịch tháng này trừ buổi lớp nghỉ chưa bù của tháng trước.
+  const sessionPlan = selectedClass
+    ? await loadSessionSuggestions(prisma, {
+        classRoom: selectedClass,
+        month,
+        year,
+        enrollments: selectedClass.enrollments
+      })
+    : null;
   // Kế hoạch tháng của từng học sinh: kỳ mới kế thừa tình trạng học của tháng gần nhất trước đó.
   const planOf = (enrollment: NonNullable<typeof selectedClass>["enrollments"][number]) =>
     resolveMonthPlan({
@@ -103,8 +114,16 @@ export default async function ClassesPage({
       latestMonth: enrollment.months[0],
       invoice: enrollment.invoices[0],
       enrollment,
-      classRoom: selectedClass!
+      classRoom: selectedClass!,
+      suggestedSessions: sessionPlan?.byEnrollment.get(enrollment.id)?.sessions
     });
+  const classAdjustmentNote = sessionPlan
+    ? describeAdjustment({
+        previousMonth: sessionPlan.adjustment.previous.month,
+        cancelled: sessionPlan.adjustment.previous.cancelled,
+        makeups: sessionPlan.adjustment.previous.makeups
+      })
+    : "";
   // Memo dự kiến cho học sinh chưa có hóa đơn: cùng SĐT với người đã/sắp có memo gốc thì nhận hậu tố B, C, ...
   const predictedMemos = selectedClass
     ? predictMemos({
@@ -177,6 +196,7 @@ export default async function ClassesPage({
                 payUrl={absoluteUrl(settings.appUrl, payPath(selectedClass))}
                 month={month}
                 year={year}
+                adjustmentNote={classAdjustmentNote}
                 rows={selectedClass.enrollments.map((enrollment) => {
                   const invoice = enrollment.invoices[0];
                   const plan = planOf(enrollment);
@@ -357,6 +377,12 @@ export default async function ClassesPage({
                       olderDebts: olderDebtsByEnrollment.get(enrollment.id) ?? [],
                       defaultSessions: plan.sessions,
                       fallbackSessions: plan.defaultSessions,
+                      sessionsHint: plan.initialized ? "" : sessionPlan?.byEnrollment.get(enrollment.id)?.hint ?? "",
+                      sessionsNote: invoice
+                        ? invoice.sessionsNote ?? ""
+                        : plan.initialized
+                          ? ""
+                          : sessionPlan?.byEnrollment.get(enrollment.id)?.note ?? "",
                       pricePerSession: plan.pricePerSession,
                       memoContent:
                         predictedMemos.get(enrollment.id)?.memo ??

@@ -36,6 +36,10 @@ type InvoiceRow = {
   defaultSessions: number;
   /** Số buổi khôi phục khi bật lại "Đang học" từ trạng thái bảo lưu (số buổi đang là 0). */
   fallbackSessions: number;
+  /** Cách tính số buổi gợi ý theo thời khóa biểu (kỳ chưa khởi tạo), vd "8 theo lịch − 1 nghỉ T10". */
+  sessionsHint: string;
+  /** Lý do trừ/cộng buổi (đã lưu trên hóa đơn, hoặc dự kiến cho kỳ chưa tạo). */
+  sessionsNote: string;
   /** Hóa đơn chưa đóng của các tháng trước trong lớp này. */
   olderDebts: Array<{ month: number; year: number; amount: number }>;
   pricePerSession: number;
@@ -374,6 +378,14 @@ export function ClassInvoiceEditor({
                           {sessions}
                         </span>
                       )}
+                      {row.sessionsHint && row.monthlyStatus === "active" ? (
+                        <p className="mt-1 whitespace-normal text-[11px] font-medium text-stone-500">{row.sessionsHint}</p>
+                      ) : null}
+                      {row.sessionsNote && row.monthlyStatus === "active" ? (
+                        <p className="mt-0.5 whitespace-normal text-[11px] font-medium text-amber-700" title={row.sessionsNote}>
+                          {row.sessionsNote}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3 text-stone-600">
                       {formatCurrency(displayUnitPrice)}

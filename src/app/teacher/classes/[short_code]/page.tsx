@@ -14,6 +14,7 @@ import { resolveClassLink } from "@/lib/class-link-resolver";
 import { teacherPath } from "@/lib/class-links";
 import { buildMemo, predictMemos } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
+import { loadSessionSuggestions } from "@/lib/class-sessions-server";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,12 @@ export default async function TeacherClassPage({
     notFound();
   }
 
+  const { byEnrollment: suggestions } = await loadSessionSuggestions(prisma, {
+    classRoom,
+    month,
+    year,
+    enrollments: classRoom.enrollments
+  });
   const planned = classRoom.enrollments.map((enrollment) => ({
     enrollment,
     plan: resolveMonthPlan({
@@ -78,7 +85,8 @@ export default async function TeacherClassPage({
       latestMonth: enrollment.months[0],
       invoice: enrollment.invoices[0],
       enrollment,
-      classRoom
+      classRoom,
+      suggestedSessions: suggestions.get(enrollment.id)?.sessions
     })
   }));
   const visible = classRoom.archivedAt ? planned.filter((item) => item.plan.initialized) : planned;

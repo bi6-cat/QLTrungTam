@@ -65,7 +65,8 @@ export type MonthPlanRecord = {
  *
  * - Kỳ đã có kế hoạch hoặc hóa đơn: dùng đúng dữ liệu đó.
  * - Kỳ mới: tình trạng học lấy theo tháng gần nhất trước đó (chưa có thì theo lúc thêm vào lớp),
- *   số buổi về mặc định đã khai (buổi riêng của học sinh, không có thì của lớp), đơn giá theo lớp.
+ *   số buổi theo gợi ý từ thời khóa biểu nếu có (xem suggestSessions), không thì mặc định đã khai
+ *   (buổi riêng của học sinh, không có thì của lớp); đơn giá theo lớp.
  */
 export function resolveMonthPlan(input: {
   month: number;
@@ -74,11 +75,12 @@ export function resolveMonthPlan(input: {
   invoice?: { sessions: number; pricePerSession: number } | null;
   enrollment: { status: EnrollmentStatus; sessionsOverride: number | null };
   classRoom: { sessionsPerMonthDefault: number; pricePerSession: number };
+  suggestedSessions?: number | null;
 }) {
   const { latestMonth, invoice, enrollment, classRoom } = input;
   const current =
     latestMonth && latestMonth.month === input.month && latestMonth.year === input.year ? latestMonth : null;
-  const defaultSessions = enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
+  const defaultSessions = input.suggestedSessions ?? enrollment.sessionsOverride ?? classRoom.sessionsPerMonthDefault;
   const status: EnrollmentStatus =
     current?.status ?? (invoice ? "active" : latestMonth?.status ?? enrollment.status);
   return {

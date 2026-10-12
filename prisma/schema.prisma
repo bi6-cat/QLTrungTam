@@ -55,6 +55,7 @@ model ClassRoom {
   createdAt               DateTime        @default(now())
   enrollments             Enrollment[]
   schedules               ClassSchedule[]
+  sessions                ClassSession[]
   expenses                Expense[]
   salaryWriteOffs         SalaryWriteOff[]
 
@@ -74,13 +75,45 @@ model ClassSchedule {
   endTime   String
   room      String    @default("")
   note      String?
+  /// Khoảng ngày lịch có hiệu lực (gồm cả hai đầu); null = không giới hạn. Ngừng lịch thì đặt
+  /// effectiveTo thay vì xóa, để các buổi trước đó vẫn hiện đúng trên thời khóa biểu.
+  effectiveFrom DateTime? @db.Date
+  effectiveTo   DateTime? @db.Date
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   classRoom ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
 
-  @@unique([classId, weekday, startTime])
-  @@index([classId])
+  @@index([classId, weekday])
   @@index([weekday])
+}
+
+enum ClassSessionStatus {
+  held
+  cancelled
+  makeup
+}
+
+/// Điểm danh buổi học của cả lớp. Buổi theo lịch cố định chỉ có bản ghi khi đã điểm danh
+/// (chưa có thì coi như học bình thường); buổi học bù luôn có bản ghi. Khớp với lịch theo
+/// (lớp, ngày, giờ bắt đầu), nên đổi giờ lịch cố định không làm mất điểm danh cũ.
+model ClassSession {
+  id        String             @id @default(cuid())
+  classId   String
+  date      DateTime           @db.Date
+  startTime String
+  endTime   String
+  room      String             @default("")
+  status    ClassSessionStatus
+  reason    String?
+  /// Buổi học bù dời từ buổi ngày này (buổi gốc ghi là lớp nghỉ); null = bù chung.
+  makeupForDate DateTime?      @db.Date
+  markedBy  String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  classRoom ClassRoom          @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, date, startTime])
+  @@index([date])
 }
 
 /// Chi phí vận hành theo tháng (lương giáo viên, thuê nhà, điện nước…).
@@ -180,6 +213,8 @@ model MonthlyInvoice {
   transactionId          String?       @unique
   /// Số tiền thực nhận khi hóa đơn được thanh toán (có thể khác amount khi gán lệch tiền).
   paidAmount             Int?
+  /// Diễn giải số buổi lúc tạo hóa đơn (vd "đã trừ 1 buổi lớp nghỉ 15/10"), dùng trong tin nhắn.
+  sessionsNote           String?
   studentNameSnapshot    String?
   studentPhoneSnapshot   String?
   classNameSnapshot      String?
