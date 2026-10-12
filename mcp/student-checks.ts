@@ -138,7 +138,8 @@ export function findDuplicateGroups(students: CheckStudent[]): DuplicateGroup[] 
       }
     }
 
-    // 4) Cùng SĐT và cùng lớp: nội dung chuyển khoản sẽ trùng nhau, khó khớp hoá đơn.
+    // 4) Cùng SĐT và cùng lớp: thường là anh chị em. App tự thêm hậu tố B, C... vào memo hoá đơn nên
+    //    không còn đụng nhau; chỉ báo mức thấp để người dùng xem có đúng là anh chị em không.
     const byClass = new Map<string, CheckStudent[]>();
     for (const student of sameStudents) {
       for (const code of student.activeClassCodes) {
@@ -150,8 +151,8 @@ export function findDuplicateGroups(students: CheckStudent[]): DuplicateGroup[] 
       if (distinct.size > 1 && remember(`class:${code}`, [...distinct.keys()])) {
         groups.push({
           kind: "same_phone_same_class",
-          severity: "high",
-          reason: `${distinct.size} học sinh cùng SĐT ${phone} học chung lớp ${code} — nội dung chuyển khoản sẽ đụng nhau.`,
+          severity: "low",
+          reason: `${distinct.size} học sinh cùng SĐT ${phone} học chung lớp ${code} — bình thường với anh chị em (memo tự có hậu tố B, C...); chỉ cần kiểm tra nếu không phải anh chị em.`,
           students: [...distinct.values()].map(brief)
         });
       }
@@ -181,7 +182,7 @@ export function findAnomalies(students: CheckStudent[]): Anomaly[] {
       add(
         "phone_format",
         "high",
-        `SĐT "${student.phone}" không giống số Việt Nam (thường 10 số, bắt đầu bằng 0) — phụ huynh có thể gõ sai memo chuyển khoản.`
+        `SĐT "${student.phone}" không giống số Việt Nam (thường 10 số, bắt đầu bằng 0) — kiểm tra lại số (SĐT dùng trong memo chuyển khoản và để nhắn Zalo).`
       );
     }
     if (PLACEHOLDER_PHONES.has(digits) || /^(\d)\1+$/.test(digits)) {

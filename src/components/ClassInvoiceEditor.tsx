@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
 import { updateClassDetailsAction } from "@/lib/actions/billing";
 import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
@@ -75,11 +75,6 @@ export function ClassInvoiceEditor({
     (row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active"
   ).length;
   const hasMissingInvoice = canManage && missingInvoiceCount > 0;
-  const suffixedRows = hasMissingInvoice
-    ? rows.filter(
-        (row) => !row.studentArchived && !row.invoice && row.monthlyStatus === "active" && row.memoSuffix
-      )
-    : [];
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
@@ -476,23 +471,6 @@ export function ClassInvoiceEditor({
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {!billingLocked && !editing && suffixedRows.length > 0 ? (
-          <div className="flex gap-3 border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">
-            <AlertTriangle className="h-5 w-5 shrink-0" />
-            <div className="grid gap-1">
-              <p className="font-semibold">Trùng SĐT trong lớp: memo của các bạn sau sẽ có hậu tố.</p>
-              <ul className="grid gap-0.5">
-                {suffixedRows.map((row) => (
-                  <li key={row.enrollmentId}>
-                    {row.studentName}: <span className="font-mono font-semibold">{row.memoContent}</span>
-                  </li>
-                ))}
-              </ul>
-              <p>Nhớ nhắc phụ huynh ghi đúng memo (kể cả chữ cái sau số điện thoại) khi chuyển khoản.</p>
             </div>
           </div>
         ) : null}

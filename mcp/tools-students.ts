@@ -102,7 +102,7 @@ export function registerStudentCheckTools(server: McpServer) {
     {
       title: "Tìm học sinh trùng",
       description:
-        "Quét toàn bộ hồ sơ tìm: trùng cả tên và SĐT, cùng SĐT tên gần giống (gõ sai), cùng tên khác SĐT, và học sinh cùng SĐT học chung lớp (memo chuyển khoản sẽ đụng nhau). Chỉ báo cáo, không sửa gì; sau đó dùng update_student / archive_student để xử lý.",
+        "Quét toàn bộ hồ sơ tìm: trùng cả tên và SĐT, cùng SĐT tên gần giống (gõ sai), cùng tên khác SĐT, và học sinh cùng SĐT học chung lớp (mức thấp: thường là anh chị em, memo tự có hậu tố B, C...). Chỉ báo cáo, không sửa gì; sau đó dùng update_student / archive_student để xử lý.",
       inputSchema: {
         includeArchived: z.boolean().optional().describe("Gồm hồ sơ đã lưu trữ (mặc định: có, vì trùng với hồ sơ lưu trữ cũng cần biết)"),
         minSeverity: severitySchema.describe("high | medium | low (mặc định low = hiện hết)")
@@ -204,7 +204,7 @@ export function registerStudentWriteTools(server: McpServer) {
       return json({
         created: { id: created.id, fullName: created.fullName, phone: created.phone },
         warning: siblings.length
-          ? `SĐT ${data.phone} đang dùng cho ${siblings.map((student) => student.fullName).join(", ")}. Nếu là anh chị em thì bình thường, nhưng đừng xếp chung một lớp vì nội dung chuyển khoản sẽ trùng nhau.`
+          ? `SĐT ${data.phone} đang dùng cho ${siblings.map((student) => student.fullName).join(", ")}. Nếu là anh chị em thì bình thường; học chung lớp thì memo hoá đơn của em sau tự có hậu tố B, C...`
           : null
       });
     })

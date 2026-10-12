@@ -8,3 +8,6 @@ db_data
 backups
 *.dump
 .deploy
+mcp/.env.local
+**/.env.local
+*.pem

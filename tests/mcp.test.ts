@@ -53,6 +53,8 @@ describe("duplicate student detection", () => {
     ]);
     assert.equal(together.length, 1);
     assert.equal(together[0].kind, "same_phone_same_class");
+    // Memo đã tự có hậu tố B, C nên không còn là lỗi cần xử lý gấp.
+    assert.equal(together[0].severity, "low");
   });
 
   test("flags the same name under different phone numbers as medium severity", () => {

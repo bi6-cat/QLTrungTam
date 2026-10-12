@@ -39,7 +39,7 @@ Không sửa gì trên server, cũng không lưu mật khẩu nào ngoài `mcp/.
 | `list_debts` | Ai còn nợ: lọc theo lớp, tháng nợ, số tháng quá hạn; tổng nợ theo tháng |
 | `list_transactions` | Giao dịch chưa khớp hoá đơn (cần đối soát tay) hoặc giao dịch trong tháng |
 | `monthly_finance`, `finance_trend` | Lãi/lỗ theo kỳ, lương GV, chi phí, dòng tiền; xu hướng N tháng |
-| `find_duplicate_students` | Hồ sơ trùng: cùng tên+SĐT, tên gần giống, cùng SĐT học chung lớp |
+| `find_duplicate_students` | Hồ sơ trùng: cùng tên+SĐT, tên gần giống, cùng SĐT học chung lớp (mức thấp, memo tự có hậu tố) |
 | `find_student_anomalies` | SĐT sai định dạng/số tạm, tên lạ, thiếu thông tin, lưu trữ nhưng vẫn học/còn nợ |
 | `recent_mcp_changes` | Nhật ký mọi thay đổi do MCP thực hiện, kèm dữ liệu trước/sau |
 

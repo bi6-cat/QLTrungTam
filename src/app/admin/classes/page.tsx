@@ -105,18 +105,6 @@ export default async function ClassesPage({
       enrollment,
       classRoom: selectedClass!
     });
-  const duplicatePhones = new Set(
-    selectedClass
-      ? Object.entries(
-          selectedClass.enrollments.reduce<Record<string, number>>((acc, enrollment) => {
-            acc[enrollment.student.phone] = (acc[enrollment.student.phone] ?? 0) + 1;
-            return acc;
-          }, {})
-        )
-          .filter(([, count]) => count > 1)
-          .map(([phone]) => phone)
-      : []
-  );
   // Memo dự kiến cho học sinh chưa có hóa đơn: cùng SĐT với người đã/sắp có memo gốc thì nhận hậu tố B, C, ...
   const predictedMemos = selectedClass
     ? predictMemos({
@@ -308,22 +296,13 @@ export default async function ClassesPage({
                 />
               </div>
 
-              {duplicatePhones.size > 0 ? (
-                <div className="mt-4 flex gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              {identicalIssuedMemos.size > 0 ? (
+                <div className="mt-4 flex gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   <AlertTriangle className="h-5 w-5 shrink-0" />
-                  <div className="grid gap-1">
-                    <p>
-                      Có số điện thoại dùng chung trong lớp: {Array.from(duplicatePhones).join(", ")}. Khi tạo hóa đơn,
-                      học sinh thứ hai trở đi tự có hậu tố B, C, ... ngay sau số điện thoại trong memo (ví dụ
-                      0912345678B) để không trùng nhau. Nhớ nhắc phụ huynh ghi đúng memo.
-                    </p>
-                    {identicalIssuedMemos.size > 0 ? (
-                      <p className="font-semibold text-red-700">
-                        Hóa đơn đã tạo có memo trùng nhau: {Array.from(identicalIssuedMemos).join("; ")}. Giao dịch của
-                        các hóa đơn này cần gán tay.
-                      </p>
-                    ) : null}
-                  </div>
+                  <p className="font-semibold">
+                    Hóa đơn đã tạo có memo trùng nhau: {Array.from(identicalIssuedMemos).join("; ")}. Giao dịch của các
+                    hóa đơn này cần gán tay.
+                  </p>
                 </div>
               ) : null}
             </div>
