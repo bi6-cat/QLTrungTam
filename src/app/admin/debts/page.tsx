@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, Users, Wallet } from "lucide-react";
 import { AutoSubmitForm } from "@/components/AutoSubmitForm";
 import { DebtReminderButton } from "@/components/DebtReminderButton";
+import { Pagination } from "@/components/Pagination";
 import { Badge, EmptyState, Field, Panel, PageHeader, Select, StatCard } from "@/components/ui";
 import {
   buildReminderMessage,
@@ -22,6 +23,7 @@ import { getAppSettings } from "@/lib/settings";
 import { requireStaff } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+const PAGE_SIZE = 20;
 
 function overdueTone(monthsOverdue: number) {
   if (monthsOverdue >= 2) return "warning" as const;
@@ -37,7 +39,7 @@ function overdueLabel(monthsOverdue: number) {
 export default async function DebtsPage({
   searchParams
 }: {
-  searchParams: Promise<{ classId?: string; sort?: string; period?: string }>;
+  searchParams: Promise<{ classId?: string; sort?: string; period?: string; page?: string }>;
 }) {
   // Quản lý phụ chỉ xem hồ sơ học sinh và copy tin nhắc nợ.
   await requireStaff();
@@ -60,12 +62,18 @@ export default async function DebtsPage({
   const fullRows = new Map(debts.rows.map((row) => [row.studentId, row]));
   const rows = sortDebtRows(period ? filterDebtRowsByPeriod(debts.rows, period) : debts.rows, sort);
   const summary = period ? summarizeDebtRows(rows) : debts;
+  const parsedPage = Number(params.page);
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(Number.isSafeInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1, totalPages);
+  const visibleRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const filterHref = (nextPeriod: string) => {
+  // Đổi bộ lọc thì về trang 1; chỉ link phân trang mới giữ số trang.
+  const filterHref = (nextPeriod: string, nextPage = 1) => {
     const search = new URLSearchParams();
     if (classId) search.set("classId", classId);
     if (sort !== "oldest") search.set("sort", sort);
     if (nextPeriod) search.set("period", nextPeriod);
+    if (nextPage > 1) search.set("page", String(nextPage));
     const query = search.toString();
     return query ? `/admin/debts?${query}` : "/admin/debts";
   };
@@ -193,7 +201,7 @@ export default async function DebtsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {rows.map((row) => {
+                {visibleRows.map((row) => {
                   const full = fullRows.get(row.studentId) ?? row;
                   const otherInvoices = full.invoices.filter(
                     (invoice) => !row.invoices.some((item) => item.id === invoice.id)
@@ -268,6 +276,14 @@ export default async function DebtsPage({
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={rows.length}
+            pageSize={PAGE_SIZE}
+            itemLabel="học sinh"
+            hrefFor={(target) => filterHref(periodKey, target)}
+          />
         </Panel>
       )}
     </div>

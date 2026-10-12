@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronLeft, ChevronRight, FilePlus2, Lock, Pencil, X } from "lucide-react";
+import { Check, FilePlus2, Lock, Pencil, X } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 import { updateClassDetailsAction } from "@/lib/actions/billing";
 import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
 import { InvoiceLifecycleActions } from "@/components/InvoiceLifecycleActions";
@@ -455,37 +456,15 @@ export function ClassInvoiceEditor({
           </table>
         </div>
 
-        {rows.length > PAGE_SIZE ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-5 py-3">
-            <p className="text-sm text-stone-600">
-              Hiển thị {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, rows.length)} /{" "}
-              {rows.length} học sinh
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9 px-3"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-semibold text-stone-600">
-                {currentPage}/{totalPages}
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9 px-3"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        <Pagination
+          page={currentPage}
+          totalPages={totalPages}
+          total={rows.length}
+          pageSize={PAGE_SIZE}
+          itemLabel="học sinh"
+          hideWhenSingle
+          onChange={setPage}
+        />
 
         {!billingLocked && (editing || hasMissingInvoice) ? (
           <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50/95 px-5 py-4 shadow-[0_-8px_20px_rgba(0,0,0,0.04)] backdrop-blur">

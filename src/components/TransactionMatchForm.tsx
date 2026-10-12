@@ -3,8 +3,6 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Link as LinkIcon,
   LoaderCircle,
   Search
@@ -13,6 +11,7 @@ import { assignTransactionAction, resolveTransactionAction } from "@/lib/actions
 import { useResultToast } from "@/components/Toaster";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { Modal } from "@/components/Modal";
+import { Pagination } from "@/components/Pagination";
 import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
 
 type InvoiceOption = {
@@ -268,32 +267,16 @@ export function TransactionMatchForm({
         )}
 
         {!searchPending && !searchError && searchMeta.total > 0 ? (
-          <div className="flex items-center justify-between gap-2 text-xs text-stone-600">
-            <span>{searchMeta.total} hóa đơn phù hợp</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => changePage(Math.max(1, searchMeta.page - 1))}
-                disabled={assigning || searchPending || searchMeta.page <= 1}
-                className="focus-ring rounded-lg border border-stone-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Trang hóa đơn trước"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span>
-                {searchMeta.page}/{searchMeta.totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => changePage(Math.min(searchMeta.totalPages, searchMeta.page + 1))}
-                disabled={assigning || searchPending || searchMeta.page >= searchMeta.totalPages}
-                className="focus-ring rounded-lg border border-stone-300 p-1.5 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Trang hóa đơn sau"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={searchMeta.page}
+            totalPages={searchMeta.totalPages}
+            total={searchMeta.total}
+            pageSize={SEARCH_PAGE_SIZE}
+            itemLabel="hóa đơn"
+            disabled={assigning || searchPending}
+            className="border-t-0 px-0 py-0"
+            onChange={changePage}
+          />
         ) : null}
 
         {selectedInvoice ? (

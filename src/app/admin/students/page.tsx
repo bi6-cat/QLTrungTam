@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { Prisma } from "@prisma/client";
-import { Archive, ChevronLeft, ChevronRight, Eye, Phone, Search, UserRound, Users, X } from "lucide-react";
+import { Archive, Eye, Phone, Search, UserRound, Users, X } from "lucide-react";
 import { Badge, Button, EmptyState, Input, Panel, PageHeader, Select } from "@/components/ui";
 import { AddStudentButton } from "@/components/AddStudentForm";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditStudentButton } from "@/components/EditStudentButton";
 import { StudentExcelImportButton } from "@/components/StudentExcelImportButton";
+import { Pagination } from "@/components/Pagination";
 import { prisma } from "@/lib/prisma";
 import { requireStaff } from "@/lib/auth";
 
@@ -210,7 +211,7 @@ export default async function StudentsPage({
             {/* Màn hình nhỏ: dạng thẻ. */}
             <ul className="divide-y divide-stone-100 md:hidden">
               {rows.map(({ student, current, pastCount, editable }) => (
-                <li key={student.id} className="grid gap-2 p-4">
+                <li key={student.id} className="grid gap-1.5 px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
@@ -234,25 +235,25 @@ export default async function StudentsPage({
               <table className="w-full text-left text-sm">
                 <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <tr>
-                    <th className="w-12 px-4 py-3 text-center">#</th>
+                    <th className="w-12 px-4 py-2.5 text-center">#</th>
                     <th className="px-4 py-3">Học sinh</th>
                     <th className="px-4 py-3">Phụ huynh · SĐT</th>
                     <th className="px-4 py-3">Lớp đang học</th>
                     <th className="px-4 py-3">Ghi chú</th>
-                    <th className="w-36 px-4 py-3 text-right">Thao tác</th>
+                    <th className="px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
                   {rows.map(({ student, current, pastCount, editable }, index) => (
                     <tr key={student.id} className={student.archivedAt ? "bg-stone-50/70" : undefined}>
-                      <td className="px-4 py-3 text-center text-stone-400">{(page - 1) * PAGE_SIZE + index + 1}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2 text-center text-stone-400">{(page - 1) * PAGE_SIZE + index + 1}</td>
+                      <td className="px-4 py-2">
                         <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
                           {student.fullName}
                         </Link>
                         {student.address ? <div className="max-w-56 truncate text-xs text-stone-500">{student.address}</div> : null}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">
+                      <td className="whitespace-nowrap px-4 py-2">
                         <div className="text-neutralText">{student.parentName || <span className="text-stone-400">Chưa có tên PH</span>}</div>
                         <a
                           href={`tel:${student.phone}`}
@@ -262,17 +263,17 @@ export default async function StudentsPage({
                           {student.phone}
                         </a>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2">
                         <ClassBadges current={current} pastCount={pastCount} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2">
                         {student.note ? (
                           <p className="line-clamp-2 max-w-64 text-stone-600" title={student.note}>{student.note}</p>
                         ) : (
                           <span className="text-stone-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2">
                         <RowActions studentId={student.id} archived={Boolean(student.archivedAt)} editable={editable} />
                       </td>
                     </tr>
@@ -281,36 +282,14 @@ export default async function StudentsPage({
               </table>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-5 py-4">
-              <p className="text-sm text-stone-600">
-                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} / <strong>{total}</strong> học sinh
-              </p>
-              {totalPages > 1 ? (
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={listHref({ page: Math.max(1, page - 1) })}
-                    aria-disabled={page <= 1}
-                    className={`focus-ring inline-flex h-9 items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold ${
-                      page <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
-                    }`}
-                  >
-                    <ChevronLeft className="h-4 w-4" /> Trước
-                  </Link>
-                  <span className="text-sm font-semibold text-stone-600">
-                    {page}/{totalPages}
-                  </span>
-                  <Link
-                    href={listHref({ page: Math.min(totalPages, page + 1) })}
-                    aria-disabled={page >= totalPages}
-                    className={`focus-ring inline-flex h-9 items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold ${
-                      page >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
-                    }`}
-                  >
-                    Sau <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              ) : null}
-            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={PAGE_SIZE}
+              itemLabel="học sinh"
+              hrefFor={(target) => listHref({ page: target })}
+            />
           </>
         )}
       </Panel>
@@ -363,12 +342,13 @@ function RowActions({
       <Link
         href={`/admin/students/${studentId}`}
         title="Xem hồ sơ"
-        className="focus-ring grid h-9 w-9 place-items-center rounded-xl text-stone-500 hover:bg-stone-100 hover:text-primary"
+        className="focus-ring inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 hover:text-primary"
       >
-        <Eye className="h-4 w-4" />
+        <Eye className="h-3.5 w-3.5" />
+        Xem
       </Link>
-      {!archived ? <EditStudentButton student={editable} /> : null}
-      <ArchiveEntityButton kind="student" entityId={studentId} entityName={editable.fullName} archived={archived} compact />
+      {!archived ? <EditStudentButton student={editable} size="sm" /> : null}
+      <ArchiveEntityButton kind="student" entityId={studentId} entityName={editable.fullName} archived={archived} size="sm" />
     </div>
   );
 }

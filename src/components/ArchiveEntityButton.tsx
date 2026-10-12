@@ -15,13 +15,16 @@ export function ArchiveEntityButton({
   entityId,
   entityName,
   archived,
-  compact = false
+  compact = false,
+  size
 }: {
   kind: EntityKind;
   entityId: string;
   entityName: string;
   archived: boolean;
   compact?: boolean;
+  /** "sm": nút nhỏ có chữ ngắn, dùng trong dòng bảng. */
+  size?: "sm";
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
@@ -64,9 +67,11 @@ export function ArchiveEntityButton({
         type="button"
         variant={archived ? "secondary" : "ghost"}
         className={
-          compact
-            ? "h-9 w-9 shrink-0 px-0 text-stone-500 hover:bg-stone-100"
-            : "h-9 px-3 text-stone-600"
+          size === "sm"
+            ? `h-8 gap-1 rounded-lg px-2 text-xs ${archived ? "text-primary" : "text-stone-600 hover:bg-stone-100"}`
+            : compact
+              ? "h-9 w-9 shrink-0 px-0 text-stone-500 hover:bg-stone-100"
+              : "h-9 px-3 text-stone-600"
         }
         title={`${label} ${entityLabel}`}
         onClick={() => {
@@ -74,8 +79,12 @@ export function ArchiveEntityButton({
           setOpen(true);
         }}
       >
-        {archived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-        {compact ? null : label}
+        {archived ? (
+          <RotateCcw className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+        ) : (
+          <Archive className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
+        )}
+        {compact && size !== "sm" ? null : label}
       </Button>
 
       {open ? (

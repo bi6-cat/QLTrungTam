@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, CalendarX2, CheckCheck, ChevronLeft, ChevronRight, Repeat2 } from "lucide-react";
+import { CalendarDays, CalendarPlus, CalendarX2, CheckCheck, ChevronLeft, ChevronRight, Repeat2 } from "lucide-react";
 import { clsx } from "clsx";
 import { markPendingHeldAction } from "@/lib/actions/schedule";
 import {
@@ -85,6 +85,8 @@ export function ScheduleBoard(props: {
       ? `${formatIsoDayMonth(props.from)} – ${formatIsoDayMonth(props.to)}/${props.to.slice(0, 4)}`
       : `Tháng ${props.month}/${props.year}`;
   const includesToday = props.from <= today && today <= props.to;
+  const navButton =
+    "focus-ring grid h-9 w-9 place-items-center rounded-lg text-stone-600 transition-colors hover:bg-stone-100 hover:text-neutralText";
 
   function markAllHeld() {
     startBulk(async () => {
@@ -102,32 +104,35 @@ export function ScheduleBoard(props: {
     <Panel className="overflow-hidden p-0">
       <div className="grid gap-3 border-b border-stone-200 p-4 lg:flex lg:flex-wrap lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-stone-300 bg-stone-50 p-1 text-sm font-semibold">
+          <div className="inline-flex rounded-xl border border-stone-300 bg-stone-50 p-1 text-sm font-semibold shadow-sm">
             <Link
               href={scheduleHref({ date: view === "month" ? (includesToday ? today : props.from) : props.anchor, classId })}
-              className={clsx("rounded-lg px-3 py-1.5", view === "week" ? "bg-white text-primary shadow-sm" : "text-stone-600 hover:text-neutralText")}
+              className={clsx("inline-flex h-9 items-center rounded-lg px-3", view === "week" ? "bg-white text-primary shadow-sm" : "text-stone-600 hover:text-neutralText")}
             >
               Tuần
             </Link>
             <Link
               href={scheduleHref({ view: "month", month: anchorParts.month, year: anchorParts.year, classId })}
-              className={clsx("rounded-lg px-3 py-1.5", view === "month" ? "bg-white text-primary shadow-sm" : "text-stone-600 hover:text-neutralText")}
+              className={clsx("inline-flex h-9 items-center rounded-lg px-3", view === "month" ? "bg-white text-primary shadow-sm" : "text-stone-600 hover:text-neutralText")}
             >
               Tháng
             </Link>
           </div>
-          <div className="inline-flex items-center gap-1">
-            <Link href={prevHref} className="focus-ring grid h-9 w-9 place-items-center rounded-lg hover:bg-stone-100" aria-label="Trước">
-              <ChevronLeft className="h-5 w-5" />
+          <div className="flex items-center gap-0.5 rounded-xl border border-stone-300 bg-white p-1 shadow-sm">
+            <Link href={prevHref} className={navButton} aria-label={view === "week" ? "Tuần trước" : "Tháng trước"}>
+              <ChevronLeft className="h-4 w-4" />
             </Link>
-            <span className="min-w-36 text-center text-sm font-bold">{rangeLabel}</span>
-            <Link href={nextHref} className="focus-ring grid h-9 w-9 place-items-center rounded-lg hover:bg-stone-100" aria-label="Sau">
-              <ChevronRight className="h-5 w-5" />
+            <span className="inline-flex h-9 min-w-[150px] items-center justify-center gap-2 px-3 text-sm font-bold text-neutralText">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              {rangeLabel}
+            </span>
+            <Link href={nextHref} className={navButton} aria-label={view === "week" ? "Tuần sau" : "Tháng sau"}>
+              <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
           {!includesToday ? (
-            <Link href={todayHref} className="focus-ring rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold hover:bg-stone-50">
-              Hôm nay
+            <Link href={todayHref} className="focus-ring inline-flex h-9 items-center rounded-lg px-2.5 text-xs font-semibold text-primary hover:bg-indigo-50">
+              {view === "week" ? "Về tuần này" : "Về tháng này"}
             </Link>
           ) : null}
         </div>

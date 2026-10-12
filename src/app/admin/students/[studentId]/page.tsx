@@ -8,8 +8,6 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   FileText,
   GraduationCap,
@@ -21,6 +19,7 @@ import {
 } from "lucide-react";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditStudentButton } from "@/components/EditStudentButton";
+import { Pagination } from "@/components/Pagination";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { formatCurrency, formatEnrollmentStatus, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
@@ -860,28 +859,16 @@ export default async function Student360Page({
             ))}
           </ol>
         </div>
-        {historyPageCount > 1 ? (
-          <div className="mt-5 flex items-center justify-between gap-3 border-t border-stone-100 pt-4">
-            <p className="text-xs text-stone-500">
-              Hiển thị {(historyPage - 1) * TIMELINE_PAGE_SIZE + 1}-
-              {Math.min(historyPage * TIMELINE_PAGE_SIZE, timeline.length)} / {timeline.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/admin/students/${student.id}?historyPage=${Math.max(1, historyPage - 1)}#timeline`}
-                className={`focus-ring inline-flex h-9 items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold ${historyPage <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"}`}
-              >
-                <ChevronLeft className="h-4 w-4" /> Trước
-              </Link>
-              <Link
-                href={`/admin/students/${student.id}?historyPage=${Math.min(historyPageCount, historyPage + 1)}#timeline`}
-                className={`focus-ring inline-flex h-9 items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold ${historyPage >= historyPageCount ? "pointer-events-none opacity-50" : "hover:bg-stone-50"}`}
-              >
-                Sau <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        ) : null}
+        <Pagination
+          page={historyPage}
+          totalPages={historyPageCount}
+          total={timeline.length}
+          pageSize={TIMELINE_PAGE_SIZE}
+          itemLabel="hoạt động"
+          hideWhenSingle
+          className="mt-5 px-0 pb-0 pt-4"
+          hrefFor={(target) => `/admin/students/${student.id}?historyPage=${target}#timeline`}
+        />
       </Panel>
     </div>
   );

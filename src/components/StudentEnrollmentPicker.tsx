@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import { Check, Plus, Search } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 import { createEnrollmentAction } from "@/lib/actions/enrollments";
 import { toast } from "@/components/Toaster";
 import { Button, Field, Input, Select } from "@/components/ui";
@@ -156,32 +157,17 @@ export function StudentEnrollmentPicker({
         <div className="text-sm text-stone-600">
           Đã chọn: <strong className="text-neutralText">{selectedIds.size} học sinh</strong>
         </div>
-        {totalPages > 1 ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-9 px-3"
-              disabled={currentPage <= 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-semibold text-stone-600">
-              {currentPage}/{totalPages}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-9 px-3"
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : null}
       </div>
+      <Pagination
+        page={currentPage}
+        totalPages={totalPages}
+        total={filtered.length}
+        pageSize={PAGE_SIZE}
+        itemLabel="học sinh"
+        hideWhenSingle
+        className="border-t-0 px-0 py-0"
+        onChange={setPage}
+      />
 
       {error ? (
         <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700" role="alert">

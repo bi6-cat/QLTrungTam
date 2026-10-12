@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { z } from "zod";
 import { successState, errorState, type ResultState } from "@/lib/action-states";
 import { actionFailure, runSerializableAction } from "@/lib/actions/shared";
-import { requireAdmin, requireStaff } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { formatIsoDayMonth, parseIsoDate } from "@/lib/class-sessions";
 import {
   addMakeupSession,
@@ -28,7 +28,7 @@ import {
   updateScheduleSchema
 } from "@/lib/validation";
 
-// Lịch cố định: chỉ chủ trung tâm. Điểm danh (đã học / lớp nghỉ / học bù): chủ và quản lý phụ.
+// Toàn bộ thời khóa biểu (lịch cố định + điểm danh) do chủ và quản lý phụ cùng quản lý.
 
 function revalidateSchedulePaths() {
   revalidatePath("/admin/schedule");
@@ -44,7 +44,7 @@ function parseInput<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<
 }
 
 export async function createScheduleAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  await requireAdmin();
+  await requireStaff();
   const { data, error } = safeParseForm(createScheduleSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   try {
@@ -59,7 +59,7 @@ export async function createScheduleAction(_prevState: ResultState, formData: Fo
 }
 
 export async function updateScheduleAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  await requireAdmin();
+  await requireStaff();
   const { data, error } = safeParseForm(updateScheduleSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   try {
@@ -72,7 +72,7 @@ export async function updateScheduleAction(_prevState: ResultState, formData: Fo
 }
 
 export async function stopScheduleAction(scheduleId: string, fromDate: string): Promise<ResultState> {
-  await requireAdmin();
+  await requireStaff();
   const date = parseIsoDate(fromDate);
   if (!date) return errorState("Ngày ngừng không hợp lệ.");
   try {

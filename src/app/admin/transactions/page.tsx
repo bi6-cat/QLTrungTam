@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, History, Landmark } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, History, Landmark } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 import { TransactionMatchForm } from "@/components/TransactionMatchForm";
 import { TransactionDetailsButton } from "@/components/TransactionDetailsButton";
 import { TransactionReference } from "@/components/TransactionReference";
@@ -214,47 +215,26 @@ export default async function TransactionsPage({
     param,
     current,
     totalPages,
-    start,
-    shown,
-    total
+    total,
+    itemLabel
   }: {
     param: string;
     current: number;
     totalPages: number;
-    start: number;
-    shown: number;
     total: number;
+    itemLabel: string;
   }) {
-    if (totalPages <= 1) return null;
-    const linkBase =
-      "focus-ring inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm transition-colors";
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-5 py-4">
-        <p className="text-sm text-stone-600">
-          Hiển thị {start + 1}-{start + shown} / {total}
-        </p>
-        <div className="flex items-center gap-2">
-          <Link
-            href={pagerHref(param, Math.max(1, current - 1))}
-            scroll={false}
-            className={`${linkBase} ${current <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"}`}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Trước
-          </Link>
-          <span className="text-sm font-semibold text-stone-600">
-            {current}/{totalPages}
-          </span>
-          <Link
-            href={pagerHref(param, Math.min(totalPages, current + 1))}
-            scroll={false}
-            className={`${linkBase} ${current >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-stone-50"}`}
-          >
-            Sau
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
+      <Pagination
+        page={current}
+        totalPages={totalPages}
+        total={total}
+        pageSize={LIST_PAGE_SIZE}
+        itemLabel={itemLabel}
+        hideWhenSingle
+        scroll={false}
+        hrefFor={(target) => pagerHref(param, target)}
+      />
     );
   }
 
@@ -439,9 +419,8 @@ export default async function TransactionsPage({
           param="paidPage"
           current={paid.current}
           totalPages={paid.totalPages}
-          start={paid.start}
-          shown={paid.rows.length}
           total={paid.total}
+          itemLabel="hóa đơn"
         />
       </Panel>
 
@@ -592,9 +571,8 @@ export default async function TransactionsPage({
           param="txPage"
           current={tx.current}
           totalPages={tx.totalPages}
-          start={tx.start}
-          shown={tx.rows.length}
           total={tx.total}
+          itemLabel="giao dịch"
         />
       </Panel>
 
@@ -677,9 +655,8 @@ export default async function TransactionsPage({
           param="unmatchedPage"
           current={unmatched.current}
           totalPages={unmatched.totalPages}
-          start={unmatched.start}
-          shown={unmatched.rows.length}
           total={unmatched.total}
+          itemLabel="giao dịch"
         />
       </Panel>
     </div>

@@ -27,9 +27,8 @@ export default async function SchedulePage({
 }: {
   searchParams: Promise<{ view?: string; date?: string; month?: string; year?: string; classId?: string }>;
 }) {
-  // Chủ và quản lý phụ cùng điểm danh; chỉ chủ sửa lịch cố định.
-  const viewer = await requireStaff();
-  const canManage = viewer.role === "owner";
+  // Chủ và quản lý phụ có toàn quyền trên thời khóa biểu (lịch cố định + điểm danh).
+  await requireStaff();
   const params = await searchParams;
   const today = todayInVietnam();
   const view = params.view === "month" ? "month" : "week";
@@ -164,21 +163,19 @@ export default async function SchedulePage({
         nextMonth={nextMonth.month}
       />
 
-      {canManage ? (
-        <FixedScheduleManager
-          today={today}
-          defaultEffectiveFrom={monthRange(todayParts.month, todayParts.year).from}
-          classes={classes.map((classRoom) => ({
-            id: classRoom.id,
-            name: classRoom.name,
-            shortCode: classRoom.shortCode,
-            colorIndex: classIndex.get(classRoom.id) ?? 0,
-            slots: classRoom.schedules
-              .map((slot) => ({ ...toScheduleSlot(slot), note: slot.note }))
-              .filter((slot) => !slot.effectiveTo || slot.effectiveTo >= today)
-          }))}
-        />
-      ) : null}
+      <FixedScheduleManager
+        today={today}
+        defaultEffectiveFrom={monthRange(todayParts.month, todayParts.year).from}
+        classes={classes.map((classRoom) => ({
+          id: classRoom.id,
+          name: classRoom.name,
+          shortCode: classRoom.shortCode,
+          colorIndex: classIndex.get(classRoom.id) ?? 0,
+          slots: classRoom.schedules
+            .map((slot) => ({ ...toScheduleSlot(slot), note: slot.note }))
+            .filter((slot) => !slot.effectiveTo || slot.effectiveTo >= today)
+        }))}
+      />
     </div>
   );
 }

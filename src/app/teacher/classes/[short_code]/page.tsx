@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, GraduationCap, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock, GraduationCap, Users } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 import { PublicBrandHeader } from "@/components/PublicBrandHeader";
 import { Badge, EmptyState } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
@@ -324,39 +325,15 @@ export default async function TeacherClassPage({
             </div>
           )}
 
-          {rows.length > PAGE_SIZE ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-5 py-4">
-              <p className="text-sm text-stone-600">
-                Hiển thị {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, rows.length)} /{" "}
-                {rows.length} học sinh
-              </p>
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`${teacherPath(classRoom)}?month=${month}&year=${year}&page=${Math.max(1, currentPage - 1)}`}
-                  className={[
-                    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
-                    currentPage <= 1 ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
-                  ].join(" ")}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Trước
-                </Link>
-                <span className="text-sm font-semibold text-stone-600">
-                  {currentPage}/{totalPages}
-                </span>
-                <Link
-                  href={`${teacherPath(classRoom)}?month=${month}&year=${year}&page=${Math.min(totalPages, currentPage + 1)}`}
-                  className={[
-                    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-sm font-semibold shadow-sm",
-                    currentPage >= totalPages ? "pointer-events-none opacity-50" : "hover:bg-stone-50"
-                  ].join(" ")}
-                >
-                  Sau
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-          ) : null}
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            total={rows.length}
+            pageSize={PAGE_SIZE}
+            itemLabel="học sinh"
+            hideWhenSingle
+            hrefFor={(target) => `${teacherPath(classRoom)}?month=${month}&year=${year}&page=${target}`}
+          />
         </section>
       </div>
     </main>
