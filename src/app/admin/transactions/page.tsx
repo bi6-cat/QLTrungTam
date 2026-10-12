@@ -257,7 +257,7 @@ export default async function TransactionsPage({
         />
         <StatCard
           label={`Chuyển khoản về trong ${formatMonth(selectedMonth, selectedYear)}`}
-          tone="primary"
+          tone="info"
           value={formatCurrency(totalBankTransactions)}
           hint={`${bankTransactionAggregate._count._all} giao dịch ngân hàng hợp lệ`}
           icon={<Landmark className="h-5 w-5" />}
@@ -283,7 +283,7 @@ export default async function TransactionsPage({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Tháng</th>
                   <th className="px-4 py-3">Hóa đơn</th>
@@ -341,7 +341,7 @@ export default async function TransactionsPage({
                 <col className="w-[17%]" />
                 <col className="w-[10%]" />
               </colgroup>
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-3">Ngày đóng</th>
                   <th className="whitespace-nowrap px-3 py-3">Học sinh</th>
@@ -447,7 +447,7 @@ export default async function TransactionsPage({
                 <col className="w-[13%]" />
                 <col className="w-[9%]" />
               </colgroup>
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-3">Thời gian</th>
                   <th className="whitespace-nowrap px-3 py-3">Mã GD</th>
@@ -597,7 +597,7 @@ export default async function TransactionsPage({
                 <col className="w-[30%]" />
                 <col className="w-[24%]" />
               </colgroup>
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-3">Thời gian</th>
                   <th className="whitespace-nowrap px-3 py-3">Mã GD</th>

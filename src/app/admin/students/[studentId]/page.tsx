@@ -545,7 +545,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Lớp</th>
                   <th className="px-4 py-3">Giáo viên</th>
@@ -618,7 +618,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Kỳ</th>
                   <th className="px-4 py-3">Lớp</th>
@@ -672,7 +672,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1320px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Kỳ</th>
                   <th className="px-4 py-3">Snapshot khi phát hành</th>
@@ -764,7 +764,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1180px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Thời gian</th>
                   <th className="px-4 py-3">Phương thức / mã GD</th>

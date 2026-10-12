@@ -72,7 +72,7 @@ export function LeaveClassButton({
       <Button
         type="button"
         variant="ghost"
-        className="h-8 w-8 shrink-0 px-0 text-stone-400 hover:bg-rose-50 hover:text-warning"
+        className="h-8 shrink-0 gap-1 rounded-lg px-2 text-xs text-stone-500 hover:bg-rose-50 hover:text-warning"
         disabled={disabled}
         title={disabled ? "Lưu hoặc hủy bản nháp trước" : `Cho ${studentName} nghỉ lớp này`}
         aria-label={`Cho ${studentName} nghỉ lớp này`}
@@ -83,7 +83,8 @@ export function LeaveClassButton({
           setOpen(true);
         }}
       >
-        <UserMinus className="h-4 w-4" aria-hidden="true" />
+        <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />
+        Cho nghỉ
       </Button>
 
       {open ? (

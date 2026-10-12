@@ -9,6 +9,7 @@ import { StudentExcelImportButton } from "@/components/StudentExcelImportButton"
 import { Pagination } from "@/components/Pagination";
 import { prisma } from "@/lib/prisma";
 import { requireStaff } from "@/lib/auth";
+import { sortByGivenName } from "@/lib/student-search";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
@@ -52,8 +53,10 @@ export default async function StudentsPage({
     AND: [{ archivedAt: showArchived ? { not: null } : null }, ...searchFilters]
   };
 
-  const [total, activeCount, archivedCount, classes] = await Promise.all([
-    prisma.student.count({ where }),
+  // Xếp theo tên (chữ cuối) như danh sách lớp: Postgres không xếp được kiểu này nên lấy id + tên của
+  // mọi học sinh khớp bộ lọc, xếp trong app rồi mới cắt trang.
+  const [matching, activeCount, archivedCount, classes] = await Promise.all([
+    prisma.student.findMany({ where, select: { id: true, fullName: true } }),
     prisma.student.count({ where: { archivedAt: null } }),
     prisma.student.count({ where: { archivedAt: { not: null } } }),
     prisma.classRoom.findMany({
@@ -62,13 +65,14 @@ export default async function StudentsPage({
       select: { id: true, name: true, shortCode: true }
     })
   ]);
+  const total = matching.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
-  const students = await prisma.student.findMany({
-    where,
-    orderBy: { fullName: "asc" },
-    skip: (page - 1) * PAGE_SIZE,
-    take: PAGE_SIZE,
+  const pageIds = sortByGivenName(matching)
+    .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    .map((student) => student.id);
+  const pageStudents = await prisma.student.findMany({
+    where: { id: { in: pageIds } },
     include: {
       enrollments: {
         orderBy: { createdAt: "asc" },
@@ -80,6 +84,11 @@ export default async function StudentsPage({
         }
       }
     }
+  });
+  const byId = new Map(pageStudents.map((student) => [student.id, student]));
+  const students = pageIds.flatMap((id) => {
+    const student = byId.get(id);
+    return student ? [student] : [];
   });
   const hasFilter = Boolean(q || classId);
   const selectedClass = classes.find((classRoom) => classRoom.id === classId) ?? null;
@@ -210,10 +219,13 @@ export default async function StudentsPage({
           <>
             {/* Màn hình nhỏ: dạng thẻ. */}
             <ul className="divide-y divide-stone-100 md:hidden">
-              {rows.map(({ student, current, pastCount, editable }) => (
+              {rows.map(({ student, current, pastCount, editable }, index) => (
                 <li key={student.id} className="grid gap-1.5 px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
+                      <span className="mr-1.5 text-xs font-semibold tabular-nums text-stone-400">
+                        {(page - 1) * PAGE_SIZE + index + 1}.
+                      </span>
                       <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
                         {student.fullName}
                       </Link>
@@ -233,7 +245,7 @@ export default async function StudentsPage({
             {/* Màn hình lớn: dạng bảng. */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left text-sm">
-                <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                   <tr>
                     <th className="w-12 px-4 py-2.5 text-center">#</th>
                     <th className="px-4 py-3">Học sinh</th>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { matchesName, normalizeName, sortByGivenName } from "../src/lib/student-search";
+import { compareStudentNames, matchesName, normalizeName, sortByGivenName } from "../src/lib/student-search";
 
 describe("student search on the pay page", () => {
   test("matches without accents, in any case and word order", () => {
@@ -22,5 +22,10 @@ describe("student search on the pay page", () => {
       { fullName: "Lê Đức" }
     ]).map((student) => student.fullName);
     assert.deepEqual(sorted, ["Nguyễn Hoàng An", "Trần Thị An", "Nguyễn Văn Bình", "Lê Đức"]);
+  });
+
+  test("compareStudentNames dùng cùng thứ tự cho mọi danh sách (Đ sau D, theo tên trước họ)", () => {
+    const names = ["Lê Đức", "Phạm Dũng", "Nguyễn Văn Bình", "Trần Thị An"];
+    assert.deepEqual([...names].sort(compareStudentNames), ["Trần Thị An", "Nguyễn Văn Bình", "Phạm Dũng", "Lê Đức"]);
   });
 });

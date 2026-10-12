@@ -41,12 +41,12 @@ export function ConfirmDeleteButton({
       <Button
         type="button"
         variant="ghost"
-        className="h-8 w-8 px-0 text-stone-400 hover:bg-rose-50 hover:text-warning"
+        className="h-8 gap-1 rounded-lg px-2 text-xs text-stone-500 hover:bg-rose-50 hover:text-warning"
         title={title}
-        aria-label={title}
         onClick={() => setOpen(true)}
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2 className="h-3.5 w-3.5" />
+        Xóa
       </Button>
       {open ? (
         <Modal title={title} onClose={() => !pending && setOpen(false)} closeDisabled={pending}>

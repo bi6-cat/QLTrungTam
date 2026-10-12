@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { compareStudentNames } from "@/lib/student-search";
 import { CENTER_INFO } from "@/lib/center";
 import { formatCurrency, formatDayMonth } from "@/lib/format";
 import { periodIndex } from "@/lib/enrollment-period";
@@ -217,7 +218,7 @@ function firstPayoutAt(records: Array<Pick<SalaryRecord, "amount" | "paidAt" | "
   return times.length > 0 ? new Date(Math.min(...times)) : null;
 }
 const byName = (a: { studentName: string }, b: { studentName: string }) =>
-  nameCollator.compare(a.studentName, b.studentName);
+  compareStudentNames(a.studentName, b.studentName);
 const byPaidAt = (a: { paidAt: Date | null }, b: { paidAt: Date | null }) =>
   (a.paidAt?.getTime() ?? 0) - (b.paidAt?.getTime() ?? 0);
 

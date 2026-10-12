@@ -42,15 +42,16 @@ type Student = {
   hint: string | null;
 };
 
-function StudentButton({ student, onSelect }: { student: Student; onSelect: (id: string) => void }) {
+function StudentButton({ student, order, onSelect }: { student: Student; order: number; onSelect: (id: string) => void }) {
   return (
     <button
       type="button"
       onClick={() => onSelect(student.id)}
       className="focus-ring flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-indigo-50 active:bg-indigo-100"
     >
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-primary">
-        <UserRound className="h-4 w-4" />
+      {/* Số thứ tự trong danh sách lớp (giữ nguyên khi đang tìm). */}
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold tabular-nums text-primary">
+        {order}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block break-words text-base font-semibold leading-snug text-neutralText">{student.fullName}</span>
@@ -163,6 +164,7 @@ function ScrollList({ children, rowCount }: { children: React.ReactNode; rowCoun
 function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const results = query.trim() ? students.filter((student) => matchesName(student.fullName, query)) : students;
+  const orderById = new Map(students.map((student, index) => [student.id, index + 1]));
 
   return (
     <div className="mt-3 grid min-w-0 gap-3">
@@ -198,7 +200,7 @@ function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: 
         <ScrollList rowCount={results.length}>
           {results.map((student) => (
             <div key={student.id} role="listitem">
-              <StudentButton student={student} onSelect={onSelect} />
+              <StudentButton student={student} order={orderById.get(student.id) ?? 0} onSelect={onSelect} />
             </div>
           ))}
         </ScrollList>

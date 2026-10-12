@@ -89,18 +89,19 @@ export function FixedScheduleManager({
                               .join(" · ") || " "}
                           </p>
                         </div>
-                        <Button type="button" variant="ghost" className="h-8 w-8 px-0 text-stone-400 hover:text-primary" title="Sửa giờ" aria-label="Sửa giờ" onClick={() => setEditing(slot)}>
-                          <Pencil className="h-4 w-4" />
+                        <Button type="button" variant="ghost" className="h-8 gap-1 rounded-lg px-2 text-xs text-stone-500 hover:text-primary" title="Sửa giờ" onClick={() => setEditing(slot)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                          Sửa
                         </Button>
                         <Button
                           type="button"
                           variant="ghost"
-                          className="h-8 w-8 px-0 text-stone-400 hover:bg-rose-50 hover:text-warning"
+                          className="h-8 gap-1 rounded-lg px-2 text-xs text-stone-500 hover:bg-rose-50 hover:text-warning"
                           title="Ngừng buổi này"
-                          aria-label="Ngừng buổi này"
                           onClick={() => setStopping({ ...slot, className: classRoom.name })}
                         >
-                          <CalendarOff className="h-4 w-4" />
+                          <CalendarOff className="h-3.5 w-3.5" />
+                          Ngừng
                         </Button>
                       </div>
                     ))}

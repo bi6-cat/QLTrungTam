@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { compareStudentNames } from "@/lib/student-search";
 import {
   enrollmentVisibleInPeriodWhere,
   latestMonthUpToPeriodArgs,
@@ -232,7 +233,7 @@ export async function buildMonthRows(month: number, year: number, now = new Date
       ];
       return { className, studentName, cells };
     })
-    .sort((a, b) => collator.compare(a.className, b.className) || collator.compare(a.studentName, b.studentName))
+    .sort((a, b) => collator.compare(a.className, b.className) || compareStudentNames(a.studentName, b.studentName))
     .map((row) => row.cells);
 
   const transactionRows: Cell[][] = transactions.map((transaction) => {

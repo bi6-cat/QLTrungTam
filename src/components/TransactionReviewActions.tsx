@@ -20,22 +20,24 @@ export function TransactionReviewActions({ transactionId }: { transactionId: str
         <Button
           type="button"
           variant="secondary"
-          className="h-8 w-8 shrink-0 px-0"
+          className="h-8 shrink-0 gap-1 rounded-lg px-2 text-xs"
           onClick={() => setOpenDialog("unassign")}
           aria-label="Bỏ gán giao dịch"
           title="Bỏ gán"
         >
-          <Unlink className="h-4 w-4" />
+          <Unlink className="h-3.5 w-3.5" />
+          Bỏ gán
         </Button>
         <Button
           type="button"
           variant="danger"
-          className="h-8 w-8 shrink-0 px-0"
+          className="h-8 shrink-0 gap-1 rounded-lg px-2 text-xs"
           onClick={() => setOpenDialog("reverse")}
           aria-label="Hoàn tác giao dịch"
           title="Hoàn tác"
         >
-          <RotateCcw className="h-4 w-4" />
+          <RotateCcw className="h-3.5 w-3.5" />
+          Hoàn tác
         </Button>
       </div>
 

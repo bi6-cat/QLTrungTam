@@ -121,7 +121,7 @@ export function StudentEnrollmentPicker({
       </label>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {visible.map((student) => {
+        {visible.map((student, index) => {
           const isSelected = selectedIds.has(student.id);
           return (
             <button
@@ -140,7 +140,12 @@ export function StudentEnrollmentPicker({
                   <Check className="h-3.5 w-3.5" />
                 </span>
               ) : null}
-              <div className="truncate pr-6 font-semibold">{student.fullName}</div>
+              <div className="truncate pr-6 font-semibold">
+                <span className="mr-1 text-xs font-semibold tabular-nums text-stone-400">
+                  {(currentPage - 1) * PAGE_SIZE + index + 1}.
+                </span>
+                {student.fullName}
+              </div>
               <div className="text-xs text-stone-500">{student.phone}</div>
             </button>
           );

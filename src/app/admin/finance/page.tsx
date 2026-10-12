@@ -112,7 +112,7 @@ export default async function FinancePage({
         />
         <StatCard
           label="Chi phí khác"
-          tone="neutral"
+          tone="accent"
           value={formatCurrency(finance.otherCost)}
           hint={`Tổng chi ${formatCurrency(finance.totalCost)}`}
           icon={<Receipt className="h-5 w-5" />}
@@ -153,7 +153,7 @@ export default async function FinancePage({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Giáo viên / Lớp</th>
                   <th className="px-4 py-3 text-right">Học phí tính lương</th>
@@ -274,7 +274,7 @@ export default async function FinancePage({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                   <tr>
                     <th className="px-4 py-3">Lớp</th>
                     <th className="px-4 py-3">Buổi</th>
@@ -387,7 +387,7 @@ export default async function FinancePage({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
               <tr>
                 <th className="px-4 py-3">Kỳ</th>
                 <th className="px-4 py-3 text-right">Đã thu</th>
@@ -451,7 +451,7 @@ export default async function FinancePage({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
                   <th className="px-4 py-3">Nội dung</th>
                   <th className="px-4 py-3">Loại</th>

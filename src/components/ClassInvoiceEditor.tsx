@@ -236,19 +236,21 @@ export function ClassInvoiceEditor({
             );
           })}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[900px] table-fixed text-left text-sm">
             <colgroup>
+              <col className="w-10" />
               <col className="w-[16%]" />
-              <col className="w-[13%]" />
-              <col className="w-[10%]" />
-              <col className="w-[8%]" />
-              <col className="w-[10%]" />
               <col className="w-[12%]" />
+              <col className="w-[9%]" />
+              <col className="w-[8%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
               <col className="w-[13%]" />
-              <col className="w-[18%]" />
+              <col className="w-[19%]" />
             </colgroup>
-            <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
               <tr>
+                <th className="px-2 py-3 text-center">#</th>
                 <th className="px-2 py-3">Học sinh</th>
                 <th className="px-2 py-3">Trạng thái học</th>
                 <th className="px-2 py-3">Hóa đơn</th>
@@ -260,7 +262,7 @@ export function ClassInvoiceEditor({
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {visibleRows.map((row) => {
+              {visibleRows.map((row, index) => {
                 const invoice = row.invoice;
                 const isPaid = invoice?.status === "paid";
                 const isLocked = Boolean(invoice && invoice.status !== "unpaid");
@@ -278,6 +280,9 @@ export function ClassInvoiceEditor({
                     key={row.enrollmentId}
                     className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing && !row.studentArchived ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
                   >
+                    <td className="px-2 py-3 text-center tabular-nums text-stone-400">
+                      {(currentPage - 1) * PAGE_SIZE + index + 1}
+                    </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
                       <Link

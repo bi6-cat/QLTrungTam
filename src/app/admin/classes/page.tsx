@@ -23,6 +23,7 @@ import { requireStaff } from "@/lib/auth";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 import { describeAdjustment } from "@/lib/class-sessions";
 import { loadSessionSuggestions } from "@/lib/class-sessions-server";
+import { compareStudentNames, sortByGivenName } from "@/lib/student-search";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export default async function ClassesPage({
       : now.getFullYear();
   const showArchived = canManage && params.archived === "1";
   const isPastPeriod = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
-  const [classes, students, settings] = await Promise.all([
+  const [unsortedClasses, unsortedStudents, settings] = await Promise.all([
     prisma.classRoom.findMany({
       where: { archivedAt: showArchived ? { not: null } : null },
       orderBy: { createdAt: "asc" },
@@ -63,7 +64,6 @@ export default async function ClassesPage({
                 ]
               }
             : enrollmentVisibleInPeriodWhere(month, year),
-          orderBy: { student: { fullName: "asc" } },
           include: {
             student: true,
             invoices: { where: { month, year }, orderBy: { createdAt: "desc" } },
@@ -72,9 +72,17 @@ export default async function ClassesPage({
         }
       }
     }),
-    prisma.student.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" } }),
+    prisma.student.findMany({ where: { archivedAt: null } }),
     getAppSettings()
   ]);
+  // Mọi danh sách học sinh xếp theo tên (chữ cuối) rồi họ tên, xem compareStudentNames.
+  const classes = unsortedClasses.map((classRoom) => ({
+    ...classRoom,
+    enrollments: [...classRoom.enrollments].sort((left, right) =>
+      compareStudentNames(left.student.fullName, right.student.fullName)
+    )
+  }));
+  const students = sortByGivenName(unsortedStudents);
   const defaultCutoffLabel = describeSalaryCutoff(parseSalaryCutoff(settings.salaryCutoff) ?? DEFAULT_SALARY_CUTOFF);
 
   const selectedClass =
@@ -275,7 +283,7 @@ export default async function ClassesPage({
                         entityId={classRoom.id}
                         entityName={classRoom.name}
                         archived={Boolean(classRoom.archivedAt)}
-                        compact
+                        size="sm"
                       />
                     ) : null}
                     </div>

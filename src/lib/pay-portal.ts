@@ -53,7 +53,6 @@ export async function getPayableStudents(classId: string) {
       archivedAt: true,
       enrollments: {
         where: payableEnrollmentWhere(now),
-        orderBy: { student: { fullName: "asc" } },
         select: {
           leftAt: true,
           student: { select: { id: true, fullName: true, phone: true, archivedAt: true } },

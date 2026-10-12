@@ -93,12 +93,13 @@ function ResetPasswordButton({ manager }: { manager: Manager }) {
       <Button
         type="button"
         variant="ghost"
-        className="h-8 w-8 px-0 text-stone-500 hover:bg-indigo-50 hover:text-primary"
+        className="h-8 gap-1 rounded-lg px-2 text-xs text-stone-600 hover:bg-indigo-50 hover:text-primary"
         title={`Đặt lại mật khẩu ${manager.username}`}
         aria-label={`Đặt lại mật khẩu ${manager.username}`}
         onClick={() => setOpen(true)}
       >
-        <KeyRound className="h-4 w-4" />
+        <KeyRound className="h-3.5 w-3.5" />
+        Đổi mật khẩu
       </Button>
       {open ? (
         <Modal

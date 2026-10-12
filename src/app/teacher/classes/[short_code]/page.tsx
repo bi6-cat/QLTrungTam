@@ -16,6 +16,7 @@ import { teacherPath } from "@/lib/class-links";
 import { buildMemo, predictMemos } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { loadSessionSuggestions } from "@/lib/class-sessions-server";
+import { compareStudentNames } from "@/lib/student-search";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +56,6 @@ export default async function TeacherClassPage({
     include: {
       enrollments: {
         where: enrollmentVisibleInPeriodWhere(month, year),
-        orderBy: { student: { fullName: "asc" } },
         include: {
           student: true,
           invoices: {
@@ -78,18 +78,20 @@ export default async function TeacherClassPage({
     year,
     enrollments: classRoom.enrollments
   });
-  const planned = classRoom.enrollments.map((enrollment) => ({
-    enrollment,
-    plan: resolveMonthPlan({
-      month,
-      year,
-      latestMonth: enrollment.months[0],
-      invoice: enrollment.invoices[0],
+  const planned = [...classRoom.enrollments]
+    .sort((left, right) => compareStudentNames(left.student.fullName, right.student.fullName))
+    .map((enrollment) => ({
       enrollment,
-      classRoom,
-      suggestedSessions: suggestions.get(enrollment.id)?.sessions
-    })
-  }));
+      plan: resolveMonthPlan({
+        month,
+        year,
+        latestMonth: enrollment.months[0],
+        invoice: enrollment.invoices[0],
+        enrollment,
+        classRoom,
+        suggestedSessions: suggestions.get(enrollment.id)?.sessions
+      })
+    }));
   const visible = classRoom.archivedAt ? planned.filter((item) => item.plan.initialized) : planned;
   const predictedMemos = predictMemos({
     shortCode: classRoom.shortCode,
@@ -238,6 +240,7 @@ export default async function TeacherClassPage({
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] table-fixed text-left text-sm">
                 <colgroup>
+                  <col className="w-12" />
                   <col className="w-[22%]" />
                   <col className="w-[13%]" />
                   <col className="w-[12%]" />
@@ -246,8 +249,9 @@ export default async function TeacherClassPage({
                   <col className="w-[11%]" />
                   <col className="w-[18%]" />
                 </colgroup>
-                <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                   <tr>
+                    <th className="px-3 py-3 text-center">#</th>
                     <th className="px-4 py-3">Học sinh</th>
                     <th className="px-4 py-3">SĐT</th>
                     <th className="px-4 py-3">Trạng thái học</th>
@@ -258,7 +262,7 @@ export default async function TeacherClassPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {visibleRows.map((row) => (
+                  {visibleRows.map((row, index) => (
                     <tr
                       key={row.enrollment.id}
                       className={
@@ -267,6 +271,9 @@ export default async function TeacherClassPage({
                           : "transition-colors hover:bg-indigo-50/40"
                       }
                     >
+                      <td className="px-3 py-3 text-center tabular-nums text-stone-400">
+                        {(currentPage - 1) * PAGE_SIZE + index + 1}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="truncate font-semibold">{row.studentName}</div>
                       </td>

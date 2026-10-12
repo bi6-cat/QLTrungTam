@@ -8,6 +8,7 @@ import {
   buildReminderMessage,
   buildZaloLink,
   DEBT_SORTS,
+  DEFAULT_DEBT_SORT,
   debtPeriodKey,
   filterDebtRowsByPeriod,
   getOutstandingDebts,
@@ -71,7 +72,7 @@ export default async function DebtsPage({
   const filterHref = (nextPeriod: string, nextPage = 1) => {
     const search = new URLSearchParams();
     if (classId) search.set("classId", classId);
-    if (sort !== "oldest") search.set("sort", sort);
+    if (sort !== DEFAULT_DEBT_SORT) search.set("sort", sort);
     if (nextPeriod) search.set("period", nextPeriod);
     if (nextPage > 1) search.set("page", String(nextPage));
     const query = search.toString();
@@ -95,7 +96,7 @@ export default async function DebtsPage({
         />
         <StatCard
           label="Học sinh còn nợ"
-          tone="neutral"
+          tone="info"
           value={summary.studentCount}
           icon={<Users className="h-5 w-5" />}
         />
@@ -108,7 +109,7 @@ export default async function DebtsPage({
         />
         <StatCard
           label="Nợ trung bình / HS"
-          tone="primary"
+          tone="accent"
           value={formatCurrency(summary.studentCount > 0 ? Math.round(summary.totalAmount / summary.studentCount) : 0)}
           icon={<AlertTriangle className="h-5 w-5" />}
         />
@@ -189,8 +190,9 @@ export default async function DebtsPage({
         <Panel className="overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
                 <tr>
+                  <th className="w-12 px-3 py-3 text-center">#</th>
                   <th className="px-4 py-3">Học sinh</th>
                   <th className="px-4 py-3">Lớp</th>
                   <th className="px-4 py-3">Phụ huynh / SĐT</th>
@@ -201,13 +203,16 @@ export default async function DebtsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {visibleRows.map((row) => {
+                {visibleRows.map((row, index) => {
                   const full = fullRows.get(row.studentId) ?? row;
                   const otherInvoices = full.invoices.filter(
                     (invoice) => !row.invoices.some((item) => item.id === invoice.id)
                   );
                   return (
                     <tr key={row.studentId} className="align-top transition-colors hover:bg-indigo-50/40">
+                      <td className="px-3 py-3 text-center tabular-nums text-stone-400">
+                        {(page - 1) * PAGE_SIZE + index + 1}
+                      </td>
                       <td className="px-4 py-3">
                         <Link
                           href={`/admin/students/${row.studentId}`}

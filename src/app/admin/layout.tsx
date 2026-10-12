@@ -13,6 +13,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/80 backdrop-blur-xl">
+        {/* Dải màu thương hiệu mảnh trên cùng. */}
+        <div className="h-1 bg-gradient-to-r from-indigo-600 via-violet-500 to-amber-400" />
         <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-4 py-3 lg:px-8">
           <Link href="/" className="focus-ring flex items-center gap-3 rounded-xl">
             <img
@@ -21,7 +23,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               className="h-10 w-10 rounded-xl border border-stone-200 bg-white object-cover shadow-sm"
             />
             <div>
-              <p className="text-sm font-bold tracking-tight text-primary">APLUS ACADEMY</p>
+              <p className="bg-gradient-to-r from-indigo-700 to-violet-600 bg-clip-text text-sm font-extrabold tracking-tight text-transparent">
+                APLUS ACADEMY
+              </p>
               <p className="text-xs text-stone-500">
                 Xin chào, {session.username}
                 {session.role === "manager" ? ` · ${ROLE_LABEL.manager}` : ""}
@@ -38,7 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </header>
 
       <div className="mx-auto grid max-w-[1800px] gap-6 px-4 py-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:px-8">
-        <aside className="h-fit rounded-2xl border border-stone-200/80 bg-white/80 p-2 shadow-soft backdrop-blur lg:sticky lg:top-[80px]">
+        <aside className="h-fit rounded-2xl border border-stone-200/80 bg-white/80 p-2 shadow-soft backdrop-blur lg:sticky lg:top-[84px]">
           <AdminNav role={session.role} />
         </aside>
         <main className="min-w-0 animate-fade-up">{children}</main>

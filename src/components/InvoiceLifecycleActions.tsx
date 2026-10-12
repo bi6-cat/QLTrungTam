@@ -78,7 +78,7 @@ export function InvoiceLifecycleActions({
           <Button
             type="button"
             variant="ghost"
-            className="h-8 w-8 shrink-0 px-0"
+            className="h-8 shrink-0 gap-1 whitespace-nowrap rounded-lg px-2 text-xs text-stone-600"
             disabled={disabled}
             title={disabled ? "Lưu hoặc hủy bản nháp trước khi đổi trạng thái hóa đơn" : "Mở các thao tác khác"}
             aria-label="Mở thao tác khác cho hóa đơn"
@@ -87,6 +87,7 @@ export function InvoiceLifecycleActions({
             onClick={() => !disabled && setChooserOpen(true)}
           >
             <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            Miễn/Hủy
           </Button>
         ) : (
           <Button

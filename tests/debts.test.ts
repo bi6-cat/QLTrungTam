@@ -75,6 +75,6 @@ describe("debts by month", () => {
     assert.equal(parseDebtPeriod("2026-13"), null);
     assert.equal(parseDebtPeriod(undefined), null);
     assert.equal(parseDebtSort("amount"), "amount");
-    assert.equal(parseDebtSort("drop table"), "oldest");
+    assert.equal(parseDebtSort("drop table"), "name");
   });
 });

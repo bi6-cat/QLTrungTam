@@ -3,6 +3,7 @@ import { absoluteUrl, payPath } from "@/lib/class-links";
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_DEBT_REMINDER_TEMPLATE } from "@/lib/settings";
+import { compareStudentNames } from "@/lib/student-search";
 
 export type DebtInvoice = {
   id: string;
@@ -143,14 +144,17 @@ export async function getOutstandingDebts(options?: {
 export type DebtSort = "oldest" | "newest" | "amount" | "name";
 
 export const DEBT_SORTS: Array<{ value: DebtSort; label: string }> = [
+  { value: "name", label: "Tên học sinh A→Z" },
   { value: "oldest", label: "Nợ lâu nhất trước" },
   { value: "newest", label: "Tháng gần nhất trước" },
-  { value: "amount", label: "Nợ nhiều tiền nhất" },
-  { value: "name", label: "Tên học sinh A→Z" }
+  { value: "amount", label: "Nợ nhiều tiền nhất" }
 ];
 
+/** Mặc định xếp theo tên như mọi danh sách học sinh khác. */
+export const DEFAULT_DEBT_SORT: DebtSort = "name";
+
 export function parseDebtSort(value: string | undefined): DebtSort {
-  return DEBT_SORTS.some((item) => item.value === value) ? (value as DebtSort) : "oldest";
+  return DEBT_SORTS.some((item) => item.value === value) ? (value as DebtSort) : DEFAULT_DEBT_SORT;
 }
 
 export type DebtPeriod = {
@@ -221,7 +225,6 @@ export function filterDebtRowsByPeriod(rows: DebtRow[], period: { month: number;
 
 export function sortDebtRows(rows: DebtRow[], sort: DebtSort): DebtRow[] {
   const newestIndex = (row: DebtRow) => Math.max(...row.invoices.map((invoice) => monthIndex(invoice.month, invoice.year)));
-  const collator = new Intl.Collator("vi");
   return [...rows].sort((left, right) => {
     switch (sort) {
       case "newest":
@@ -229,7 +232,7 @@ export function sortDebtRows(rows: DebtRow[], sort: DebtSort): DebtRow[] {
       case "amount":
         return right.totalAmount - left.totalAmount || right.oldestOverdue - left.oldestOverdue;
       case "name":
-        return collator.compare(left.studentName, right.studentName);
+        return compareStudentNames(left.studentName, right.studentName);
       default:
         return right.oldestOverdue - left.oldestOverdue || right.totalAmount - left.totalAmount;
     }

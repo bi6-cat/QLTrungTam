@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { compareStudentNames } from "@/lib/student-search";
 import { NextResponse } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/lib/excel-report";
@@ -40,18 +41,14 @@ export async function GET(request: Request) {
     );
   }
 
-  const [invoices, selectedClass] = await Promise.all([
+  const [unsortedInvoices, selectedClass] = await Promise.all([
     prisma.monthlyInvoice.findMany({
       where: {
         month,
         year,
         enrollment: classId ? { classId } : undefined
       },
-      orderBy: [
-        { classNameSnapshot: "asc" },
-        { studentNameSnapshot: "asc" },
-        { id: "asc" }
-      ],
+      orderBy: { id: "asc" },
       include: {
         enrollment: { include: { student: true, classRoom: true } }
       }
@@ -59,9 +56,21 @@ export async function GET(request: Request) {
     classId ? prisma.classRoom.findUnique({ where: { id: classId } }) : null
   ]);
 
+  // Theo lớp rồi theo tên học sinh (chữ cuối), như mọi danh sách học sinh trong app.
+  const className = (invoice: (typeof unsortedInvoices)[number]) =>
+    invoice.classNameSnapshot ?? invoice.enrollment.classRoom.name;
+  const studentName = (invoice: (typeof unsortedInvoices)[number]) =>
+    invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName;
+  const classCollator = new Intl.Collator("vi");
+  const invoices = [...unsortedInvoices].sort(
+    (left, right) =>
+      classCollator.compare(className(left), className(right)) || compareStudentNames(studentName(left), studentName(right))
+  );
+
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(`T${month}-${year}`);
   const columns = [
+    { key: "stt", width: 6 },
     { key: "className", width: 22 },
     { key: "shortCode", width: 12 },
     { key: "teacherName", width: 20 },
@@ -86,6 +95,7 @@ export async function GET(request: Request) {
 
   const headerRow = sheet.getRow(headerStartRow);
   headerRow.values = [
+    "STT",
     "Lớp",
     "Mã lớp",
     "Giáo viên",
@@ -103,13 +113,19 @@ export async function GET(request: Request) {
   styleTableHeaderRow(headerRow);
 
   const firstDataRow = headerStartRow + 1;
+  // STT đánh lại từ 1 cho mỗi lớp.
+  let stt = 0;
+  let previousClass = "";
   for (const invoice of invoices) {
+    stt = className(invoice) === previousClass ? stt + 1 : 1;
+    previousClass = className(invoice);
     sheet.addRow({
-      className: invoice.classNameSnapshot ?? invoice.enrollment.classRoom.name,
+      stt,
+      className: className(invoice),
       shortCode: invoice.classShortCodeSnapshot ?? invoice.enrollment.classRoom.shortCode,
       teacherName:
         (invoice.teacherNameSnapshot ?? invoice.enrollment.classRoom.teacherName) || "-",
-      student: invoice.studentNameSnapshot ?? invoice.enrollment.student.fullName,
+      student: studentName(invoice),
       phone: invoice.studentPhoneSnapshot ?? invoice.enrollment.student.phone,
       month: `${invoice.month}/${invoice.year}`,
       sessions: invoice.sessions,

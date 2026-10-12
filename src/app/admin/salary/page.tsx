@@ -196,7 +196,7 @@ export default async function SalaryPage({
         />
         <StatCard
           label={`Phải trả ${formatMonth(now.getMonth() + 1, now.getFullYear())}`}
-          tone="neutral"
+          tone="accent"
           value={formatCurrency(currentDue)}
           hint="Theo học phí đã nộp tính đến hôm nay"
           icon={<Users className="h-5 w-5" />}
@@ -488,7 +488,7 @@ function ClassLedger({
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] text-left text-sm">
-          <thead className="bg-stone-50/80 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
             <tr>
               <th className="px-4 py-2.5">Tháng lương</th>
               <th className="px-4 py-2.5 text-right">Tổng tháng</th>

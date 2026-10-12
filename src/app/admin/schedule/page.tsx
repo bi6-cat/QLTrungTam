@@ -126,14 +126,14 @@ export default async function SchedulePage({
         />
         <StatCard
           label="Lớp nghỉ"
-          tone="neutral"
+          tone="warning"
           value={rangeSummary.cancelled}
           hint={view === "week" ? "Trong tuần đang xem" : "Trong tháng đang xem"}
           icon={<CalendarX2 className="h-5 w-5" />}
         />
         <StatCard
           label="Học bù"
-          tone="neutral"
+          tone="violet"
           value={rangeSummary.makeup}
           hint={view === "week" ? "Trong tuần đang xem" : "Trong tháng đang xem"}
           icon={<CalendarCheck2 className="h-5 w-5" />}
