@@ -10,3 +10,5 @@ backups
 .deploy
 *.tsbuildinfo
 secrets/
+# MCP: cấu hình cục bộ chứa mật khẩu DB
+mcp/.env.local

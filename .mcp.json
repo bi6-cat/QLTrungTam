@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "qltrungtam": {
+      "command": "bash",
+      "args": ["mcp/run.sh"]
+    }
+  }
+}
