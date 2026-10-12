@@ -12,7 +12,7 @@ import {
 } from "@/lib/enrollment-period";
 import { resolveClassLink } from "@/lib/class-link-resolver";
 import { teacherPath } from "@/lib/class-links";
-import { buildMemo } from "@/lib/payment";
+import { buildMemo, predictMemos } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { MonthSwitcher } from "@/components/MonthSwitcher";
 
@@ -82,6 +82,17 @@ export default async function TeacherClassPage({
     })
   }));
   const visible = classRoom.archivedAt ? planned.filter((item) => item.plan.initialized) : planned;
+  const predictedMemos = predictMemos({
+    shortCode: classRoom.shortCode,
+    month,
+    year,
+    issuedMemos: visible.flatMap(({ enrollment }) =>
+      enrollment.invoices[0] ? [enrollment.invoices[0].memoContent] : []
+    ),
+    pending: visible
+      .filter(({ enrollment, plan }) => !enrollment.invoices[0] && !enrollment.student.archivedAt && plan.status === "active")
+      .map(({ enrollment }) => ({ key: enrollment.id, phone: enrollment.student.phone }))
+  });
   const rows = visible.map(({ enrollment, plan }) => {
     const invoice = enrollment.invoices[0] ?? null;
     const periodInitialized = plan.initialized;
@@ -105,7 +116,10 @@ export default async function TeacherClassPage({
       amount,
       studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
       studentPhone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
-      memo: invoice?.memoContent ?? buildMemo(classRoom.shortCode, enrollment.student.phone, month, year)
+      memo:
+        invoice?.memoContent ??
+        predictedMemos.get(enrollment.id)?.memo ??
+        buildMemo(classRoom.shortCode, enrollment.student.phone, month, year)
     };
   });
 

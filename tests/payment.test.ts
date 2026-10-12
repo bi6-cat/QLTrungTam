@@ -5,7 +5,10 @@ import {
   buildMemo,
   buildVietQrImageUrl,
   normalizePhone,
-  parseMemo
+  parseMemo,
+  pickMemoSuffix,
+  predictMemos,
+  usedMemoSuffixes
 } from "../src/lib/payment";
 
 describe("normalizePhone", () => {
@@ -33,6 +36,7 @@ describe("buildMemo", () => {
     assert.deepEqual(parseMemo(memo), {
       shortCode: "HOA_12-A",
       phone: "84912345678",
+      suffix: "",
       year: 2027,
       month: 12
     });
@@ -44,6 +48,7 @@ describe("parseMemo", () => {
     assert.deepEqual(parseMemo("MBVCB.123456 hp van-8 0912345678 26t9 chuyen tien"), {
       shortCode: "VAN-8",
       phone: "0912345678",
+      suffix: "",
       year: 2026,
       month: 9
     });
@@ -53,6 +58,7 @@ describe("parseMemo", () => {
     assert.deepEqual(parseMemo("HP LY_9 0987654321 T10"), {
       shortCode: "LY_9",
       phone: "0987654321",
+      suffix: "",
       year: null,
       month: 10
     });
@@ -62,6 +68,7 @@ describe("parseMemo", () => {
     assert.deepEqual(parseMemo("HPLS12A0987787878 26T8"), {
       shortCode: "LS12A",
       phone: "0987787878",
+      suffix: "",
       year: 2026,
       month: 8
     });
@@ -71,6 +78,7 @@ describe("parseMemo", () => {
     assert.deepEqual(parseMemo("HPENA2091234567826T8"), {
       shortCode: "ENA2",
       phone: "0912345678",
+      suffix: "",
       year: 2026,
       month: 8
     });
@@ -113,5 +121,79 @@ describe("buildVietQrImageUrl", () => {
     assert.equal(url.searchParams.get("amount"), "1250000");
     assert.equal(url.searchParams.get("addInfo"), "HP TOAN-6 0912345678 26T7");
     assert.equal(url.searchParams.get("accountName"), "TRUNG TAM A & B");
+  });
+});
+
+describe("memo suffix for siblings sharing a phone", () => {
+  test("builds and parses a suffixed memo", () => {
+    const memo = buildMemo("ls12a", "0987787878", 8, 2026, "b");
+    assert.equal(memo, "HP LS12A 0987787878B 26T8");
+    assert.deepEqual(parseMemo(memo), {
+      shortCode: "LS12A",
+      phone: "0987787878",
+      suffix: "B",
+      year: 2026,
+      month: 8
+    });
+  });
+
+  test("reads the suffix in bank content that strips spaces", () => {
+    assert.deepEqual(parseMemo("HPLS12A0987787878B 26T8"), {
+      shortCode: "LS12A",
+      phone: "0987787878",
+      suffix: "B",
+      year: 2026,
+      month: 8
+    });
+  });
+
+  test("a legacy memo without a year still reads the suffix", () => {
+    assert.equal(parseMemo("HP LY_9 0987654321C T10")?.suffix, "C");
+  });
+
+  test("a plain memo has an empty suffix", () => {
+    assert.equal(parseMemo("HP A 0912345678 T10")?.suffix, "");
+  });
+
+  test("picks the first unused suffix and reports exhaustion", () => {
+    assert.equal(pickMemoSuffix([]), "");
+    assert.equal(pickMemoSuffix([""]), "B");
+    assert.equal(pickMemoSuffix(["", "B", "D"]), "C");
+    assert.equal(pickMemoSuffix(["", "B", "C", "D", "E", "F", "G", "H"]), null);
+  });
+
+  test("only counts suffixes of memos with the same phone", () => {
+    const memos = ["HP LS12A 0987787878 26T8", "HP LS12A 0911111111 26T8", "HP LS12A 0987787878B 26T8", "khong-doc-duoc"];
+    assert.deepEqual(usedMemoSuffixes(memos, "0987 787 878"), ["", "B"]);
+  });
+
+  test("predicts memos in order, keeping the first sibling's memo unchanged", () => {
+    const predicted = predictMemos({
+      shortCode: "LS12A",
+      month: 8,
+      year: 2026,
+      issuedMemos: [],
+      pending: [
+        { key: "a", phone: "0987787878" },
+        { key: "b", phone: "0987787878" },
+        { key: "c", phone: "0911111111" },
+        { key: "d", phone: "0987787878" }
+      ]
+    });
+    assert.equal(predicted.get("a")?.memo, "HP LS12A 0987787878 26T8");
+    assert.equal(predicted.get("b")?.memo, "HP LS12A 0987787878B 26T8");
+    assert.equal(predicted.get("c")?.suffix, "");
+    assert.equal(predicted.get("d")?.memo, "HP LS12A 0987787878C 26T8");
+  });
+
+  test("predicts after an already issued memo", () => {
+    const predicted = predictMemos({
+      shortCode: "LS12A",
+      month: 8,
+      year: 2026,
+      issuedMemos: ["HP LS12A 0987787878 26T8"],
+      pending: [{ key: "x", phone: "0987787878" }]
+    });
+    assert.equal(predicted.get("x")?.memo, "HP LS12A 0987787878B 26T8");
   });
 });

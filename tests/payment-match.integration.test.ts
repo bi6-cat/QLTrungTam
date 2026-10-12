@@ -67,6 +67,43 @@ describe("memo matching", { concurrency: false }, () => {
     assert.equal(match.invoice, null);
   });
 
+  test("siblings sharing a phone in one class match their own suffixed memo", async () => {
+    const fixture = await harness.createFixture();
+    const first = await harness.createInvoice(fixture, { amount: 800_000, realMemo: { phoneSnapshot: fixture.phone } });
+    const second = await harness.createSiblingInvoice(fixture, {
+      suffix: "B",
+      month: first.month,
+      year: first.year,
+      amount: 800_000
+    });
+    assert.notEqual(first.memoContent, second.memoContent);
+
+    const plain = await matchInvoiceFromTransaction({ content: first.memoContent, amount: 800_000, transferredAt });
+    assert.equal(plain.invoice?.id, first.id);
+
+    const suffixed = await matchInvoiceFromTransaction({ content: second.memoContent, amount: 800_000, transferredAt });
+    assert.equal(suffixed.invoice?.id, second.id);
+
+    const spaceStripped = await matchInvoiceFromTransaction({
+      content: second.memoContent.replace(/ /g, ""),
+      amount: 800_000,
+      transferredAt
+    });
+    assert.equal(spaceStripped.invoice?.id, second.id);
+  });
+
+  test("a suffixed memo does not match an invoice issued without that suffix", async () => {
+    const fixture = await harness.createFixture();
+    const invoice = await harness.createInvoice(fixture, { amount: 800_000, realMemo: { phoneSnapshot: fixture.phone } });
+
+    const match = await matchInvoiceFromTransaction({
+      content: invoice.memoContent.replace(fixture.phone, `${fixture.phone}B`),
+      amount: 800_000,
+      transferredAt
+    });
+    assert.equal(match.invoice, null);
+  });
+
   test("falls back to the current phone for invoices without a phone snapshot", async () => {
     const fixture = await harness.createFixture();
     const invoice = await harness.createInvoice(fixture, {

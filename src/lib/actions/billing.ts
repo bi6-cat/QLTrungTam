@@ -5,7 +5,7 @@ import { actionFailure, revalidateFinancialPaths, runSerializableAction } from "
 import { requireAdmin, requireStaff, type StaffUser } from "@/lib/auth";
 import { isEnrollmentActiveInPeriod, latestMonthUpToPeriodArgs, resolveMonthPlan } from "@/lib/enrollment-period";
 import { changeInvoiceLifecycle, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
-import { buildMemo } from "@/lib/payment";
+import { buildMemo, normalizePhone, pickMemoSuffix, usedMemoSuffixes } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { NOTE_MAX_LENGTH, safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
 
@@ -26,7 +26,7 @@ export async function updateClassDetailsAction(_prevState: ResultState, formData
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   const parsed = actor.role === "owner" ? data : { ...data, intent: "save" as const };
 
-  let summary: { created: number; updated: number; voided: number };
+  let summary: { created: number; updated: number; voided: number; suffixed: string[] };
   try {
     summary = await saveClassDetails(parsed, formData, actor);
   } catch (saveError) {
@@ -39,7 +39,12 @@ export async function updateClassDetailsAction(_prevState: ResultState, formData
     summary.updated > 0 ? `cập nhật ${summary.updated} học sinh` : "",
     summary.voided > 0 ? `hủy ${summary.voided} hóa đơn do bảo lưu` : ""
   ].filter(Boolean);
-  return successState(parts.length > 0 ? `Đã ${parts.join(", ")}.` : "Đã lưu, không có thay đổi.");
+  const message = parts.length > 0 ? `Đã ${parts.join(", ")}.` : "Đã lưu, không có thay đổi.";
+  return successState(
+    summary.suffixed.length > 0
+      ? `${message} Trùng SĐT trong lớp nên memo có hậu tố: ${summary.suffixed.join("; ")}.`
+      : message
+  );
 }
 
 async function saveClassDetails(
@@ -55,7 +60,7 @@ async function saveClassDetails(
   );
 
   return runSerializableAction(async (tx) => {
-    const summary = { created: 0, updated: 0, voided: 0 };
+    const summary = { created: 0, updated: 0, voided: 0, suffixed: [] as string[] };
     const classState = await tx.classRoom.findUnique({
       where: { id: parsed.classId },
       select: { archivedAt: true }
@@ -214,6 +219,36 @@ async function saveClassDetails(
         });
         summary.voided += 1;
       } else if (!existingInvoice && parsed.intent === "create" && status === "active") {
+        // Cùng lớp, cùng kỳ, cùng SĐT (anh chị em) thì memo gốc đã bị dùng: thêm hậu tố B, C, ...
+        // Tính cả hóa đơn đã hủy/miễn vì khôi phục lại sẽ lấy lại đúng memo cũ.
+        const issuedMemos = await tx.monthlyInvoice.findMany({
+          where: {
+            month,
+            year,
+            enrollment: { classId: enrollment.classId },
+            memoContent: { contains: normalizePhone(enrollment.student.phone) }
+          },
+          select: { memoContent: true }
+        });
+        const memoSuffix = pickMemoSuffix(
+          usedMemoSuffixes(
+            issuedMemos.map((item) => item.memoContent),
+            enrollment.student.phone
+          )
+        );
+        if (memoSuffix === null) {
+          throw new Error(
+            `Quá nhiều học sinh cùng SĐT ${enrollment.student.phone} trong lớp ${enrollment.classRoom.shortCode}, không thể tạo thêm memo khác nhau cho ${enrollment.student.fullName}.`
+          );
+        }
+        const memoContent = buildMemo(
+          enrollment.classRoom.shortCode,
+          enrollment.student.phone,
+          month,
+          year,
+          memoSuffix
+        );
+        if (memoSuffix) summary.suffixed.push(`${enrollment.student.fullName} (${memoContent})`);
         await tx.monthlyInvoice.create({
           data: {
             enrollmentId,
@@ -222,7 +257,7 @@ async function saveClassDetails(
             sessions,
             pricePerSession: periodPricePerSession,
             amount: sessions * periodPricePerSession,
-            memoContent: buildMemo(enrollment.classRoom.shortCode, enrollment.student.phone, month, year),
+            memoContent,
             studentNameSnapshot: enrollment.student.fullName,
             studentPhoneSnapshot: enrollment.student.phone,
             classNameSnapshot: enrollment.classRoom.name,

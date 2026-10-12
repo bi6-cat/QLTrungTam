@@ -147,6 +147,45 @@ export class LedgerTestHarness {
     });
   }
 
+  /**
+   * Anh/chị/em: học sinh mới cùng SĐT, cùng lớp với fixture, kèm hóa đơn cùng kỳ mang memo thật
+   * (có hậu tố nếu truyền suffix).
+   */
+  async createSiblingInvoice(
+    fixture: LedgerFixture,
+    options: { suffix: string; month: number; year: number; amount?: number }
+  ) {
+    this.fixtureSequence += 1;
+    this.invoiceSequence += 1;
+    const sequence = this.fixtureSequence.toString();
+    const amount = options.amount ?? 800_000;
+    const studentId = `${this.entityPrefix}student_${sequence}`;
+    const enrollmentId = `${this.entityPrefix}enrollment_${sequence}`;
+
+    await prisma.student.create({
+      data: {
+        id: studentId,
+        fullName: `Ledger integration sibling ${sequence}`,
+        phone: fixture.phone,
+        address: "Ledger integration test address"
+      }
+    });
+    await prisma.enrollment.create({ data: { id: enrollmentId, classId: fixture.classId, studentId } });
+    return prisma.monthlyInvoice.create({
+      data: {
+        id: `${this.entityPrefix}invoice_${this.invoiceSequence}`,
+        enrollmentId,
+        month: options.month,
+        year: options.year,
+        sessions: 1,
+        pricePerSession: amount,
+        amount,
+        memoContent: buildMemo(fixture.shortCode, fixture.phone, options.month, options.year, options.suffix),
+        studentPhoneSnapshot: fixture.phone
+      }
+    });
+  }
+
   async createBankTransaction(options: CreateBankTransactionOptions = {}) {
     this.transactionSequence += 1;
     const sequence = this.transactionSequence;
