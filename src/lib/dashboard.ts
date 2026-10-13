@@ -33,6 +33,11 @@ export type TrendPoint = {
   label: string;
   collected: number;
   outstanding: number;
+  /** Số học sinh (không trùng) đang học trong tháng. */
+  students: number;
+  /** Lượt ghi danh mới / lượt nghỉ lớp bắt đầu trong tháng. */
+  joined: number;
+  left: number;
 };
 
 export type DashboardData = {
@@ -92,7 +97,9 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
   // 6 tháng gần nhất tính lùi từ tháng đang xem, dùng cho biểu đồ xu hướng.
   const trendPeriods = Array.from({ length: 6 }, (_, offset) => shiftMonth(month, year, offset - 5));
 
-  const [classes, unpaidAll, unmatchedTransactions, trendGroups, pendingSalary] = await Promise.all([
+  const trendStart = new Date(trendPeriods[0].year, trendPeriods[0].month - 1, 1);
+
+  const [classes, unpaidAll, unmatchedTransactions, trendGroups, pendingSalary, trendEnrollments] = await Promise.all([
     prisma.classRoom.findMany({
       orderBy: { createdAt: "asc" },
       select: {
@@ -145,7 +152,18 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
       },
       _sum: { amount: true, paidAmount: true }
     }),
-    getPendingSalaryLines(now)
+    getPendingSalaryLines(now),
+    // Ghi danh có mặt trong khoảng 6 tháng, cùng điều kiện với ô "Học sinh đang học".
+    prisma.enrollment.findMany({
+      where: {
+        status: "active",
+        startDate: { lt: periodEnd },
+        OR: [{ leftAt: null }, { leftAt: { gte: trendStart } }],
+        student: { archivedAt: null },
+        classRoom: { archivedAt: null }
+      },
+      select: { studentId: true, startDate: true, leftAt: true }
+    })
   ]);
 
   const rows: DashboardClassRow[] = classes
@@ -213,8 +231,26 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
       year: period.year,
       label: `T${period.month}`,
       collected: 0,
-      outstanding: 0
+      outstanding: 0,
+      students: 0,
+      joined: 0,
+      left: 0
     });
+  }
+  for (const period of trendPeriods) {
+    const point = trendMap.get(`${period.year}-${period.month}`)!;
+    const start = new Date(period.year, period.month - 1, 1).getTime();
+    const end = new Date(period.year, period.month, 1).getTime();
+    const studying = new Set<string>();
+    for (const enrollment of trendEnrollments) {
+      const startedAt = enrollment.startDate.getTime();
+      const leftAt = enrollment.leftAt?.getTime() ?? null;
+      if (startedAt < end && (leftAt === null || leftAt > start)) studying.add(enrollment.studentId);
+      if (startedAt >= start && startedAt < end) point.joined += 1;
+      // leftAt = ngày đầu của tháng đầu tiên không còn học.
+      if (leftAt !== null && leftAt >= start && leftAt < end) point.left += 1;
+    }
+    point.students = studying.size;
   }
   for (const group of trendGroups) {
     const point = trendMap.get(`${group.year}-${group.month}`);

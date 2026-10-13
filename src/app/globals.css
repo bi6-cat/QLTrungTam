@@ -1,5 +1,13 @@
 @tailwind base;
 @tailwind components;
+
+/* Lưới chưa khai báo cột dùng một cột co được (như grid-cols-1). Cột ngầm định
+   "auto" sẽ nở theo nội dung rộng nhất (bảng, chữ không xuống dòng…) và đẩy cả
+   trang tràn ngang trên điện thoại. Đặt trước utilities để grid-cols-* vẫn thắng. */
+.grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @tailwind utilities;
 
 :root {

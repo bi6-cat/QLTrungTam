@@ -255,8 +255,8 @@ function SessionCard({
       onClick={() => onSelect(session)}
       className={clsx("focus-ring w-full rounded-lg border p-2 text-left transition-colors", style.card)}
     >
-      <div className="flex items-center justify-between gap-1">
-        <span className={clsx("text-xs font-bold text-neutralText", session.status === "cancelled" && "line-through decoration-rose-400")}>
+      <div className="flex flex-wrap items-center justify-between gap-1">
+        <span className={clsx("whitespace-nowrap text-xs font-bold text-neutralText", session.status === "cancelled" && "line-through decoration-rose-400")}>
           {session.startTime}–{session.endTime}
         </span>
         <span className={clsx("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", style.chip)}>{style.label}</span>
@@ -293,7 +293,8 @@ function WeekView({
   onMakeup: (date: IsoDate) => void;
 }) {
   return (
-    <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+    // 7 cột chỉ khi màn đủ rộng (mỗi cột ~160px); hẹp hơn thì xếp 4/2/1 cột để thẻ buổi học không tràn.
+    <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
       {days.map((day) => {
         const daySessions = sessions.filter((session) => session.date === day);
         const isToday = day === today;
@@ -301,7 +302,7 @@ function WeekView({
           <div
             key={day}
             className={clsx(
-              "grid content-start gap-2 rounded-xl border p-2",
+              "grid min-w-0 content-start gap-2 rounded-xl border p-2",
               isToday ? "border-indigo-300 bg-indigo-50/50" : "border-stone-200 bg-stone-50/60"
             )}
           >

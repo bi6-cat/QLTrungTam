@@ -13,7 +13,7 @@ export function LoginForm() {
       <Field label="Tên đăng nhập">
         <span className="relative block">
           <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-          <Input name="username" autoComplete="username" required defaultValue="admin" className="h-12 pl-10" />
+          <Input name="username" autoComplete="username" required className="h-12 pl-10" />
         </span>
       </Field>
       <Field label="Mật khẩu">

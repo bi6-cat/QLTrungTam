@@ -30,8 +30,16 @@ import { MonthSwitcher } from "@/components/MonthSwitcher";
 
 export const dynamic = "force-dynamic";
 
-/** Chiều cao vùng vẽ cột của biểu đồ xu hướng, tính bằng pixel. */
-const CHART_HEIGHT = 176;
+/** Chiều cao vùng vẽ cột của biểu đồ học phí / học sinh, tính bằng pixel. */
+const CHART_HEIGHT = 150;
+const STUDENT_CHART_HEIGHT = 56;
+
+/** Số tiền rút gọn cho nhãn trên cột (31,6tr, 850k) để vừa cột hẹp trên điện thoại. */
+function formatCompact(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}tr`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
+  return String(value);
+}
 
 function percent(value: number) {
   return `${Math.round(value * 100)}%`;
@@ -108,6 +116,7 @@ export default async function AdminHomePage({
   const [dashboard, insights] = await Promise.all([getDashboard(month, year), getDashboardInsights(month, year)]);
   const { totals, alerts, outstandingAllTime, trend } = dashboard;
   const trendMax = Math.max(1, ...trend.map((point) => point.collected + point.outstanding));
+  const studentMax = Math.max(1, ...trend.map((point) => point.students));
 
   const actionItems = [
     // Tạo hóa đơn là việc của chủ trung tâm; quản lý phụ chỉ nhập số buổi.
@@ -192,9 +201,11 @@ export default async function AdminHomePage({
     { key: "pending", label: "Chưa điểm danh", value: attendance.pending, bar: "bg-amber-400" },
     { key: "upcoming", label: "Sắp tới", value: attendance.upcoming, bar: "bg-stone-200" }
   ];
-  const classRanking = [...dashboard.classes]
+  // Lớp thu thấp nhất lên đầu, tối đa 6 lớp (bảng "Theo lớp" bên dưới có đủ mọi lớp).
+  const rankedClasses = [...dashboard.classes]
     .filter((row) => row.expectedAmount > 0)
-    .sort((left, right) => right.collectionRate - left.collectionRate);
+    .sort((left, right) => left.collectionRate - right.collectionRate);
+  const classRanking = rankedClasses.slice(0, 6);
 
   return (
     <div className="grid gap-6">
@@ -295,28 +306,30 @@ export default async function AdminHomePage({
             icon={<TrendingUp className="h-5 w-5" />}
             tone="indigo"
             title="Xu hướng 6 tháng"
-            description="Cột đậm là tiền đã thu, phần nhạt phía trên là khoản còn nợ của tháng đó."
-            action={
-              <div className="hidden items-center gap-3 text-xs text-stone-500 sm:flex">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-primary" /> Đã thu
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-amber-200" /> Chưa thu
-                </span>
-              </div>
-            }
+            description="Học phí đã thu, còn nợ và số học sinh theo từng tháng. Bấm vào cột để xem tháng đó."
           />
 
+          {/* Học phí: cột đậm là đã thu, phần vàng phía trên là còn nợ của tháng đó. */}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Học phí</p>
+            <div className="flex items-center gap-3 text-xs text-stone-500">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm bg-primary" /> Đã thu
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm bg-amber-200" /> Chưa thu
+              </span>
+            </div>
+          </div>
           {/* Chiều cao cột tính bằng pixel: phần trăm không dùng được ở đây vì
               container flex không truyền xuống chiều cao xác định. */}
-          <div className="relative mt-6">
-            <div className="pointer-events-none absolute inset-x-0 top-6 grid" style={{ height: `${CHART_HEIGHT}px` }}>
+          <div className="relative mt-2">
+            <div className="pointer-events-none absolute inset-x-0 top-5 grid" style={{ height: `${CHART_HEIGHT}px` }}>
               {[0, 1, 2, 3].map((line) => (
                 <div key={line} className="border-t border-dashed border-stone-100" />
               ))}
             </div>
-            <div className="relative flex items-end gap-3">
+            <div className="relative grid grid-cols-6 items-end gap-2 sm:gap-3">
               {trend.map((point) => {
                 const total = point.collected + point.outstanding;
                 const scale = (value: number) =>
@@ -328,18 +341,18 @@ export default async function AdminHomePage({
                   <Link
                     key={`${point.year}-${point.month}`}
                     href={`/admin?month=${point.month}&year=${point.year}`}
-                    className="group flex min-w-0 flex-1 flex-col items-center gap-2"
+                    className="group flex min-w-0 flex-col items-center gap-1.5"
                     title={`${formatMonth(point.month, point.year)}: thu ${formatCurrency(point.collected)}, nợ ${formatCurrency(point.outstanding)}`}
                   >
                     <span
                       className={clsx(
-                        "h-4 truncate text-[11px] font-semibold text-stone-500 transition-opacity",
+                        "h-4 max-w-full truncate text-[11px] font-semibold text-stone-500 transition-opacity",
                         isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                       )}
                     >
-                      {total > 0 ? formatCurrency(total) : ""}
+                      {total > 0 ? formatCompact(total) : ""}
                     </span>
-                    <div className="flex w-full max-w-16 flex-col justify-end" style={{ height: `${CHART_HEIGHT}px` }}>
+                    <div className="flex w-full max-w-14 flex-col justify-end" style={{ height: `${CHART_HEIGHT}px` }}>
                       {outstandingHeight > 0 ? (
                         <div className="w-full rounded-t-md bg-amber-200" style={{ height: `${outstandingHeight}px` }} />
                       ) : null}
@@ -360,6 +373,49 @@ export default async function AdminHomePage({
                 );
               })}
             </div>
+          </div>
+
+          {/* Học sinh: số học sinh đang học, kèm lượt vào học / nghỉ trong tháng. */}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Học sinh đang học</p>
+            <div className="flex items-center gap-3 text-xs text-stone-500">
+              <span className="font-semibold text-emerald-600">+ vào học</span>
+              <span className="font-semibold text-rose-600">− nghỉ</span>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-6 items-end gap-2 sm:gap-3">
+            {trend.map((point) => {
+              const isSelected = point.month === month && point.year === year;
+              const height = point.students > 0 ? Math.max(4, Math.round((point.students / studentMax) * STUDENT_CHART_HEIGHT)) : 0;
+              return (
+                <Link
+                  key={`${point.year}-${point.month}`}
+                  href={`/admin?month=${point.month}&year=${point.year}`}
+                  className="group flex min-w-0 flex-col items-center gap-1"
+                  title={`${formatMonth(point.month, point.year)}: ${point.students} học sinh, +${point.joined} vào học, −${point.left} nghỉ`}
+                >
+                  <span className={clsx("text-sm font-bold tabular-nums", isSelected ? "text-sky-700" : "text-neutralText")}>{point.students}</span>
+                  <div className="flex w-full max-w-14 flex-col justify-end" style={{ height: `${STUDENT_CHART_HEIGHT}px` }}>
+                    {height > 0 ? (
+                      <div
+                        className={clsx(
+                          "w-full rounded-t-md",
+                          isSelected ? "bg-gradient-to-b from-sky-400 to-sky-600" : "bg-sky-100 transition-colors group-hover:bg-sky-300"
+                        )}
+                        style={{ height: `${height}px` }}
+                      />
+                    ) : (
+                      <div className="w-full border-b-2 border-dashed border-stone-200" />
+                    )}
+                  </div>
+                  <span className="flex flex-wrap justify-center gap-x-1 text-[11px] font-semibold tabular-nums">
+                    <span className={point.joined > 0 ? "text-emerald-600" : "text-stone-300"}>+{point.joined}</span>
+                    <span className={point.left > 0 ? "text-rose-600" : "text-stone-300"}>−{point.left}</span>
+                  </span>
+                  <span className={clsx("text-xs font-semibold", isSelected ? "text-primary" : "text-stone-500")}>{point.label}</span>
+                </Link>
+              );
+            })}
           </div>
         </Panel>
 
@@ -388,7 +444,12 @@ export default async function AdminHomePage({
           </div>
           {classRanking.length > 0 ? (
             <div className="mt-6 border-t border-stone-100 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Tỷ lệ thu theo lớp</p>
+              <p className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Lớp thu thấp nhất
+                {rankedClasses.length > classRanking.length ? (
+                  <span className="font-medium normal-case tracking-normal text-stone-400">+{rankedClasses.length - classRanking.length} lớp khác</span>
+                ) : null}
+              </p>
               <ul className="mt-3 grid gap-2.5">
                 {classRanking.map((row) => (
                   <li key={row.id}>
