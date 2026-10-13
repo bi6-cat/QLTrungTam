@@ -10,7 +10,14 @@ const config: Config = {
         success: "#10B981",
         warning: "#F43F5E",
         neutralBg: "#FAFAF9",
-        neutralText: "#1F2933"
+        neutralText: "#1F2933",
+        // Bảng màu trang chủ: nền ngà, chữ mực xanh đen, điểm nhấn vàng đồng.
+        ivory: { DEFAULT: "#F7F5F0", deep: "#EFEBE3" },
+        ink: { DEFAULT: "#0E1726", soft: "#1B2638", muted: "#5B6474" },
+        brass: { DEFAULT: "#B8925A", dark: "#7F6033", light: "#D9BE8C" }
+      },
+      fontFamily: {
+        display: ["var(--font-display)", "Georgia", "serif"]
       },
       boxShadow: {
         // Bóng đổ nhiều lớp cho chiều sâu tinh tế hơn bóng phẳng cũ.
