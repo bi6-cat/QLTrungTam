@@ -122,3 +122,45 @@ textarea {
   }
 }
 
+
+/* Trang chủ: giấy vở kẻ dòng có lề đỏ (khối "Vì sao chọn"). */
+.paper-ruled {
+  background-color: #fffdf7;
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 44px,
+      rgba(244, 63, 94, 0.35) 44px,
+      rgba(244, 63, 94, 0.35) 46px,
+      transparent 46px
+    ),
+    repeating-linear-gradient(to bottom, transparent 0, transparent 35px, rgba(67, 56, 202, 0.12) 35px, rgba(67, 56, 202, 0.12) 36px);
+}
+
+@media (min-width: 640px) {
+  .paper-ruled {
+    background-image:
+      linear-gradient(
+        to right,
+        transparent 68px,
+        rgba(244, 63, 94, 0.35) 68px,
+        rgba(244, 63, 94, 0.35) 70px,
+        transparent 70px
+      ),
+      repeating-linear-gradient(to bottom, transparent 0, transparent 35px, rgba(67, 56, 202, 0.12) 35px, rgba(67, 56, 202, 0.12) 36px);
+  }
+}
+
+/* Mẩu băng keo vàng dán ảnh. */
+.tape-strip::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 84px;
+  height: 24px;
+  transform: translateX(-50%) rotate(-3deg);
+  background: rgba(251, 191, 36, 0.55);
+  border-radius: 3px;
+  z-index: 1;
+}

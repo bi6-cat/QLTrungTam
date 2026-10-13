@@ -65,7 +65,7 @@ const PHONE_DISPLAY = CONTACT.phone.replace(/^(\d{4})(\d{3})(\d{3})$/, "$1 $2 $3
  */
 const PHOTOS = {
   hero: "/photos/lop-hoc.jpg", // Ảnh lớp học đang học, ngang (4:3)
-  tutoring: "" // Cận cảnh thầy cô kèm một học sinh, ngang (VD "/photos/kem-sat.jpg")
+  tutoring: "" // Ảnh giờ chữa bài trên lớp, ngang 4:3 (VD "/photos/chua-bai.jpg"); trống thì hiện hình vẽ
 }
 
 /**
@@ -131,15 +131,38 @@ const SUBJECTS = [
   { name: "Địa lý", icon: Globe2, tile: "bg-cyan-50 text-cyan-700", band: "from-cyan-400 to-teal-600" }
 ] as const;
 
+/**
+ * "Vì sao chọn": 4 điều viết như lời thầy cô nói với phụ huynh.
+ * 👉 Sửa câu chữ ở đây cho đúng cách trung tâm đang dạy.
+ */
+const REASONS = [
+  {
+    title: "Con chưa hiểu, cô giảng lại.",
+    desc: "Thắc mắc chỗ nào cứ hỏi, cô giảng lại đến khi hiểu. Hỏi lại mấy lần cũng được, không ai cười."
+  },
+  {
+    title: "Bài về nhà được chữa đàng hoàng.",
+    desc: "Đầu buổi chữa bài cũ, sai chỗ nào sửa chỗ đó, rồi mới sang bài mới."
+  },
+  {
+    title: "Học đúng thứ con đang cần.",
+    desc: "Hổng nền thì lấp nền trước. Sắp thi vào 10 hay THPT thì luyện đề theo dạng."
+  },
+  {
+    title: "Bố mẹ luôn biết con học thế nào.",
+    desc: "Có gì cô nhắn Zalo. Học phí xem qua link riêng, quét QR là xong."
+  }
+] as const;
+
 const STEPS = [
   { title: "Liên hệ tư vấn", desc: "Gọi điện, nhắn Zalo hoặc Facebook để trung tâm nắm nhu cầu của con." },
   { title: "Kiểm tra trình độ", desc: "Đánh giá nhanh kiến thức hiện tại để tư vấn lộ trình phù hợp." },
-  { title: "Học thử miễn phí", desc: "Con học thử buổi đầu tiên, làm quen với thầy cô và lớp học." },
+  { title: "Học thử buổi đầu", desc: "Con học thử buổi đầu tiên, làm quen với thầy cô và lớp học." },
   { title: "Vào lớp chính thức", desc: "Nhận lịch học và đường link học phí riêng để phụ huynh tiện theo dõi." }
 ] as const;
 
 const PERKS = [
-  "Học thử miễn phí buổi đầu tiên",
+  "Thầy cô nhiều năm kinh nghiệm, dạy bám sát chương trình mới",
   "Kiểm tra trình độ và tư vấn lộ trình cá nhân",
   "Chữa bài kỹ, chưa hiểu được giảng lại",
   "Cập nhật tình hình học tập cho phụ huynh"
@@ -320,101 +343,90 @@ function FooterHeading({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Minh họa "hiểu bài ngay tại lớp": bảng phấn có bài vừa giải xong, bóng đèn "à ra thế",
- * bong bóng từ "?" thành "!". Dùng khi chưa có ảnh cho ô lớn ở phần "Vì sao chọn".
+ * Minh họa giờ chữa bài: cô giáo chỉ lên bảng phấn, một bạn giơ tay hỏi, các bạn khác chép bài.
+ * Dùng trong khung ảnh của phần "Vì sao chọn" khi chưa có ảnh thật.
  */
-function UnderstandIllustration({ className = "" }: { className?: string }) {
+function ClassroomIllustration({ className = "" }: { className?: string }) {
   const hand = { fontFamily: "var(--font-hand), 'Comic Sans MS', cursive" };
+  const skin = "#F6CBA5";
+  const hair = "#1F2937";
   return (
-    <svg aria-hidden="true" viewBox="0 0 800 520" preserveAspectRatio="xMidYMin slice" className={className} fill="none">
-      <defs>
-        <radialGradient id="aplus-glow" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0" stopColor="#FDE68A" stopOpacity="0.9" />
-          <stop offset="1" stopColor="#FDE68A" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="aplus-board" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#24604A" />
-          <stop offset="1" stopColor="#1A4636" />
-        </linearGradient>
-      </defs>
+    <svg role="img" aria-label="Minh họa giờ chữa bài trên lớp" viewBox="0 0 480 360" className={className}>
+      {/* tường + sàn */}
+      <rect width="480" height="360" fill="#EEF2FF" />
+      <rect y="268" width="480" height="92" fill="#E0E7FF" />
+      {/* cửa sổ có nắng */}
+      <rect x="24" y="34" width="86" height="96" rx="8" fill="#FFFFFF" />
+      <path d="M67 34 v96 M24 82 h86" stroke="#C7D2FE" strokeWidth="4" />
+      <path d="M24 130 L 0 268 L 60 268 L 110 130 Z" fill="#FDE68A" opacity="0.35" />
 
-      {/* chấm nền như giấy kẻ */}
-      <g fill="#FFFFFF" opacity="0.08">
-        {Array.from({ length: 12 }, (_, row) =>
-          Array.from({ length: 20 }, (_, col) => <circle key={`${row}-${col}`} cx={20 + col * 40} cy={20 + row * 40} r="2" />)
-        )}
-      </g>
+      {/* bảng phấn */}
+      <rect x="196" y="30" width="262" height="156" rx="10" fill="#B7834A" />
+      <rect x="206" y="40" width="242" height="136" rx="6" fill="#24604A" />
+      <text x="224" y="78" fill="#FFFFFF" fontSize="24" style={hand}>2x + 5 = 11</text>
+      <text x="224" y="112" fill="#FFFFFF" fillOpacity="0.8" fontSize="24" style={hand}>2x = 6</text>
+      <text x="224" y="148" fill="#FDE68A" fontSize="28" style={hand}>x = 3</text>
+      <path d="M316 136 l9 9 l20 -24" stroke="#FBBF24" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="224" y="186" width="200" height="7" rx="3.5" fill="#8C5F31" />
 
-      {/* Bảng phấn */}
-      <g transform="rotate(-2 360 160)">
-        <rect x="150" y="48" width="430" height="240" rx="16" fill="#B7834A" />
-        <rect x="164" y="62" width="402" height="212" rx="10" fill="url(#aplus-board)" />
-        <text x="190" y="102" fill="#FFFFFF" fillOpacity="0.55" fontSize="22" style={hand}>
-          Bài 3
-        </text>
-        <text x="190" y="148" fill="#FFFFFF" fontSize="38" style={hand}>
-          2x + 5 = 11
-        </text>
-        <text x="190" y="196" fill="#FFFFFF" fillOpacity="0.85" fontSize="38" style={hand}>
-          2x = 6
-        </text>
-        <text x="190" y="246" fill="#FDE68A" fontSize="44" style={hand}>
-          x = 3
-        </text>
-        <path d="M330 232 l14 14 l30 -36" stroke="#FBBF24" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-        {/* gạch chân bằng phấn */}
-        <path d="M186 258 C 230 252, 290 254, 312 258" stroke="#FDE68A" strokeWidth="4" strokeLinecap="round" opacity="0.8" />
-        {/* máng phấn + viên phấn */}
-        <rect x="200" y="288" width="330" height="10" rx="5" fill="#8C5F31" />
-        <rect x="420" y="279" width="34" height="10" rx="4" fill="#FFFFFF" />
-      </g>
-
-      {/* Bóng đèn "à ra thế" */}
+      {/* cô giáo */}
       <g>
-        <circle cx="660" cy="118" r="96" fill="url(#aplus-glow)" />
-        <g stroke="#FBBF24" strokeWidth="6" strokeLinecap="round">
-          <path d="M660 24 v-16" />
-          <path d="M724 52 l12 -12" />
-          <path d="M596 52 l-12 -12" />
-          <path d="M752 116 h16" />
-          <path d="M568 116 h-16" />
-        </g>
-        <path d="M660 62 a52 52 0 0 1 30 95 c-7 6 -10 12 -10 20 v6 h-40 v-6 c0 -8 -3 -14 -10 -20 a52 52 0 0 1 30 -95 z" fill="#FBBF24" />
-        <path d="M646 132 l14 -26 l14 26" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-        <rect x="638" y="186" width="44" height="10" rx="4" fill="#E2E8F0" />
-        <rect x="642" y="199" width="36" height="10" rx="4" fill="#CBD5E1" />
+        <rect x="150" y="196" width="44" height="74" rx="10" fill="#4338CA" />
+        <rect x="154" y="262" width="12" height="20" rx="4" fill="#1E1B4B" />
+        <rect x="178" y="262" width="12" height="20" rx="4" fill="#1E1B4B" />
+        <path d="M144 150 q28 -10 56 0 v56 q-28 10 -56 0 z" fill="#FBBF24" />
+        {/* tay chỉ lên bảng */}
+        <path d="M194 160 L 236 120" stroke="#FBBF24" strokeWidth="13" strokeLinecap="round" />
+        <circle cx="240" cy="116" r="7" fill={skin} />
+        <path d="M150 164 L 140 200" stroke="#FBBF24" strokeWidth="12" strokeLinecap="round" />
+        <circle cx="139" cy="204" r="6" fill={skin} />
+        <rect x="165" y="132" width="14" height="14" rx="4" fill={skin} />
+        <circle cx="172" cy="116" r="22" fill={skin} />
+        <path d="M150 114 a22 22 0 0 1 44 0 q-8 -10 -22 -8 q-14 -2 -22 8 z" fill={hair} />
+        <circle cx="190" cy="100" r="9" fill={hair} />
+        <circle cx="165" cy="118" r="2.2" fill={hair} />
+        <circle cx="180" cy="118" r="2.2" fill={hair} />
+        <path d="M166 127 q6 5 12 0" stroke="#B45309" strokeWidth="2.2" fill="none" strokeLinecap="round" />
       </g>
 
-      {/* Bong bóng ? -> ! (cột bên trái bảng, tránh vùng chữ phía dưới) */}
+      {/* bàn học sinh */}
+      <rect x="0" y="292" width="480" height="16" rx="4" fill="#E9B872" />
+      <rect x="0" y="306" width="480" height="54" fill="#D9A35C" />
+
+      {/* học sinh 1: giơ tay hỏi */}
       <g>
-        <rect x="34" y="92" width="100" height="70" rx="18" fill="#FFFFFF" fillOpacity="0.18" />
-        <path d="M58 160 l-6 18 l22 -18 z" fill="#FFFFFF" fillOpacity="0.18" />
-        <text x="70" y="143" fill="#FFFFFF" fontSize="46" fontWeight="800" fillOpacity="0.85">?</text>
-        <path d="M86 184 C 64 200, 64 212, 82 226" stroke="#FFFFFF" strokeOpacity="0.6" strokeWidth="3" strokeDasharray="6 8" strokeLinecap="round" />
-        <rect x="34" y="232" width="100" height="70" rx="18" fill="#FBBF24" />
-        <path d="M110 300 l6 18 l-22 -18 z" fill="#FBBF24" />
-        <text x="76" y="283" fill="#1E1B4B" fontSize="46" fontWeight="800">!</text>
+        <path d="M44 300 q0 -46 40 -46 q40 0 40 46 z" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="2" />
+        <path d="M106 268 L 120 196" stroke="#CBD5E1" strokeWidth="19" strokeLinecap="round" />
+        <path d="M106 268 L 120 196" stroke="#FFFFFF" strokeWidth="15" strokeLinecap="round" />
+        <circle cx="121" cy="188" r="9" fill={skin} />
+        <circle cx="84" cy="230" r="24" fill={hair} />
+        <rect x="58" y="226" width="52" height="10" rx="5" fill={hair} />
+        {/* bong bóng hỏi */}
+        <rect x="34" y="150" width="42" height="36" rx="12" fill="#FFFFFF" stroke="#C7D2FE" strokeWidth="2" />
+        <path d="M66 184 l10 14 l-2 -14 z" fill="#FFFFFF" />
+        <text x="47" y="177" fill="#4338CA" fontSize="24" fontWeight="800">?</text>
       </g>
 
-      {/* Chồng sách + bút chì */}
-      <g transform="translate(600 300)">
-        <rect x="0" y="40" width="150" height="26" rx="5" fill="#F43F5E" />
-        <rect x="12" y="14" width="132" height="26" rx="5" fill="#FFFFFF" />
-        <rect x="4" y="-12" width="140" height="26" rx="5" fill="#10B981" />
-        <rect x="12" y="20" width="110" height="3" rx="1.5" fill="#CBD5E1" />
-        <g transform="rotate(-24 70 -40)">
-          <rect x="10" y="-52" width="120" height="16" rx="3" fill="#FBBF24" />
-          <path d="M130 -52 l22 8 l-22 8 z" fill="#FDE68A" />
-          <path d="M146 -46 l6 2 l-6 2 z" fill="#1E1B4B" />
-          <rect x="0" y="-52" width="12" height="16" rx="3" fill="#F9A8D4" />
-        </g>
+      {/* học sinh 2 + 3: cúi chép bài */}
+      <g>
+        <path d="M222 300 q0 -40 36 -40 q36 0 36 40 z" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="2" />
+        <circle cx="258" cy="244" r="21" fill={hair} />
+        <path d="M244 254 q14 10 28 0" stroke={hair} strokeWidth="6" />
+        <circle cx="276" cy="232" r="7" fill={hair} />
+      </g>
+      <g>
+        <path d="M352 300 q0 -42 38 -42 q38 0 38 42 z" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="2" />
+        <circle cx="390" cy="240" r="22" fill={hair} />
+        <rect x="364" y="236" width="52" height="9" rx="4.5" fill={hair} />
       </g>
 
-      {/* Lấp lánh */}
-      <g fill="#FDE68A">
-        <path d="M118 64 c2 12 6 16 18 18 c-12 2 -16 6 -18 18 c-2 -12 -6 -16 -18 -18 c12 -2 16 -6 18 -18 z" />
-        <path d="M560 360 c1.5 9 4.5 12 13.5 13.5 c-9 1.5 -12 4.5 -13.5 13.5 c-1.5 -9 -4.5 -12 -13.5 -13.5 c9 -1.5 12 -4.5 13.5 -13.5 z" opacity="0.8" />
-      </g>
+      {/* vở + bút trên bàn */}
+      <rect x="300" y="282" width="46" height="14" rx="3" fill="#FFFFFF" transform="rotate(-4 323 289)" />
+      <rect x="306" y="276" width="40" height="5" rx="2.5" fill="#F43F5E" transform="rotate(-18 326 278)" />
+      <rect x="172" y="284" width="38" height="12" rx="3" fill="#C7D2FE" transform="rotate(3 191 290)" />
+
+      {/* lấp lánh */}
+      <path d="M128 52 c1.5 8 4 10.5 12 12 c-8 1.5 -10.5 4 -12 12 c-1.5 -8 -4 -10.5 -12 -12 c8 -1.5 10.5 -4 12 -12 z" fill="#FBBF24" />
     </svg>
   );
 }
@@ -526,11 +538,11 @@ export default function LandingPage() {
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-relaxed text-ink-muted">
                 Dạy thêm các môn phổ thông cho học sinh cấp 2 &amp; cấp 3: củng cố kiến thức nền, luyện thi vào 10 và THPT
-                Quốc gia, với thầy cô tận tâm và lộ trình rõ ràng cho từng khối.
+                Quốc gia, bám sát chương trình mới, với thầy cô nhiều năm kinh nghiệm.
               </p>
               <div className="relative mt-9 flex flex-wrap items-center gap-3">
                 <a href="#contact" className={`${btnPrimary} h-14 px-7 text-base`}>
-                  Đăng ký học thử
+                  Đăng ký tư vấn
                   <ArrowRight className="h-5 w-5" />
                 </a>
                 <a href="#courses" className={`${btnOutline} h-14 px-7 text-base`}>
@@ -538,11 +550,11 @@ export default function LandingPage() {
                 </a>
                 <div className="pointer-events-none absolute -bottom-16 left-40 hidden items-end gap-1 text-brand sm:flex">
                   <CurvyArrow className="h-12 w-16 -scale-x-100 -rotate-[160deg]" />
-                  <span className="font-hand text-xl">buổi đầu miễn phí!</span>
+                  <span className="font-hand text-xl">thầy cô nhiều năm đứng lớp!</span>
                 </div>
               </div>
               <ul className="mt-16 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-muted sm:mt-20">
-                {PERKS.slice(1, 4).map((perk) => (
+                {PERKS.slice(0, 3).map((perk) => (
                   <li key={perk} className="flex items-center gap-2">
                     <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-100 text-emerald-600">
                       <Check className="h-3 w-3" strokeWidth={3} />
@@ -583,11 +595,13 @@ export default function LandingPage() {
                 <p className="mt-2 font-hand text-lg leading-none text-brand">sắp xong rồi!</p>
               </div>
 
-              <div className="absolute -right-2 -top-6 grid h-24 w-24 rotate-12 animate-float place-items-center rounded-full bg-sun text-center shadow-lg motion-reduce:animate-none sm:-right-6">
-                <p className="font-hand text-xl leading-5 text-ink">
-                  Học thử
+              <div className="absolute -right-2 -top-6 grid h-28 w-28 rotate-12 animate-float place-items-center rounded-full bg-sun text-center shadow-lg motion-reduce:animate-none sm:-right-6">
+                <p className="font-hand text-lg leading-5 text-ink">
+                  Bám sát
                   <br />
-                  <span className="text-3xl">0đ</span>
+                  chương trình
+                  <br />
+                  mới
                 </p>
               </div>
 
@@ -616,147 +630,52 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* VÌ SAO CHỌN — BENTO */}
+        {/* VÌ SAO CHỌN — TRANG VỞ CỦA CÔ */}
         <section id="why" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6 md:py-28">
           <SectionHeading
             eyebrow="Vì sao chọn APLUS?"
-            title="Một lớp học mà phụ huynh yên tâm, học sinh muốn đến."
-            desc="Nghiêm túc trong chuyên môn, gần gũi trong cách dạy, minh bạch với phụ huynh."
+            title="Mấy điều tụi mình luôn giữ, từ buổi học đầu tiên."
           />
 
-          <div className="mt-12 grid gap-4 md:grid-cols-6">
-            {/* Ô ảnh lớn: thầy cô kèm từng em */}
-            <article className="group relative min-h-[380px] overflow-hidden rounded-[1.75rem] bg-brand-deep md:col-span-4 md:row-span-2 md:min-h-[460px]">
-              <div className="absolute inset-0">
-                {PHOTOS.tutoring ? (
-                  <PhotoSlot
-                    src={PHOTOS.tutoring}
-                    alt="Thầy cô giảng bài, học sinh hiểu bài ngay tại lớp"
-                    className="transition-transform duration-700 group-hover:scale-[1.04]"
-                  />
-                ) : (
-                  <div className="h-full w-full bg-gradient-to-br from-brand to-indigo-500">
-                    <UnderstandIllustration className="h-[68%] w-full transition-transform duration-700 group-hover:scale-[1.03]" />
-                  </div>
-                )}
-              </div>
-              <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-brand-deep via-brand-deep/40 to-transparent" />
-              <span className="absolute left-5 top-5 inline-flex -rotate-2 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-ink shadow-lg">
-                <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={3} />
-                Luyện tập mỗi buổi
-              </span>
-              <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-8">
-                <p className="font-hand text-2xl text-sun">Học hiểu ngay tại lớp</p>
-                <h3 className="mt-1 max-w-md text-2xl font-extrabold leading-tight sm:text-3xl">
-                  Chưa hiểu chỗ nào, thầy cô giảng lại chỗ đó.
-                </h3>
-                <p className="mt-2 max-w-md text-sm leading-relaxed text-white/80 sm:text-base">
-                  Buổi nào cũng có phần chữa bài và luyện tập, để con hiểu bài ở lớp chứ không mang thắc mắc về nhà.
-                </p>
-              </div>
-            </article>
-
-            {/* Số liệu */}
-            <article className="flex flex-col justify-between gap-5 rounded-[1.75rem] bg-brand-soft p-6 md:col-span-2">
-              <p className="text-sm font-semibold text-brand">APLUS hôm nay</p>
-              <dl className="grid gap-3">
-                {[
-                  { value: `${classCount}+`, label: "lớp đang tuyển sinh", dot: "bg-brand" },
-                  { value: teacherCount, label: "giáo viên đứng lớp", dot: "bg-sun" },
-                  { value: SUBJECTS.length, label: "môn học cấp 2 & 3", dot: "bg-emerald-500" }
-                ].map((stat) => (
-                  <div key={stat.label} className="flex items-baseline gap-3">
-                    <dd className="w-16 text-4xl font-extrabold tracking-tight text-ink">{stat.value}</dd>
-                    <dt className="flex items-center gap-2 text-sm text-ink-muted">
-                      <span className={`h-2 w-2 rounded-full ${stat.dot}`} />
-                      {stat.label}
-                    </dt>
-                  </div>
-                ))}
-              </dl>
-            </article>
-
-            {/* Lộ trình */}
-            <article className="rounded-[1.75rem] bg-sun-soft p-6 md:col-span-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Lộ trình theo mục tiêu</h3>
-                <Target className="h-6 w-6 text-sun-dark" />
-              </div>
-              <ol className="relative mt-5 grid gap-4 pl-7">
-                <span aria-hidden="true" className="absolute bottom-2 left-[9px] top-2 w-0.5 rounded bg-gradient-to-b from-sun-dark/30 to-sun-dark" />
-                {[
-                  { title: "Củng cố nền tảng", sub: "Lấp lỗ hổng kiến thức" },
-                  { title: "Luyện đề theo dạng", sub: "Làm quen cấu trúc đề thi" },
-                  { title: "Về đích", sub: "Thi vào 10 · THPT Quốc gia" }
-                ].map((step, i) => (
-                  <li key={step.title} className="relative">
-                    <span
-                      className={`absolute -left-7 top-0.5 grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold ${i === 2 ? "bg-sun-dark text-white" : "bg-white text-sun-dark ring-2 ring-sun-dark/40"}`}
-                    >
-                      {i + 1}
+          <div className="mt-12 grid gap-10 lg:grid-cols-[1.35fr_1fr] lg:gap-8">
+            {/* Trang vở kẻ dòng, lề đỏ */}
+            <div className="paper-ruled relative rounded-2xl py-6 pl-16 pr-6 shadow-[0_24px_50px_-28px_rgba(30,27,75,0.5)] ring-1 ring-slate-200 sm:py-8 sm:pl-24 sm:pr-8">
+              <ol className="grid gap-7 text-base leading-9 sm:text-[17px]">
+                {REASONS.map((reason, index) => (
+                  <li key={reason.title} className="relative">
+                    <span className="absolute -left-12 top-0 font-hand text-3xl leading-9 text-rose-500 sm:-left-16">
+                      {index + 1}.
                     </span>
-                    <p className="text-sm font-bold leading-tight">{step.title}</p>
-                    <p className="text-xs text-ink-muted">{step.sub}</p>
+                    <p className="font-bold">{reason.title}</p>
+                    <p className="text-ink-muted">{reason.desc}</p>
                   </li>
                 ))}
               </ol>
-            </article>
+              <p className="mt-6 text-right font-hand text-2xl text-brand">— Thầy cô APLUS</p>
+            </div>
 
-            {/* Giáo viên */}
-            <article className="flex flex-col rounded-[1.75rem] border-2 border-ink/10 bg-white p-6 md:col-span-2">
-              <div className="flex -space-x-3">
-                {teachers.slice(0, 4).map((t, index) => (
-                  <span
-                    key={t.name}
-                    title={teacherLabel(t.name)}
-                    className={`grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br text-sm font-bold ring-4 ring-white ${POLAROID_TONES[index % POLAROID_TONES.length]}`}
-                  >
-                    {initials(t.name)}
-                  </span>
-                ))}
-                <span className="grid h-11 w-11 place-items-center rounded-full bg-sun ring-4 ring-white">
-                  <Star className="h-5 w-5 fill-ink text-ink" />
-                </span>
-              </div>
-              <h3 className="mt-5 text-lg font-bold">Giáo viên tận tâm</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-                5–10 năm kinh nghiệm, bám sát chương trình cấp 2 &amp; cấp 3, quan tâm từng học sinh.
-              </p>
-            </article>
-
-            {/* Học phí qua link */}
-            <article className="relative overflow-hidden rounded-[1.75rem] bg-ink p-6 text-white md:col-span-2">
-              <h3 className="text-lg font-bold">Học phí minh bạch</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-white/70">Mỗi học sinh một link riêng: xem số buổi, quét QR là xong.</p>
-              <div className="mt-5 flex items-center gap-3 rounded-2xl bg-white p-3 text-ink">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-soft">
-                  <QrCode className="h-7 w-7 text-brand" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-xs text-ink-muted">
-                    {sampleCourse.name} · {sampleCourse.sessionsPerMonthDefault} buổi
-                  </p>
-                  <p className="text-lg font-extrabold text-brand">
-                    {formatCurrency(sampleCourse.pricePerSession * sampleCourse.sessionsPerMonthDefault)}
-                  </p>
+            {/* Ảnh dán băng keo + giấy note */}
+            <div className="grid content-start gap-8">
+              <figure className="tape-strip relative rotate-2 rounded-md bg-white p-3 pb-4 shadow-[0_18px_40px_-20px_rgba(30,27,75,0.45)] ring-1 ring-slate-200">
+                <div className="aspect-[4/3] overflow-hidden rounded-sm">
+                  {PHOTOS.tutoring ? (
+                    <img src={PHOTOS.tutoring} alt="Giờ chữa bài trên lớp" className="h-full w-full object-cover" />
+                  ) : (
+                    <ClassroomIllustration className="h-full w-full" />
+                  )}
                 </div>
-                <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Đã đóng</span>
-              </div>
-            </article>
-
-            {/* Phụ huynh */}
-            <article className="flex flex-col rounded-[1.75rem] bg-emerald-50 p-6 md:col-span-2">
-              <h3 className="text-lg font-bold">Đồng hành cùng phụ huynh</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">Trao đổi tình hình học tập thường xuyên qua Zalo.</p>
-              <div className="mt-auto grid gap-2 pt-5 text-sm">
-                <p className="w-fit max-w-[90%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2 shadow-sm">
-                  Tuần này con làm bài đầy đủ, tiến bộ phần hình học ạ.
+                <figcaption className="mt-3 text-center font-hand text-xl text-ink">Giờ chữa bài trên lớp</figcaption>
+              </figure>
+              <div className="-rotate-2 rounded-md bg-sun-soft p-5 shadow-md">
+                <p className="font-hand text-2xl leading-7 text-ink">
+                  Thầy cô 5–10 năm đứng lớp, dạy bám sát chương trình giáo dục phổ thông mới.
                 </p>
-                <p className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-emerald-500 px-3.5 py-2 text-white shadow-sm">
-                  Cảm ơn cô nhiều ạ!
-                </p>
+                <a href="#teachers" className={`${focus} mt-3 inline-flex items-center gap-1 rounded text-sm font-bold text-brand`}>
+                  Xem đội ngũ giáo viên
+                  <ArrowRight className="h-4 w-4" />
+                </a>
               </div>
-            </article>
+            </div>
           </div>
         </section>
 
@@ -914,7 +833,6 @@ export default function LandingPage() {
                   </span>
                   <h3 className="mt-5 text-lg font-bold">{s.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-white/70">{s.desc}</p>
-                  {i === 2 ? <p className="mt-2 font-hand text-xl text-sun">← miễn phí nha!</p> : null}
                 </li>
               ))}
             </ol>
