@@ -40,6 +40,11 @@ export function teacherPath(classRoom: { shortCode: string; teacherToken: string
   return `/teacher/classes/${classLinkSlug(classRoom.shortCode, classRoom.teacherToken)}`;
 }
 
+/** Link khảo sát ẩn danh của một lớp, gửi vào nhóm Zalo của lớp. */
+export function surveyPath(shortCode: string, token: string) {
+  return `/survey/${classLinkSlug(shortCode, token)}`;
+}
+
 export function absoluteUrl(appUrl: string, path: string) {
   return `${appUrl.replace(/\/$/, "")}${path}`;
 }

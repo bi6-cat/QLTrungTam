@@ -32,6 +32,8 @@ describe("admin roles", () => {
       "/admin/schedulex",
       "/admin/finance",
       "/admin/salary",
+      "/admin/surveys",
+      "/admin/surveys/abc",
       "/admin/debtsx",
       "/admin/classes-old"
     ]) {

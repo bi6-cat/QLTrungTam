@@ -7,6 +7,7 @@ import {
   Banknote,
   BookOpen,
   CalendarDays,
+  ClipboardList,
   FileSpreadsheet,
   LayoutDashboard,
   PiggyBank,
@@ -28,6 +29,7 @@ const ownerNav = [
   { href: "/admin/finance", label: "Thu chi", icon: PiggyBank },
   { href: "/admin/salary", label: "Lương GV", icon: Banknote },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
+  { href: "/admin/surveys", label: "Khảo sát", icon: ClipboardList },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings }
 ];
 

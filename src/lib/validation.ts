@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SALARY_CUTOFF_PATTERN } from "@/lib/salary-cutoff";
+import { QUESTION_TYPES, SURVEY_AUDIENCES, SURVEY_CATEGORIES } from "@/lib/survey-core";
 
 // ---------------------------------------------------------------------------
 // Các schema trường dùng lại.
@@ -381,6 +382,48 @@ export const unassignTransactionSchema = z.object({
 export const reverseTransactionSchema = z.object({
   transactionId: id,
   reason: looseText(500)
+});
+
+// ---------------------------------------------------------------------------
+// Khảo sát.
+// ---------------------------------------------------------------------------
+const surveyAudience = z.enum(SURVEY_AUDIENCES, { message: "Đối tượng khảo sát không hợp lệ" });
+
+export const createSurveySchema = z.object({
+  title: requiredText("Nhập tên khảo sát", 150),
+  templateKey: requiredText("Chọn mẫu khảo sát", 40),
+  audience: surveyAudience
+});
+
+export const updateSurveySchema = z.object({
+  id,
+  title: requiredText("Nhập tên khảo sát", 150),
+  description: looseText(1000),
+  audience: surveyAudience,
+  closesOn: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v ?? "")
+    .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "Ngày đóng không hợp lệ"),
+  minGroupSize: z.coerce
+    .number({ message: "Số phiếu tối thiểu phải là số" })
+    .int("Số phiếu tối thiểu phải là số nguyên")
+    .min(1, "Số phiếu tối thiểu ít nhất là 1")
+    .max(20, "Số phiếu tối thiểu tối đa là 20")
+});
+
+export const saveSurveyQuestionSchema = z.object({
+  surveyId: id,
+  questionId: looseText(64),
+  type: z.enum(QUESTION_TYPES, { message: "Loại câu hỏi không hợp lệ" }),
+  category: z.enum(SURVEY_CATEGORIES, { message: "Nhóm đánh giá không hợp lệ" }),
+  prompt: requiredText("Nhập nội dung câu hỏi", 300),
+  required: z
+    .string()
+    .optional()
+    .transform((value) => value === "on" || value === "true"),
+  options: looseText(3000)
 });
 
 // ---------------------------------------------------------------------------

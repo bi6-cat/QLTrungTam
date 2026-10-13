@@ -59,6 +59,8 @@ model ClassRoom {
   expenses                Expense[]
   salaryWriteOffs         SalaryWriteOff[]
   salaryCutoffs           ClassSalaryCutoff[]
+  surveyLinks             SurveyClassLink[]
+  surveyResponses         SurveyResponse[]
 
   @@index([shortCode])
   @@index([publicToken])
@@ -334,4 +336,123 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+enum SurveyStatus {
+  draft
+  open
+  closed
+}
+
+/// Ai trả lời khảo sát; "both" thì form hỏi người trả lời là học sinh hay phụ huynh.
+enum SurveyAudience {
+  student
+  parent
+  both
+}
+
+enum SurveyRespondent {
+  student
+  parent
+}
+
+enum SurveyQuestionType {
+  rating
+  nps
+  single
+  multi
+  text
+}
+
+/// Nhóm đánh giá của câu hỏi, để gom điểm qua nhiều đợt khảo sát.
+enum SurveyCategory {
+  facilities
+  teacher
+  curriculum
+  center
+  other
+}
+
+/// Khảo sát ẩn danh gửi theo link từng lớp. Chỉ chủ trung tâm xem và quản lý.
+model Survey {
+  id           String            @id @default(cuid())
+  title        String
+  description  String            @default("")
+  audience     SurveyAudience    @default(student)
+  status       SurveyStatus      @default(draft)
+  /// Hết ngày này (giờ Việt Nam) thì link tự ngừng nhận phiếu; null = mở đến khi đóng tay.
+  closesOn     DateTime?         @db.Date
+  /// Kết quả của một nhóm (lớp, giáo viên, đối tượng) chỉ hiện khi có ít nhất ngần này phiếu.
+  minGroupSize Int               @default(3)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  questions    SurveyQuestion[]
+  links        SurveyClassLink[]
+  responses    SurveyResponse[]
+
+  @@index([status])
+}
+
+model SurveyQuestion {
+  id       String             @id @default(cuid())
+  surveyId String
+  position Int
+  type     SurveyQuestionType
+  category SurveyCategory     @default(other)
+  prompt   String
+  required Boolean            @default(true)
+  /// Lựa chọn của câu chọn một / chọn nhiều; phiếu lưu số thứ tự lựa chọn.
+  options  String[]           @default([])
+  survey   Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers  SurveyAnswer[]
+
+  @@index([surveyId, position])
+}
+
+/// Link khảo sát của một lớp: /survey/<MÃ LỚP>-<token>, gửi vào nhóm Zalo của lớp.
+model SurveyClassLink {
+  id        String    @id @default(cuid())
+  surveyId  String
+  classId   String
+  token     String    @unique
+  createdAt DateTime  @default(now())
+  survey    Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  classRoom ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, classId])
+}
+
+/// Một phiếu trả lời ẩn danh. Cố ý KHÔNG lưu học sinh, IP, trình duyệt hay giờ nộp:
+/// id là UUID ngẫu nhiên (cuid chứa thời điểm tạo) và chỉ giữ ngày nộp.
+model SurveyResponse {
+  id             String           @id @default(uuid())
+  surveyId       String
+  classId        String?
+  /// Tên giáo viên của lớp lúc nộp, để kết quả cũ vẫn đúng người khi lớp đổi giáo viên.
+  teacherName    String           @default("")
+  respondentRole SurveyRespondent
+  submittedOn    DateTime         @db.Date
+  survey         Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  classRoom      ClassRoom?       @relation(fields: [classId], references: [id], onDelete: SetNull)
+  answers        SurveyAnswer[]
+
+  @@index([surveyId, classId])
+  @@index([submittedOn])
+}
+
+model SurveyAnswer {
+  responseId String
+  questionId String
+  /// Số sao (1–5) hoặc điểm giới thiệu (0–10).
+  value      Int?
+  text       String?
+  /// Số thứ tự các lựa chọn đã chọn (câu chọn một / chọn nhiều).
+  choices    Int[]          @default([])
+  /// Chủ trung tâm ẩn góp ý không phù hợp khỏi trang kết quả.
+  hiddenAt   DateTime?
+  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([responseId, questionId])
+  @@index([questionId])
 }

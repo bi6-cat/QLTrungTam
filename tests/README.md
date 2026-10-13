@@ -10,7 +10,7 @@ Unit test chỉ gọi helper thuần, không kết nối database và không tha
 npm test
 ```
 
-Phạm vi hiện có: cú pháp memo học phí, URL VietQR, định dạng, chuyển đổi form, mật khẩu, public token và parser/validator import Excel.
+Phạm vi hiện có: cú pháp memo học phí, URL VietQR, định dạng, chuyển đổi form, mật khẩu, public token, parser/validator import Excel và kiểm tra phiếu / tổng hợp kết quả khảo sát.
 
 ## Integration test sổ tài chính
 
