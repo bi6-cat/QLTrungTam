@@ -161,14 +161,15 @@ export function StatCard({
 }) {
   const t = statTone[tone];
   return (
-    <Panel interactive className="relative overflow-hidden">
+    // Điện thoại: thẻ xếp 2 cột nên gọn hơn (padding, cỡ chữ, ẩn icon).
+    <Panel interactive className="relative min-w-0 overflow-hidden p-3.5 sm:p-5">
       <span className="absolute inset-x-0 top-0 h-1 bg-primary" />
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-stone-500">{label}</p>
-        {icon ? <span className={cn("grid h-9 w-9 place-items-center rounded-xl", t.chip)}>{icon}</span> : null}
+        <p className="text-xs font-semibold text-stone-500 sm:text-sm">{label}</p>
+        {icon ? <span className={cn("hidden h-9 w-9 shrink-0 place-items-center rounded-xl sm:grid", t.chip)}>{icon}</span> : null}
       </div>
-      <p className={cn("mt-3 text-2xl font-bold tracking-tight", t.value)}>{value}</p>
-      {hint ? <p className="mt-1 text-sm text-stone-500">{hint}</p> : null}
+      <p className={cn("mt-2 break-words text-lg font-bold tracking-tight sm:mt-3 sm:text-2xl", t.value)}>{value}</p>
+      {hint ? <p className="mt-1 text-xs text-stone-500 sm:text-sm">{hint}</p> : null}
     </Panel>
   );
 }
@@ -188,7 +189,7 @@ export function PageHeader({
         {/* Vạch màu nhấn cạnh tiêu đề trang. */}
         <span aria-hidden="true" className="mt-1 w-1.5 shrink-0 self-stretch rounded-full bg-primary" />
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-neutralText">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-neutralText sm:text-2xl">{title}</h1>
           {description ? <p className="mt-1 text-sm text-stone-600">{description}</p> : null}
         </div>
       </div>

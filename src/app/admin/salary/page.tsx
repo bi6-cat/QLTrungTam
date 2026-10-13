@@ -175,7 +175,7 @@ export default async function SalaryPage({
         description="Lương tháng = % của lớp × học phí nộp đến hết ngày chốt (cộng tiền nộp muộn của tháng trước). Học sinh nộp sau ngày chốt tự chuyển sang lương tháng sau, có ghi chú tên. Ghi lại từng lần chuyển tiền cho giáo viên."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label="Còn thiếu lương GV"
           tone={owedTotal > 0 ? "warning" : "success"}
@@ -488,7 +488,7 @@ function ClassLedger({
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] text-left text-sm">
-          <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+          <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
               <th className="px-4 py-2.5">Tháng lương</th>
               <th className="px-4 py-2.5 text-right">Tổng tháng</th>

@@ -147,10 +147,10 @@ export function ClassInvoiceEditor({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-soft">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200/80 p-6">
+      <div className="flex flex-col gap-4 border-b border-stone-200/80 p-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:p-6">
         <div className="min-w-0 flex-1">
           <h3 className="font-bold">Chi tiết {formatMonth(month, year)}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-500">
+          <div className="mt-2 grid grid-cols-1 gap-y-1 text-sm text-stone-500 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
             <span>
               Đã phát hành: <strong className="text-lg text-primary">{formatCurrency(issuedAmount)}</strong>
             </span>
@@ -166,21 +166,21 @@ export function ClassInvoiceEditor({
               </span>
             ) : null}
             {billingLocked ? (
-              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600 ring-1 ring-inset ring-stone-500/15">
+              <span className="justify-self-start rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600 ring-1 ring-inset ring-stone-500/15">
                 Lớp đã lưu trữ · không phát hành mới
               </span>
             ) : hasMissingInvoice ? (
-              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
+              <span className="justify-self-start rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Cần tạo {missingInvoiceCount} hóa đơn
               </span>
             ) : canManage && !hasAnyInvoice ? (
-              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
+              <span className="justify-self-start rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
                 Dự thảo
               </span>
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           {editing ? (
             <>
               <Button
@@ -248,7 +248,7 @@ export function ClassInvoiceEditor({
               <col className="w-[13%]" />
               <col className="w-[19%]" />
             </colgroup>
-            <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+            <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
                 <th className="px-2 py-3 text-center">#</th>
                 <th className="px-2 py-3">Học sinh</th>
@@ -278,7 +278,7 @@ export function ClassInvoiceEditor({
                 return (
                   <tr
                     key={row.enrollmentId}
-                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing && !row.studentArchived ? "bg-amber-50/30" : "hover:bg-indigo-50/40"}`}
+                    className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing && !row.studentArchived ? "bg-amber-50/30" : "hover:bg-stone-50"}`}
                   >
                     <td className="px-2 py-3 text-center tabular-nums text-stone-400">
                       {(currentPage - 1) * PAGE_SIZE + index + 1}

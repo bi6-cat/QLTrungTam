@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   BookOpen,
@@ -61,6 +61,15 @@ export function AdminNav({ role }: { role: AdminRole }) {
     return match?.href ?? "/admin";
   }, [nav, optimisticHref, pathname]);
 
+  // Điện thoại: menu là thanh ngang cuộn được, kéo mục đang chọn vào giữa tầm nhìn.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>("[aria-current=page]");
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+    nav.scrollTo({ left: active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2, behavior: "smooth" });
+  }, [activeHref]);
+
   return (
     <>
       {isNavigating ? (
@@ -68,8 +77,8 @@ export function AdminNav({ role }: { role: AdminRole }) {
           <div className="route-progress h-full bg-accent" />
         </div>
       ) : null}
-      <p className="px-3 pb-2 pt-2 text-[11px] font-bold uppercase tracking-wider text-stone-400">Điều hướng</p>
-      <nav className="grid gap-1">
+      <p className="hidden px-3 pb-2 pt-2 text-[11px] font-bold uppercase tracking-wider text-stone-400 lg:block">Điều hướng</p>
+      <nav ref={navRef} className="scrollbar-none flex gap-1 overflow-x-auto lg:grid lg:overflow-visible">
         {nav.map((item) => {
           const Icon = item.icon;
           const isActive = activeHref === item.href;
@@ -78,8 +87,9 @@ export function AdminNav({ role }: { role: AdminRole }) {
               key={item.href}
               href={item.href}
               onClick={() => setOptimisticHref(item.href)}
+              aria-current={isActive ? "page" : undefined}
               className={clsx(
-                "focus-ring group relative flex h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-150",
+                "focus-ring group relative flex h-10 shrink-0 items-center gap-2 overflow-hidden rounded-xl px-2.5 text-sm font-semibold transition-all duration-150 lg:h-11 lg:gap-3 lg:px-3",
                 isActive
                   ? "bg-indigo-50 text-primary shadow-sm ring-1 ring-indigo-100"
                   : "text-stone-700 hover:bg-stone-100/80 hover:text-neutralText"
@@ -87,13 +97,13 @@ export function AdminNav({ role }: { role: AdminRole }) {
             >
               <span
                 className={clsx(
-                  "absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full transition-all duration-200",
+                  "absolute left-0 top-1/2 hidden h-6 w-1 -translate-y-1/2 rounded-r-full transition-all duration-200 lg:block",
                   isActive ? "bg-accent opacity-100" : "bg-transparent opacity-0"
                 )}
               />
               <span
                 className={clsx(
-                  "grid h-8 w-8 place-items-center rounded-lg transition-colors",
+                  "grid h-7 w-7 place-items-center rounded-lg transition-colors lg:h-8 lg:w-8",
                   isActive
                     ? "bg-gradient-to-b from-indigo-600 to-primary text-white shadow-sm"
                     : "bg-stone-100 text-primary group-hover:bg-indigo-100"
@@ -101,7 +111,7 @@ export function AdminNav({ role }: { role: AdminRole }) {
               >
                 <Icon className="h-4 w-4" />
               </span>
-              <span className="truncate">{item.label}</span>
+              <span className="whitespace-nowrap lg:truncate">{item.label}</span>
             </Link>
           );
         })}

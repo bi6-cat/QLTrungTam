@@ -245,7 +245,7 @@ export default async function StudentsPage({
             {/* Màn hình lớn: dạng bảng. */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+                <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <tr>
                     <th className="w-12 px-4 py-2.5 text-center">#</th>
                     <th className="px-4 py-3">Học sinh</th>

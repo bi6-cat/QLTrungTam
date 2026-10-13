@@ -44,14 +44,27 @@ function pageFontFamily() {
   return family ? `${family}, Arial, sans-serif` : "Arial, sans-serif";
 }
 
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+// Ảnh gửi nhóm phụ huynh cả lớp: chỉ có số học sinh theo trạng thái, không có tổng tiền của lớp.
 export async function renderTuitionOverviewImage({
   centerName,
+  logoSrc,
   className,
   month,
   year,
   rows
 }: {
   centerName: string;
+  /** Logo vẽ ở góc trên; tải lỗi thì bỏ qua. */
+  logoSrc?: string;
   className: string;
   month: number;
   year: number;
@@ -64,12 +77,13 @@ export async function renderTuitionOverviewImage({
     [400, 500, 600, 700].map((weight) => document.fonts?.load(font(weight, 20), "Học phí Tháng ₫").catch(() => undefined))
   );
   await document.fonts?.ready;
+  const logo = logoSrc ? await loadImage(logoSrc) : null;
 
   const headerHeight = 300;
   const statsHeight = 150;
   const tableHeadHeight = 56;
   const rowHeight = 64;
-  const totalHeight = 84;
+  const totalHeight = 72;
   const footerHeight = 110;
   const bodyRows = Math.max(rows.length, 1);
   const height = headerHeight + statsHeight + tableHeadHeight + bodyRows * rowHeight + totalHeight + footerHeight;
@@ -106,16 +120,30 @@ export async function renderTuitionOverviewImage({
   ctx.fillStyle = COLORS.primary;
   ctx.fillRect(0, 0, WIDTH, 8);
 
-  // --- Tiêu đề ---
+  // --- Tiêu đề: logo + tên trung tâm, rồi tên lớp ---
+  // logo.jpg có nhiều nền trắng quanh chữ: cắt phần lõi (tỉ lệ ~2:1) để logo đủ to.
+  const logoHeight = 64;
+  let brandX = PAD;
+  if (logo) {
+    const crop = { x: logo.width * 0.15, y: logo.height * 0.3, w: logo.width * 0.74, h: logo.height * 0.38 };
+    const logoWidth = Math.round((crop.w / crop.h) * logoHeight);
+    ctx.drawImage(logo, crop.x, crop.y, crop.w, crop.h, PAD, 44, logoWidth, logoHeight);
+    ctx.fillStyle = COLORS.line;
+    ctx.fillRect(PAD + logoWidth + 24, 50, 1, logoHeight - 12);
+    brandX = PAD + logoWidth + 48;
+  }
   ctx.fillStyle = COLORS.primary;
-  ctx.font = font(700, 18);
+  ctx.font = font(700, 20);
   setSpacing(4);
-  text(centerName.toUpperCase(), PAD, 82);
+  text(centerName.toUpperCase(), brandX, 74);
   setSpacing(0);
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = font(500, 17);
+  text("Thông báo học phí", brandX, 100);
 
   ctx.fillStyle = COLORS.ink;
-  ctx.font = font(700, 58);
-  text(className, PAD, 168, { maxWidth: WIDTH - PAD * 2 });
+  ctx.font = font(700, 42);
+  text(className, PAD, 176, { maxWidth: WIDTH - PAD * 2 });
 
   ctx.font = font(500, 32);
   ctx.fillStyle = COLORS.body;
@@ -132,12 +160,10 @@ export async function renderTuitionOverviewImage({
   // --- Số liệu tóm tắt ---
   const paid = rows.filter((row) => row.status === "paid");
   const unpaid = rows.filter((row) => row.status === "unpaid");
-  const billed = rows.filter((row) => row.status === "paid" || row.status === "unpaid");
   const stats = [
     { label: "Học sinh", value: String(rows.length) },
     { label: "Đã đóng", value: String(paid.length) },
-    { label: "Chưa đóng", value: String(unpaid.length) },
-    { label: "Tổng học phí", value: formatCurrency(billed.reduce((sum, row) => sum + row.amount, 0)) }
+    { label: "Chưa đóng", value: String(unpaid.length) }
   ];
   const statsTop = headerHeight;
   const colWidth = (WIDTH - PAD * 2) / stats.length;
@@ -219,15 +245,12 @@ export async function renderTuitionOverviewImage({
     if (index < rows.length - 1) hline(top + rowHeight - 1, COLORS.line);
   });
 
-  // --- Tổng cộng ---
+  // --- Dòng cuối bảng: chỉ đếm học sinh, không cộng tiền cả lớp ---
   const totalTop = bodyTop + bodyRows * rowHeight;
   hline(totalTop, COLORS.strongLine, 2);
   ctx.fillStyle = COLORS.body;
-  ctx.font = font(600, 21);
-  text(`Tổng cộng · ${rows.length} học sinh`, col.student, totalTop + 52);
-  ctx.fillStyle = COLORS.ink;
-  ctx.font = font(700, 24);
-  text(formatCurrency(billed.reduce((sum, row) => sum + row.amount, 0)), col.amount, totalTop + 52, { align: "right" });
+  ctx.font = font(600, 20);
+  text(`Tổng số · ${rows.length} học sinh`, col.student, totalTop + 46);
 
   // --- Chân trang ---
   const footerY = height - 48;

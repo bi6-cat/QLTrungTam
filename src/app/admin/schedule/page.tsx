@@ -109,7 +109,7 @@ export default async function SchedulePage({
         description="Bấm vào buổi học để điểm danh, ghi lớp nghỉ hoặc dời buổi. Buổi lớp nghỉ chưa bù được trừ vào số buổi thu tháng sau."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label={view === "week" ? "Buổi trong tuần" : `Buổi trong tháng ${month}`}
           tone="primary"

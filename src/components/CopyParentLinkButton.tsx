@@ -117,7 +117,7 @@ function ParentLinkDialog({
     setExportError("");
 
     try {
-      const blob = await renderTuitionOverviewImage({ centerName: "APLUS ACADEMY", className, month, year, rows });
+      const blob = await renderTuitionOverviewImage({ centerName: "APLUS ACADEMY", logoSrc: "/logo.jpg", className, month, year, rows });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

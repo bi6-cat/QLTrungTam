@@ -249,7 +249,7 @@ export default async function TeacherClassPage({
                   <col className="w-[11%]" />
                   <col className="w-[18%]" />
                 </colgroup>
-                <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+                <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <tr>
                     <th className="px-3 py-3 text-center">#</th>
                     <th className="px-4 py-3">Học sinh</th>
@@ -268,7 +268,7 @@ export default async function TeacherClassPage({
                       className={
                         row.invoice?.status === "paid"
                           ? "bg-emerald-50/30 transition-colors hover:bg-emerald-50/60"
-                          : "transition-colors hover:bg-indigo-50/40"
+                          : "transition-colors hover:bg-stone-50"
                       }
                     >
                       <td className="px-3 py-3 text-center tabular-nums text-stone-400">

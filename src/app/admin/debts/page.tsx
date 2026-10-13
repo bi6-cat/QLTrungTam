@@ -86,7 +86,7 @@ export default async function DebtsPage({
         description="Toàn bộ học phí chưa thu, cộng dồn qua mọi tháng. Lọc theo tháng hoặc đổi cách sắp xếp ở bên dưới."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label={period ? `Công nợ ${formatMonth(period.month, period.year)}` : "Tổng công nợ"}
           tone={summary.totalAmount > 0 ? "warning" : "success"}
@@ -190,7 +190,7 @@ export default async function DebtsPage({
         <Panel className="overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="w-12 px-3 py-3 text-center">#</th>
                   <th className="px-4 py-3">Học sinh</th>
@@ -209,7 +209,7 @@ export default async function DebtsPage({
                     (invoice) => !row.invoices.some((item) => item.id === invoice.id)
                   );
                   return (
-                    <tr key={row.studentId} className="align-top transition-colors hover:bg-indigo-50/40">
+                    <tr key={row.studentId} className="align-top transition-colors hover:bg-stone-50">
                       <td className="px-3 py-3 text-center tabular-nums text-stone-400">
                         {(page - 1) * PAGE_SIZE + index + 1}
                       </td>

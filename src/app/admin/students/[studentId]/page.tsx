@@ -545,7 +545,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Lớp</th>
                   <th className="px-4 py-3">Giáo viên</th>
@@ -561,7 +561,7 @@ export default async function Student360Page({
                     (month) => month.month === currentMonth && month.year === currentYear
                   );
                   const currentStatus = currentStatusByEnrollmentId.get(enrollment.id) ?? enrollment.status;
-                  return <tr key={enrollment.id} className="transition-colors hover:bg-indigo-50/40">
+                  return <tr key={enrollment.id} className="transition-colors hover:bg-stone-50">
                     <td className="px-4 py-3">
                       <div className="font-semibold">{enrollment.classRoom.name}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
@@ -618,7 +618,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Kỳ</th>
                   <th className="px-4 py-3">Lớp</th>
@@ -631,7 +631,7 @@ export default async function Student360Page({
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {monthRows.map(({ enrollment, month }) => (
-                  <tr key={month.id} className="transition-colors hover:bg-indigo-50/40">
+                  <tr key={month.id} className="transition-colors hover:bg-stone-50">
                     <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatMonth(month.month, month.year)}</td>
                     <td className="px-4 py-3">
                       <div className="font-semibold">{enrollment.classRoom.shortCode}</div>
@@ -672,7 +672,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1320px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Kỳ</th>
                   <th className="px-4 py-3">Snapshot khi phát hành</th>
@@ -687,7 +687,7 @@ export default async function Student360Page({
                   const status = invoiceStatusMeta(invoice.status);
                   const relatedTransactions = transactionsByInvoiceId.get(invoice.id) ?? [];
                   return (
-                    <tr key={invoice.id} className="align-top transition-colors hover:bg-indigo-50/40">
+                    <tr key={invoice.id} className="align-top transition-colors hover:bg-stone-50">
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="font-semibold">{formatMonth(invoice.month, invoice.year)}</div>
                         <div className="mt-1 text-xs text-stone-500">Phát hành {formatDateTime(invoice.createdAt)}</div>
@@ -764,7 +764,7 @@ export default async function Student360Page({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1180px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Thời gian</th>
                   <th className="px-4 py-3">Phương thức / mã GD</th>
@@ -793,7 +793,7 @@ export default async function Student360Page({
                           ? { label: "Đã xử lý", tone: "neutral" as const }
                           : { label: "Đã bỏ gán", tone: "neutral" as const };
                   return (
-                    <tr key={transaction.id} className="align-top transition-colors hover:bg-indigo-50/40">
+                    <tr key={transaction.id} className="align-top transition-colors hover:bg-stone-50">
                       <td className="whitespace-nowrap px-4 py-3">{formatDateTime(transaction.transferredAt)}</td>
                       <td className="px-4 py-3">
                         <Badge tone={transaction.paymentMethod === "cash" ? "neutral" : "primary"}>

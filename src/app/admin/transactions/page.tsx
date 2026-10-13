@@ -247,7 +247,7 @@ export default async function TransactionsPage({
       />
 
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
         <StatCard
           label={`Học phí kỳ ${formatMonth(selectedMonth, selectedYear)} đã đóng`}
           tone="success"
@@ -283,7 +283,7 @@ export default async function TransactionsPage({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Tháng</th>
                   <th className="px-4 py-3">Hóa đơn</th>
@@ -341,7 +341,7 @@ export default async function TransactionsPage({
                 <col className="w-[17%]" />
                 <col className="w-[10%]" />
               </colgroup>
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-3">Ngày đóng</th>
                   <th className="whitespace-nowrap px-3 py-3">Học sinh</th>
@@ -447,7 +447,7 @@ export default async function TransactionsPage({
                 <col className="w-[13%]" />
                 <col className="w-[9%]" />
               </colgroup>
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-3">Thời gian</th>
                   <th className="whitespace-nowrap px-3 py-3">Mã GD</th>
@@ -597,7 +597,7 @@ export default async function TransactionsPage({
                 <col className="w-[30%]" />
                 <col className="w-[24%]" />
               </colgroup>
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-3">Thời gian</th>
                   <th className="whitespace-nowrap px-3 py-3">Mã GD</th>

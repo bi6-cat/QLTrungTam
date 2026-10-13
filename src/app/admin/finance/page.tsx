@@ -87,7 +87,7 @@ export default async function FinancePage({
         amount={owedPast.reduce((sum, line) => sum + line.difference, 0)}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label={`Học phí kỳ ${formatMonth(month, year)} đã thu`}
           tone="success"
@@ -153,7 +153,7 @@ export default async function FinancePage({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Giáo viên / Lớp</th>
                   <th className="px-4 py-3 text-right">Học phí tính lương</th>
@@ -274,7 +274,7 @@ export default async function FinancePage({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+                <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <tr>
                     <th className="px-4 py-3">Lớp</th>
                     <th className="px-4 py-3">Buổi</th>
@@ -287,7 +287,7 @@ export default async function FinancePage({
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {finance.classMargins.map((row) => (
-                    <tr key={row.classId} className="transition-colors hover:bg-indigo-50/40">
+                    <tr key={row.classId} className="transition-colors hover:bg-stone-50">
                       <td className="px-4 py-3">
                         <div className="font-semibold">{row.name}</div>
                         <div className="text-xs text-stone-500">
@@ -387,7 +387,7 @@ export default async function FinancePage({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+            <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
               <tr>
                 <th className="px-4 py-3">Kỳ</th>
                 <th className="px-4 py-3 text-right">Đã thu</th>
@@ -451,7 +451,7 @@ export default async function FinancePage({
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
-              <thead className="border-b border-indigo-100 bg-indigo-50/60 text-xs font-semibold uppercase tracking-wide text-indigo-900/60">
+              <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 <tr>
                   <th className="px-4 py-3">Nội dung</th>
                   <th className="px-4 py-3">Loại</th>
@@ -463,7 +463,7 @@ export default async function FinancePage({
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {expenses.map((expense) => (
-                  <tr key={expense.id} className="transition-colors hover:bg-indigo-50/40">
+                  <tr key={expense.id} className="transition-colors hover:bg-stone-50">
                     <td className="px-4 py-3">
                       <div className="font-medium">{expense.description}</div>
                       <div className="text-xs text-stone-500">
