@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, EyeOff, ListChecks, MessageSquareText, Send, ShieldCheck, Star, ThumbsUp, Users } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, EyeOff, Inbox, ListChecks, MessageSquareText, Send, ShieldCheck, Star, ThumbsUp, Users } from "lucide-react";
 import { clsx } from "clsx";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { CommentVisibilityButton } from "@/components/surveys/CommentVisibilityButton";
@@ -32,7 +32,9 @@ import { activeStudentCounts, getSurveyDetail } from "@/lib/surveys";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "results" | "questions" | "share";
+type Tab = "results" | "responses" | "questions" | "share";
+
+const RESPONSES_PER_PAGE = 50;
 
 function tabHref(surveyId: string, tab: Tab, extra: Record<string, string | undefined> = {}) {
   const params = new URLSearchParams({ tab });
@@ -60,7 +62,7 @@ export default async function SurveyDetailPage({
   searchParams
 }: {
   params: Promise<{ surveyId: string }>;
-  searchParams: Promise<{ tab?: string; class?: string; role?: string }>;
+  searchParams: Promise<{ tab?: string; class?: string; role?: string; page?: string }>;
 }) {
   await requireAdmin();
   const { surveyId } = await params;
@@ -79,7 +81,7 @@ export default async function SurveyDetailPage({
 
   const responseCount = survey.responses.length;
   const tab: Tab =
-    query.tab === "questions" || query.tab === "share" || query.tab === "results"
+    query.tab === "questions" || query.tab === "share" || query.tab === "results" || query.tab === "responses"
       ? query.tab
       : responseCount > 0
         ? "results"
@@ -95,6 +97,10 @@ export default async function SurveyDetailPage({
     ...activeClasses.map((c) => [c.id, c.name] as const)
   ]);
   const studentTotal = survey.links.reduce((sum, link) => sum + (studentCounts.get(link.classId) ?? 0), 0);
+
+  const classFilter = query.class && className.has(query.class) ? query.class : undefined;
+  const roleFilter: SurveyRespondent | undefined =
+    query.role === "student" || query.role === "parent" ? query.role : undefined;
 
   const statusLabel = survey.status === "open" && !survey.acceptsResponses ? "Hết hạn" : STATUS_LABEL[survey.status];
 
@@ -137,6 +143,7 @@ export default async function SurveyDetailPage({
         {(
           [
             { key: "results", label: "Kết quả", count: responseCount, icon: Star },
+            { key: "responses", label: "Từng phiếu", count: responseCount, icon: Inbox },
             { key: "questions", label: "Câu hỏi", count: survey.questions.length, icon: ListChecks },
             { key: "share", label: "Gửi link", count: survey.links.length, icon: Send }
           ] as const
@@ -199,11 +206,22 @@ export default async function SurveyDetailPage({
         </Panel>
       ) : null}
 
+      {tab === "responses" ? (
+        <ResponseList
+          survey={survey}
+          classFilter={classFilter}
+          roleFilter={roleFilter}
+          className={className}
+          responsesByClass={responsesByClass}
+          page={Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1)}
+        />
+      ) : null}
+
       {tab === "results" ? (
         <Results
           survey={survey}
-          classFilter={query.class && className.has(query.class) ? query.class : undefined}
-          roleFilter={query.role === "student" || query.role === "parent" ? query.role : undefined}
+          classFilter={classFilter}
+          roleFilter={roleFilter}
           className={className}
           responsesByClass={responsesByClass}
           studentCounts={studentCounts}
@@ -247,39 +265,17 @@ function Results({
   const filtered = survey.responses.filter(
     (r) => (!classFilter || r.classId === classFilter) && (!roleFilter || r.respondentRole === roleFilter)
   );
-  const filterHref = (next: { class?: string; role?: string }) =>
-    tabHref(survey.id, "results", { class: classFilter, role: roleFilter, ...next });
-  const classesWithResponses = [...responsesByClass.entries()].sort((a, b) =>
-    (className.get(a[0]) ?? "").localeCompare(className.get(b[0]) ?? "", "vi")
-  );
-
   const filters = (
-    <div className="grid gap-2">
-      <div className="scrollbar-none -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-        <Chip href={filterHref({ class: "" })} active={!classFilter}>
-          Tất cả lớp
-        </Chip>
-        {classesWithResponses.map(([classId, count]) => (
-          <Chip key={classId} href={filterHref({ class: classId })} active={classFilter === classId}>
-            {className.get(classId) ?? "Lớp đã xóa"}
-            <span className="opacity-60">{count}</span>
-          </Chip>
-        ))}
-      </div>
-      {survey.audience === "both" ? (
-        <div className="flex flex-wrap gap-1.5">
-          <Chip href={filterHref({ role: "" })} active={!roleFilter}>
-            Mọi người trả lời
-          </Chip>
-          {(["student", "parent"] as const).map((role) => (
-            <Chip key={role} href={filterHref({ role })} active={roleFilter === role}>
-              {RESPONDENT_LABEL[role]}
-            </Chip>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <ResponseFilters
+      survey={survey}
+      tab="results"
+      classFilter={classFilter}
+      roleFilter={roleFilter}
+      className={className}
+      responsesByClass={responsesByClass}
+    />
   );
+  const classesWithResponses = [...responsesByClass.keys()];
 
   if (!meetsThreshold(filtered.length, min)) {
     return (
@@ -385,6 +381,297 @@ function Results({
         ))}
       </div>
     </div>
+  );
+}
+
+function ResponseFilters({
+  survey,
+  tab,
+  classFilter,
+  roleFilter,
+  className,
+  responsesByClass
+}: {
+  survey: SurveyDetail;
+  tab: Tab;
+  classFilter?: string;
+  roleFilter?: SurveyRespondent;
+  className: Map<string, string>;
+  responsesByClass: Map<string, number>;
+}) {
+  // Đổi bộ lọc thì về trang 1 của danh sách phiếu.
+  const filterHref = (next: { class?: string; role?: string }) =>
+    tabHref(survey.id, tab, { class: classFilter, role: roleFilter, ...next });
+  const classesWithResponses = [...responsesByClass.entries()].sort((a, b) =>
+    (className.get(a[0]) ?? "").localeCompare(className.get(b[0]) ?? "", "vi")
+  );
+
+  return (
+    <div className="grid gap-2">
+      <div className="scrollbar-none -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+        <Chip href={filterHref({ class: "" })} active={!classFilter}>
+          Tất cả lớp
+        </Chip>
+        {classesWithResponses.map(([classId, count]) => (
+          <Chip key={classId} href={filterHref({ class: classId })} active={classFilter === classId}>
+            {className.get(classId) ?? "Lớp đã xóa"}
+            <span className="opacity-60">{count}</span>
+          </Chip>
+        ))}
+      </div>
+      {survey.audience === "both" ? (
+        <div className="flex flex-wrap gap-1.5">
+          <Chip href={filterHref({ role: "" })} active={!roleFilter}>
+            Mọi người trả lời
+          </Chip>
+          {(["student", "parent"] as const).map((role) => (
+            <Chip key={role} href={filterHref({ role })} active={roleFilter === role}>
+              {RESPONDENT_LABEL[role]}
+            </Chip>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatDay(iso: string) {
+  return iso.split("-").reverse().join("/");
+}
+
+/** Xem lần lượt từng phiếu: mọi câu trả lời của một người nằm cùng một thẻ. */
+function ResponseList({
+  survey,
+  classFilter,
+  roleFilter,
+  className,
+  responsesByClass,
+  page
+}: {
+  survey: SurveyDetail;
+  classFilter?: string;
+  roleFilter?: SurveyRespondent;
+  className: Map<string, string>;
+  responsesByClass: Map<string, number>;
+  page: number;
+}) {
+  if (survey.responses.length === 0) {
+    return (
+      <EmptyState title="Chưa có phiếu trả lời" icon={<Inbox className="h-6 w-6" />}>
+        Phiếu sẽ hiện ở đây ngay khi học sinh hoặc phụ huynh gửi.
+      </EmptyState>
+    );
+  }
+
+  // Mới nhất lên đầu; trong cùng ngày giữ thứ tự ngẫu nhiên của mã phiếu.
+  const filtered = survey.responses
+    .filter((r) => (!classFilter || r.classId === classFilter) && (!roleFilter || r.respondentRole === roleFilter))
+    .sort((a, b) => b.submittedOn.localeCompare(a.submittedOn));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / RESPONSES_PER_PAGE));
+  const current = Math.min(page, pageCount);
+  const start = (current - 1) * RESPONSES_PER_PAGE;
+  const visible = filtered.slice(start, start + RESPONSES_PER_PAGE);
+  const pageHref = (next: number) =>
+    tabHref(survey.id, "responses", { class: classFilter, role: roleFilter, page: next > 1 ? String(next) : undefined });
+
+  return (
+    <div className="grid gap-4">
+      <ResponseFilters
+        survey={survey}
+        tab="responses"
+        classFilter={classFilter}
+        roleFilter={roleFilter}
+        className={className}
+        responsesByClass={responsesByClass}
+      />
+
+      {filtered.length === 0 ? (
+        <EmptyState title="Không có phiếu nào khớp bộ lọc" icon={<Inbox className="h-6 w-6" />}>
+          Chọn lớp hoặc đối tượng khác.
+        </EmptyState>
+      ) : (
+        <>
+          <p className="text-sm text-stone-500">
+            {filtered.length} phiếu{pageCount > 1 ? ` · đang xem ${start + 1}–${start + visible.length}` : ""}. Phiếu ẩn danh,
+            chỉ biết lớp và ngày gửi.
+          </p>
+          <ResponseTable
+            survey={survey}
+            rows={visible.map((response, index) => ({
+              response,
+              number: filtered.length - start - index,
+              classLabel: response.classId ? (className.get(response.classId) ?? "Lớp đã xóa") : "Lớp đã xóa"
+            }))}
+          />
+          {pageCount > 1 ? (
+            <nav className="flex items-center justify-center gap-2" aria-label="Trang danh sách phiếu">
+              {current > 1 ? (
+                <Link href={pageHref(current - 1)} scroll={false} className="focus-ring inline-flex h-9 items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-600 hover:bg-stone-50">
+                  <ChevronLeft className="h-4 w-4" />
+                  Trước
+                </Link>
+              ) : null}
+              <span className="px-2 text-sm tabular-nums text-stone-500">
+                Trang {current}/{pageCount}
+              </span>
+              {current < pageCount ? (
+                <Link href={pageHref(current + 1)} scroll={false} className="focus-ring inline-flex h-9 items-center gap-1 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-600 hover:bg-stone-50">
+                  Sau
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Bảng phiếu kiểu bảng tính: mỗi phiếu một hàng, mỗi câu một cột (C1, C2…), góp ý tự viết
+ * gom ở cột cuối. Chú thích tên câu nằm trên bảng để tiêu đề cột gọn.
+ */
+function ResponseTable({
+  survey,
+  rows
+}: {
+  survey: SurveyDetail;
+  rows: { response: SurveyDetail["responses"][number]; number: number; classLabel: string }[];
+}) {
+  const scored = survey.questions.filter((q) => q.type !== "text");
+  const texts = survey.questions.filter((q) => q.type === "text");
+  const code = new Map(survey.questions.map((q, index) => [q.id, `C${index + 1}`]));
+
+  return (
+    <Panel className="p-0">
+      <details className="group border-b border-stone-100 px-4 py-3 text-xs text-stone-500">
+        <summary className="cursor-pointer list-none font-medium text-stone-600 [&::-webkit-details-marker]:hidden">
+          <span className="group-open:hidden">Xem nội dung từng câu (C1–C{survey.questions.length}) ▾</span>
+          <span className="hidden group-open:inline">Ẩn nội dung câu hỏi ▴</span>
+        </summary>
+        <ol className="mt-2 grid gap-1 sm:grid-cols-2">
+          {survey.questions.map((question) => (
+            <li key={question.id}>
+              <strong className="font-semibold text-neutralText">{code.get(question.id)}.</strong> {question.prompt}
+            </li>
+          ))}
+        </ol>
+      </details>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs text-stone-500">
+            <tr className="border-b border-stone-100 bg-stone-50/70">
+              <th className="sticky left-0 z-10 bg-stone-50 px-3 py-2 font-semibold">Phiếu</th>
+              <th className="px-3 py-2 font-semibold">Lớp · ngày</th>
+              <th className="px-2 py-2 text-center font-semibold">TB</th>
+              {scored.map((question) => (
+                <th key={question.id} title={question.prompt} className="px-2 py-2 text-center font-semibold">
+                  {code.get(question.id)}
+                </th>
+              ))}
+              {texts.length > 0 ? <th className="min-w-[16rem] px-3 py-2 font-semibold">Góp ý</th> : null}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stone-100">
+            {rows.map(({ response, number, classLabel }) => {
+              const answers = new Map(response.answers.map((answer) => [answer.questionId, answer]));
+              const rating = overallRating(survey.questions, [response]);
+              const comments = texts.flatMap((question) => {
+                const answer = answers.get(question.id);
+                return answer?.text ? [{ question, answer }] : [];
+              });
+              return (
+                <tr key={response.id} className="align-top hover:bg-stone-50/60">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2.5 font-semibold tabular-nums text-neutralText">#{number}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    <span className="block font-medium text-neutralText">{classLabel}</span>
+                    <span className="text-xs text-stone-500">
+                      {survey.audience === "both" ? `${RESPONDENT_LABEL[response.respondentRole]} · ` : ""}
+                      {formatDay(response.submittedOn)}
+                    </span>
+                  </td>
+                  <td className={clsx("px-2 py-2.5 text-center font-bold tabular-nums", scoreTone(rating).text)}>
+                    {rating === null ? "—" : formatScore(rating)}
+                  </td>
+                  {scored.map((question) => (
+                    <td key={question.id} className="px-2 py-2.5 text-center">
+                      <AnswerCell question={question} answer={answers.get(question.id)} />
+                    </td>
+                  ))}
+                  {texts.length > 0 ? (
+                    <td className="px-3 py-2.5">
+                      {comments.length === 0 ? (
+                        <span className="text-stone-300">—</span>
+                      ) : (
+                        <ul className="grid gap-1.5">
+                          {comments.map(({ question, answer }) => (
+                            <li key={question.id} className="flex items-start gap-1.5">
+                              <p
+                                className={clsx(
+                                  "min-w-0 flex-1 whitespace-pre-line break-words",
+                                  answer.hidden ? "text-stone-400 line-through" : "text-stone-700"
+                                )}
+                              >
+                                {texts.length > 1 ? (
+                                  <span className="mr-1 text-xs font-semibold text-stone-400">{code.get(question.id)}</span>
+                                ) : null}
+                                {answer.text}
+                              </p>
+                              <CommentVisibilityButton responseId={response.id} questionId={question.id} hidden={answer.hidden} />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+/** Ô câu trả lời gọn: sao/NPS là số có màu, lựa chọn là chữ ngắn (đủ nội dung khi rê chuột). */
+function AnswerCell({
+  question,
+  answer
+}: {
+  question: SurveyDetail["questions"][number];
+  answer: SurveyDetail["responses"][number]["answers"][number] | undefined;
+}) {
+  const empty = <span className="text-stone-300">—</span>;
+  if (!answer) return empty;
+
+  if (question.type === "rating" || question.type === "nps") {
+    if (answer.value === null) return empty;
+    const value = answer.value;
+    const tone =
+      question.type === "rating"
+        ? scoreTone(value).text
+        : value >= 9
+          ? "text-emerald-700"
+          : value >= 7
+            ? "text-stone-600"
+            : "text-rose-700";
+    return (
+      <span className={clsx("inline-flex items-center gap-0.5 font-semibold tabular-nums", tone)}>
+        {value}
+        {question.type === "rating" ? <Star className="h-3 w-3 fill-current" /> : null}
+      </span>
+    );
+  }
+
+  const picked = answer.choices.map((choice) => question.options[choice]).filter(Boolean);
+  if (picked.length === 0) return empty;
+  const label = picked.join(", ");
+  return (
+    <span title={label} className="mx-auto block max-w-[9rem] truncate text-xs text-stone-700">
+      {label}
+    </span>
   );
 }
 

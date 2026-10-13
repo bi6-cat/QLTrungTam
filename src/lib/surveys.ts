@@ -190,7 +190,7 @@ export async function getSurveyDetail(surveyId: string) {
       links: {
         include: { classRoom: { select: { id: true, name: true, shortCode: true, teacherName: true, archivedAt: true } } }
       },
-      responses: { select: responseSelect, orderBy: { id: "asc" } }
+      responses: { select: { ...responseSelect, submittedOn: true }, orderBy: { id: "asc" } }
     }
   });
   if (!survey) return null;
@@ -198,6 +198,9 @@ export async function getSurveyDetail(surveyId: string) {
     ...survey,
     closesOn: survey.closesOn ? isoFromDbDate(survey.closesOn) : null,
     acceptsResponses: surveyAcceptsResponses(survey),
-    responses: toResponseRows(survey.responses)
+    responses: toResponseRows(survey.responses).map((row, index) => ({
+      ...row,
+      submittedOn: isoFromDbDate(survey.responses[index].submittedOn)
+    }))
   };
 }

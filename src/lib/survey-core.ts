@@ -51,7 +51,7 @@ export const CATEGORY_LABEL: Record<SurveyCategory, string> = {
 
 export const MAX_TEXT_ANSWER = 2000;
 export const MAX_OPTIONS = 12;
-export const DEFAULT_MIN_GROUP_SIZE = 3;
+export const DEFAULT_MIN_GROUP_SIZE = 1;
 
 export function isChoiceType(type: SurveyQuestionType) {
   return type === "single" || type === "multi";

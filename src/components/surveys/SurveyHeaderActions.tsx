@@ -111,11 +111,12 @@ function EditSurveyDialog({ survey, onClose }: { survey: SurveyInfo; onClose: ()
             <Input name="closesOn" type="date" defaultValue={survey.closesOn ?? ""} />
           </Field>
         </div>
-        <Field label="Số phiếu tối thiểu để xem kết quả theo nhóm" hint="1–20">
+        <Field label="Số phiếu tối thiểu để xem kết quả theo nhóm" hint="1 = luôn hiện">
           <Input name="minGroupSize" type="number" min={1} max={20} required defaultValue={survey.minGroupSize} />
         </Field>
         <p className="text-xs text-stone-500">
-          Lớp (hoặc đối tượng) có ít phiếu hơn số này sẽ bị ẩn kết quả riêng, để không đoán ra ai đã trả lời gì.
+          Đặt lớn hơn 1 nếu muốn ẩn kết quả của lớp (hoặc đối tượng) quá ít phiếu, để không đoán ra ai đã trả lời gì. Tab
+          “Từng phiếu” luôn hiện đủ.
         </p>
         {state.error ? (
           <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">

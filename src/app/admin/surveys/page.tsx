@@ -8,7 +8,6 @@ import { formatDayMonth } from "@/lib/format";
 import {
   AUDIENCE_LABEL,
   CATEGORY_LABEL,
-  DEFAULT_MIN_GROUP_SIZE,
   formatPercent,
   formatScore,
   meetsThreshold,
@@ -92,7 +91,7 @@ export default async function SurveysPage() {
             <Panel>
               <h2 className="font-semibold text-neutralText">Điểm giáo viên</h2>
               <p className="mt-0.5 text-xs text-stone-500">
-                Câu nhóm “Giáo viên”, gắn theo giáo viên của lớp nhận link. Cần từ {DEFAULT_MIN_GROUP_SIZE} phiếu mới hiện điểm.
+                Câu nhóm “Giáo viên”, gắn theo giáo viên của lớp nhận link.
               </p>
               <div className="mt-4 grid gap-4">
                 {teachers.length === 0 ? (

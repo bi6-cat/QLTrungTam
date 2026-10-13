@@ -9,6 +9,14 @@ import { toast } from "@/components/Toaster";
 import { buildParentNotice } from "@/lib/parent-notice";
 import { renderTuitionOverviewImage } from "@/lib/tuition-overview-image";
 
+// Ô nội dung cao vừa đủ theo chữ thay vì cố định 10 dòng để lại khoảng trống. Ref dạng hàm mới
+// mỗi lần render nên chạy lại cả khi hộp thoại vừa mở lẫn khi sửa chữ.
+function fitToContent(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight + 2}px`;
+}
+
 type OverviewStatus = "unpaid" | "paid" | "waived" | "void" | "not_created" | "on_leave";
 
 type OverviewRow = {
@@ -191,10 +199,11 @@ function ParentLinkDialog({
           <p className="mt-1 text-xs text-stone-500">Có thể sửa nội dung trước khi chép sang Zalo.</p>
           <textarea
             id="parent-link-message"
+            ref={(el) => fitToContent(el)}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            rows={10}
-            className="focus-ring mt-2 w-full rounded-xl border border-stone-300 bg-white p-3 text-sm leading-relaxed shadow-sm hover:border-stone-400 focus:border-primary"
+            rows={4}
+            className="focus-ring mt-2 max-h-[50vh] w-full resize-none rounded-xl border border-stone-300 bg-white p-3 text-sm leading-relaxed shadow-sm hover:border-stone-400 focus:border-primary"
           />
         </div>
 

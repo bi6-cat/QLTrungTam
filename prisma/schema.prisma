@@ -382,8 +382,8 @@ model Survey {
   status       SurveyStatus      @default(draft)
   /// Hết ngày này (giờ Việt Nam) thì link tự ngừng nhận phiếu; null = mở đến khi đóng tay.
   closesOn     DateTime?         @db.Date
-  /// Kết quả của một nhóm (lớp, giáo viên, đối tượng) chỉ hiện khi có ít nhất ngần này phiếu.
-  minGroupSize Int               @default(3)
+  /// Kết quả của một nhóm (lớp, giáo viên, đối tượng) chỉ hiện khi có ít nhất ngần này phiếu; 1 = luôn hiện.
+  minGroupSize Int               @default(1)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   questions    SurveyQuestion[]

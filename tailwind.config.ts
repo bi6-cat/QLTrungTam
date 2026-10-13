@@ -11,13 +11,15 @@ const config: Config = {
         warning: "#F43F5E",
         neutralBg: "#FAFAF9",
         neutralText: "#1F2933",
-        // Bảng màu trang chủ: nền ngà, chữ mực xanh đen, điểm nhấn vàng đồng.
-        ivory: { DEFAULT: "#F7F5F0", deep: "#EFEBE3" },
-        ink: { DEFAULT: "#0E1726", soft: "#1B2638", muted: "#5B6474" },
-        brass: { DEFAULT: "#B8925A", dark: "#7F6033", light: "#D9BE8C" }
+        // Bảng màu trang công khai: xanh chàm thương hiệu, vàng nắng làm điểm nhấn, chữ xanh than.
+        brand: { DEFAULT: "#4338CA", dark: "#3730A3", deep: "#1E1B4B", light: "#C7D2FE", soft: "#EEF2FF" },
+        sun: { DEFAULT: "#FBBF24", dark: "#B45309", soft: "#FEF3C7" },
+        ink: { DEFAULT: "#0F172A", muted: "#475569" },
+        canvas: "#F8FAFF"
       },
       fontFamily: {
-        display: ["var(--font-display)", "Georgia", "serif"]
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        hand: ["var(--font-hand)", "Comic Sans MS", "cursive"]
       },
       boxShadow: {
         // Bóng đổ nhiều lớp cho chiều sâu tinh tế hơn bóng phẳng cũ.
@@ -41,12 +43,22 @@ const config: Config = {
         },
         shimmer: {
           "100%": { transform: "translateX(100%)" }
+        },
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" }
+        },
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" }
         }
       },
       animation: {
         "fade-up": "fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both",
         "fade-in": "fade-in 0.35s ease-out both",
-        "scale-in": "scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both"
+        "scale-in": "scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both",
+        marquee: "marquee 38s linear infinite",
+        float: "float 6s ease-in-out infinite"
       }
     }
   },
