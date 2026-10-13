@@ -425,6 +425,7 @@ export default async function Student360Page({
             </Link>
             {!student.archivedAt ? (
               <EditStudentButton
+                size="md"
                 student={{
                   id: student.id,
                   fullName: student.fullName,

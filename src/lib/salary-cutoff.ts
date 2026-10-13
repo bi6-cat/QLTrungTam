@@ -60,6 +60,27 @@ export function cutoffResolver(rule: SalaryCutoff, overrides?: ReadonlyMap<numbe
 }
 
 /**
+ * Ngày chốt đặt riêng cho một lớp trong từng tháng: thắng mọi quy tắc khác, kể cả việc lùi theo
+ * ngày chuyển lương (người dùng đã chọn ngày cụ thể cho lớp-tháng đó).
+ */
+export function withClassOverrides<T extends CutoffResolver & { fromPayout(index: number): boolean }>(
+  base: T,
+  overrides: ReadonlyMap<number, Date>
+): T & { classOverridden(index: number): boolean } {
+  return {
+    ...base,
+    date: (index) => overrides.get(index) ?? base.date(index),
+    end: (index) => {
+      const day = overrides.get(index);
+      return day ? new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1) : base.end(index);
+    },
+    overridden: (index) => overrides.has(index) || base.overridden(index),
+    fromPayout: (index) => !overrides.has(index) && base.fromPayout(index),
+    classOverridden: (index) => overrides.has(index)
+  };
+}
+
+/**
  * "Dư nợ" là tiền học sinh đóng sau ngày tính lương. Tháng nào chuyển lương MUỘN hơn ngày chốt
  * (vd lớp mới thu học phí tháng 8 vào tháng 9 rồi mới trả lương ngày 30/9) thì ngày chốt lùi tới
  * ngày chuyển lương đầu tiên của tháng đó; chuyển sớm hơn thì vẫn giữ ngày chốt.

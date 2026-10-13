@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, Plus, Search } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 import { createEnrollmentAction } from "@/lib/actions/enrollments";
@@ -35,7 +35,14 @@ export function StudentEnrollmentPicker({
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
-  const markStale = useRefreshWhenIdle(pending);
+  // Thêm đủ hết thì đóng hộp thoại, nhưng chỉ sau khi đã gọi nạp lại danh sách lớp: đóng ngay
+  // thì component bị gỡ trước khi kịp refresh, phải tải lại trang mới thấy học sinh mới.
+  const closeWhenIdle = useRef(false);
+  const markStale = useRefreshWhenIdle(pending, () => {
+    if (!closeWhenIdle.current) return;
+    closeWhenIdle.current = false;
+    onSuccess?.();
+  });
   const [error, setError] = useState("");
 
   function toggleSelected(id: string) {
@@ -50,7 +57,11 @@ export function StudentEnrollmentPicker({
     });
   }
 
-  async function handleSubmit(formData: FormData) {
+  // onSubmit thường thay vì <form action>: action của form chạy trong transition nên `pending`
+  // không bao giờ hiện là true, useRefreshWhenIdle sẽ không biết lúc nào đã xong để nạp lại.
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     if (selectedIds.size === 0) return;
     setPending(true);
     setError("");
@@ -76,12 +87,13 @@ export function StudentEnrollmentPicker({
       }
     }
     if (succeeded.length > 0) markStale();
+    closeWhenIdle.current = succeeded.length > 0 && failed.length === 0;
     setPending(false);
 
     if (succeeded.length === 1) toast.success(succeeded[0]);
     else if (succeeded.length > 1) toast.success(`Đã thêm ${succeeded.length} học sinh vào lớp.`);
     if (failed.length === 0) {
-      onSuccess?.();
+      if (succeeded.length === 0) onSuccess?.();
       return;
     }
     const nameById = new Map(students.map((student) => [student.id, student.fullName]));
@@ -106,7 +118,7 @@ export function StudentEnrollmentPicker({
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <form action={handleSubmit} className="mt-4 grid gap-4">
+    <form onSubmit={handleSubmit} className="mt-4 grid gap-4">
       <label className="grid gap-1.5 text-sm font-medium text-stone-700">
         Tìm học sinh
         <div className="relative">

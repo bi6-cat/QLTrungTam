@@ -40,7 +40,8 @@ export function SalaryMonthCutoffs({ rows, ruleLabel }: { rows: MonthCutoffRow[]
       <div className="grid gap-2 border-t border-stone-100 p-4">
         <p className="text-xs text-stone-500">
           Tháng nào trả lương khác ngày thường lệ thì đặt riêng ngày chốt cho tháng đó (áp dụng cho các lớp theo
-          ngày chốt chung). Học phí nộp sau ngày chốt tính sang lương tháng sau.
+          ngày chốt chung). Học phí nộp sau ngày chốt tính sang lương tháng sau. Chỉ muốn đổi cho một lớp thì bấm
+          “Đổi” cạnh ngày chốt của tháng đó trong bảng lương của lớp.
         </p>
         {rows.map((row) => (
           <CutoffRow key={`${row.year}-${row.month}`} row={row} />

@@ -397,7 +397,7 @@ export function SalaryWriteOffButton({
       <Button
         type="button"
         variant="ghost"
-        className="h-8 whitespace-nowrap px-2 text-xs text-stone-500"
+        className="h-8 whitespace-nowrap bg-stone-100 px-2.5 text-xs text-stone-600 hover:bg-stone-200 hover:text-neutralText"
         onClick={() => setOpen(true)}
         title={undo ? "Tính lại dư nợ của tháng này" : "Bỏ qua dư nợ tháng này (đã thỏa thuận xong với giáo viên)"}
       >

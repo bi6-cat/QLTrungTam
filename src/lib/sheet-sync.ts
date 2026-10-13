@@ -9,7 +9,7 @@ import {
 import { getMonthlyFinance } from "@/lib/finance";
 import { formatMonth } from "@/lib/format";
 import { batchUpdateSpreadsheet, listSheetTabs, parseServiceAccount } from "@/lib/google-sheets";
-import { salaryLineNotes } from "@/lib/salary";
+import { salaryLineNotes, salaryStatusText } from "@/lib/salary";
 import { expenseCategoryLabel } from "@/lib/schedule";
 import { buildTabRequests, monthTabTitle, pickSheetId, sheetSection, type Cell, type SheetRow } from "@/lib/sheet-layout";
 import { describeTransaction } from "@/lib/transaction-report";
@@ -265,7 +265,7 @@ export async function buildMonthRows(month: number, year: number, now = new Date
       line.paidCash,
       line.debt,
       line.difference,
-      line.status.label,
+      salaryStatusText(line.status),
       salaryLineNotes(line)
         .map((note) => `${note.label}: ${note.text}`)
         .join(" | ")

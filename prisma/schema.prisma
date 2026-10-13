@@ -58,6 +58,7 @@ model ClassRoom {
   sessions                ClassSession[]
   expenses                Expense[]
   salaryWriteOffs         SalaryWriteOff[]
+  salaryCutoffs           ClassSalaryCutoff[]
 
   @@index([shortCode])
   @@index([publicToken])
@@ -313,6 +314,20 @@ model SalaryMonthCutoff {
   updatedAt  DateTime @updatedAt
 
   @@id([year, month])
+}
+
+/// Ngày chốt lương đặt riêng cho một lớp trong một tháng lương. Ưu tiên hơn ngày chốt chung,
+/// ngày đặt riêng của tháng và quy tắc riêng của lớp; HS nộp sau ngày này tính sang lương tháng sau.
+model ClassSalaryCutoff {
+  classId    String
+  year       Int
+  month      Int
+  /// 0h (giờ máy chủ) của ngày chốt.
+  cutoffDate DateTime
+  updatedAt  DateTime  @updatedAt
+  classRoom  ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([classId, year, month])
 }
 
 model AppSetting {

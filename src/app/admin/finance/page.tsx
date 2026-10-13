@@ -18,7 +18,7 @@ import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui"
 import { getFinanceTrend, getMonthlyFinance } from "@/lib/finance";
 import { formatCurrency, formatDayMonth, formatMonth } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { getPendingSalaryLines, groupSalaryByTeacher } from "@/lib/salary";
+import { getPendingSalaryLines, groupSalaryByTeacher, salaryStatusText } from "@/lib/salary";
 import { expenseCategoryLabel } from "@/lib/schedule";
 import { requireAdmin } from "@/lib/auth";
 
@@ -246,7 +246,7 @@ export default async function FinancePage({
                             {line.difference === 0 ? "—" : formatCurrency(line.difference)}
                           </td>
                           <td className="px-4 py-2.5">
-                            <Badge tone={status.tone}>{status.label}</Badge>
+                            <Badge tone={status.tone}>{salaryStatusText(status)}</Badge>
                           </td>
                         </tr>
                       );

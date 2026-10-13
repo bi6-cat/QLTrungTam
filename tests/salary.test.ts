@@ -413,6 +413,53 @@ describe("debt column and write-off", () => {
   });
 });
 
+describe("class-month cutoff", () => {
+  const july = index(7);
+  const input = () =>
+    salaryInput({
+      fromIndex: july,
+      toIndex: index(9),
+      invoices: [
+        invoice("a", "paid", 4_680_000, new Date(2026, 6, 15), 7),
+        invoice("late", "paid", 320_000, new Date(2026, 7, 1, 22), 7),
+        invoice("b", "paid", 6_880_000, new Date(2026, 7, 20), 8)
+      ],
+      records: [payout("p8", 5_160_000, new Date(2026, 7, 31), 8)]
+    });
+
+  test("a later cutoff for one class keeps a late payment in its own month", () => {
+    const [t7] = computeSalaryLines({
+      ...input(),
+      classCutoffs: [{ classId: "c1", month: 7, year: 2026, cutoffDate: new Date(2026, 7, 5) }]
+    });
+    assert.equal(t7.cutoffClassOverridden, true);
+    assert.deepEqual(t7.cutoffDate, new Date(2026, 7, 5));
+    assert.equal(t7.carriedOut.length, 0);
+    assert.equal(t7.ownCollected, 5_000_000);
+  });
+
+  test("an earlier cutoff pushes the rest to next month and wins over the payout date", () => {
+    const lines = computeSalaryLines({
+      ...input(),
+      classCutoffs: [{ classId: "c1", month: 8, year: 2026, cutoffDate: new Date(2026, 7, 15) }]
+    });
+    const t8 = lines.find((line) => line.month === 8)!;
+    const t9 = lines.find((line) => line.month === 9)!;
+    assert.equal(t8.cutoffFromPayout, false);
+    assert.deepEqual(t8.carriedOut.map((item) => item.invoiceId), ["b"]);
+    assert.deepEqual(t9.carriedIn.map((item) => item.invoiceId), ["b"]);
+  });
+
+  test("other classes keep the shared cutoff", () => {
+    const [t7] = computeSalaryLines({
+      ...input(),
+      classCutoffs: [{ classId: "other", month: 7, year: 2026, cutoffDate: new Date(2026, 7, 5) }]
+    });
+    assert.equal(t7.cutoffClassOverridden, false);
+    assert.deepEqual(t7.carriedOut.map((item) => item.invoiceId), ["late"]);
+  });
+});
+
 describe("buildSalaryLedger", () => {
   test("groups months per class and teacher, and the message lists transfers and late payers", () => {
     const [teacher] = buildSalaryLedger(

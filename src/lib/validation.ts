@@ -300,6 +300,11 @@ export const salaryMonthCutoffSchema = z.object({
     .transform((v) => (v === "reset" ? "reset" : "save"))
 });
 
+/** Ngày chốt lương đặt riêng cho một lớp trong một tháng. */
+export const classSalaryCutoffSchema = salaryMonthCutoffSchema.extend({
+  classId: z.string().trim().min(1, "Thiếu lớp").max(64)
+});
+
 export const enrollmentSchema = z
   .object({
     studentId: id,

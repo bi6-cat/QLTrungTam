@@ -4,7 +4,7 @@ import { getAuthorizedUser } from "@/lib/auth";
 import { periodIndex } from "@/lib/enrollment-period";
 import { addReportBranding, styleTableDataRows, styleTableHeaderRow } from "@/lib/excel-report";
 import { formatDayMonth, formatMonth } from "@/lib/format";
-import { loadSalaryLedger, salaryLineNotes, type SalaryLine } from "@/lib/salary";
+import { loadSalaryLedger, salaryLineNotes, salaryStatusText, type SalaryLine } from "@/lib/salary";
 
 const RANGES = [1, 3, 6, 12];
 const NO_TEACHER = "__none";
@@ -120,7 +120,7 @@ export async function GET(request: Request) {
       cash: line.paidCash || null,
       debt: line.debt || null,
       remaining: line.difference || null,
-      status: line.status.label,
+      status: salaryStatusText(line.status),
       notes: salaryLineNotes(line)
         .map((note) => `${note.label}: ${note.text}`)
         .join("\n")

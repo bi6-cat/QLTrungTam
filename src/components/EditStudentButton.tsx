@@ -17,7 +17,7 @@ type Student = {
   note: string | null;
 };
 
-export function EditStudentButton({ student, size = "icon" }: { student: Student; size?: "icon" | "sm" }) {
+export function EditStudentButton({ student, size = "icon" }: { student: Student; size?: "icon" | "sm" | "md" }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -28,13 +28,15 @@ export function EditStudentButton({ student, size = "icon" }: { student: Student
         className={
           size === "sm"
             ? "h-8 gap-1 rounded-lg px-2 text-xs text-primary hover:bg-indigo-50"
-            : "h-9 w-9 px-0 text-primary hover:bg-indigo-50"
+            : size === "md"
+              ? "h-11 gap-2 px-4 text-primary hover:bg-indigo-50"
+              : "h-9 w-9 px-0 text-primary hover:bg-indigo-50"
         }
         title="Sửa học sinh"
         onClick={() => setOpen(true)}
       >
-        <Pencil className={size === "sm" ? "h-3.5 w-3.5" : "h-5 w-5"} />
-        {size === "sm" ? "Sửa" : null}
+        <Pencil className={size === "icon" ? "h-5 w-5" : size === "md" ? "h-4 w-4" : "h-3.5 w-3.5"} />
+        {size === "sm" ? "Sửa" : size === "md" ? "Sửa học sinh" : null}
       </Button>
       {open ? <EditStudentDialog student={student} onClose={() => setOpen(false)} /> : null}
     </>

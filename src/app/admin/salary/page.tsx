@@ -10,6 +10,7 @@ import {
   type PayslipOption
 } from "@/components/SalaryForms";
 import { SalaryMonthCutoffs, type MonthCutoffRow } from "@/components/SalaryMonthCutoffs";
+import { ClassSalaryCutoffButton } from "@/components/ClassSalaryCutoffButton";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { periodIndex } from "@/lib/enrollment-period";
@@ -414,6 +415,7 @@ function TeacherPanel({
   );
 }
 
+/** Các lần trả lương của một tháng (chuyển khoản và tiền mặt chung một cột, có nhãn CK/TM). */
 function PayoutList({
   payouts,
   className,
@@ -427,34 +429,92 @@ function PayoutList({
 }) {
   if (payouts.length === 0) return <span className="text-stone-400">—</span>;
   return (
-    <ul className="grid gap-1">
-      {payouts.map((payout) => (
-        <li key={payout.id} className="flex items-start justify-end gap-1">
-          <div className="min-w-0 text-right">
-            <div className="whitespace-nowrap">
-              <span className={`font-semibold ${payout.amount < 0 ? "text-primary" : "text-success"}`}>
-                {formatCurrency(payout.amount)}
-              </span>
-              <span className="ml-1.5 text-xs text-stone-500">{formatDayMonth(payout.paidAt ?? payout.createdAt)}</span>
+    <ul className="grid gap-1.5">
+      {payouts.map((payout) => {
+        const cash = payout.paymentMethod === "cash";
+        return (
+          <li key={payout.id} className="flex items-start justify-end gap-1.5">
+            <div className="min-w-0 text-right">
+              <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                <span
+                  className={`rounded px-1 py-px text-[10px] font-bold ${
+                    cash ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"
+                  }`}
+                  title={cash ? "Tiền mặt" : "Chuyển khoản"}
+                >
+                  {cash ? "TM" : "CK"}
+                </span>
+                <span className={`font-semibold tabular-nums ${payout.amount < 0 ? "text-primary" : "text-success"}`}>
+                  {formatCurrency(payout.amount)}
+                </span>
+              </div>
+              <div className="text-xs text-stone-500">
+                {formatDayMonth(payout.paidAt ?? payout.createdAt)}
+                {payout.note ? ` · ${payout.note}` : ""}
+              </div>
             </div>
-            {payout.note ? <div className="text-xs text-stone-500">{payout.note}</div> : null}
-          </div>
-          <ConfirmDeleteButton
-            id={payout.id}
-            action={deleteExpenseAction}
-            title="Xóa lần trả này"
-            description={
-              <>
-                Xóa khoản <strong>{formatCurrency(payout.amount)}</strong> (
-                {payout.paymentMethod === "cash" ? "tiền mặt" : "chuyển khoản"}) ngày{" "}
-                {formatDayMonth(payout.paidAt ?? payout.createdAt)} của {className} T{month}/{year}? Số này sẽ quay lại
-                phần còn thiếu của giáo viên.
-              </>
-            }
-          />
-        </li>
-      ))}
+            <ConfirmDeleteButton
+              id={payout.id}
+              action={deleteExpenseAction}
+              iconOnly
+              title="Xóa lần trả này"
+              description={
+                <>
+                  Xóa khoản <strong>{formatCurrency(payout.amount)}</strong> ({cash ? "tiền mặt" : "chuyển khoản"}) ngày{" "}
+                  {formatDayMonth(payout.paidAt ?? payout.createdAt)} của {className} T{month}/{year}? Số này sẽ quay lại
+                  phần còn thiếu của giáo viên.
+                </>
+              }
+            />
+          </li>
+        );
+      })}
     </ul>
+  );
+}
+
+const NOTE_TONE = {
+  in: "text-emerald-700",
+  out: "text-amber-700",
+  writeOff: "text-stone-500",
+  waiting: "text-primary"
+} as const;
+
+/** Ghi chú tự động; danh sách HS chưa nộp dài thì chỉ hiện vài tên đầu, bấm để xem hết. */
+function LedgerNotes({ period }: { period: SalaryLine }) {
+  const notes = salaryLineNotes(period).filter((note) => note.tone !== "waiting");
+  const waiting = period.waiting;
+  if (notes.length === 0 && waiting.length === 0) return <span className="text-stone-400">—</span>;
+  const preview = waiting.slice(0, 3).map((item) => item.studentName);
+  return (
+    <div className="grid gap-2">
+      {notes.map((note) => (
+        <div key={note.tone}>
+          <span className={`font-semibold ${NOTE_TONE[note.tone]}`}>{note.label}:</span> {note.text}
+        </div>
+      ))}
+      {waiting.length > 0 ? (
+        <div>
+          <span className={`font-semibold ${NOTE_TONE.waiting}`}>Chưa nộp ({waiting.length}):</span>{" "}
+          {waiting.length <= 3 ? (
+            preview.join(", ")
+          ) : (
+            <details className="inline">
+              <summary className="inline cursor-pointer list-none">
+                {preview.join(", ")}{" "}
+                <span className="font-semibold text-primary hover:underline">+{waiting.length - 3} HS khác</span>
+              </summary>
+              <span className="mt-1 block text-stone-500">{waiting.slice(3).map((item) => item.studentName).join(", ")}</span>
+            </details>
+          )}
+          <div className="mt-0.5 text-stone-500">
+            {period.cutoffPassed
+              ? "Nộp sau sẽ tính vào lương tháng sau."
+              : `+${formatCurrency(period.waitingShare)} nếu nộp trước ${formatDayMonth(period.cutoffDate)}`}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -469,9 +529,11 @@ function ClassLedger({
   options: PayoutOption[];
   currentIndex: number;
 }) {
+  const paidBank = classRoom.periods.reduce((sum, period) => sum + period.paidBank, 0);
+  const paidCash = classRoom.periods.reduce((sum, period) => sum + period.paidCash, 0);
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 px-5 pb-2 pt-4">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-5 pb-2 pt-4">
         <h3 className="font-bold">{classRoom.className}</h3>
         <span className="text-xs text-stone-500">
           {classRoom.shortCode} · {classRoom.classSharePercent}% học phí · chốt lương{" "}
@@ -481,43 +543,83 @@ function ClassLedger({
         <Link
           href={`/admin/classes?classId=${classRoom.classId}`}
           className="text-xs font-semibold text-primary hover:underline"
+          title="Đổi quy tắc chốt lương mặc định của lớp (áp dụng mọi tháng)"
         >
-          Đổi ngày chốt
+          Đổi quy tắc chốt
         </Link>
         {classRoom.archived ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1120px] text-left text-sm">
+        <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-[200px]" />
+            <col className="w-[120px]" />
+            <col className="w-[190px]" />
+            <col className="w-[150px]" />
+            <col />
+            <col className="w-[200px]" />
+          </colgroup>
           <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
             <tr>
               <th className="px-4 py-2.5">Tháng lương</th>
-              <th className="px-4 py-2.5 text-right">Tổng tháng</th>
-              <th className="px-4 py-2.5 text-right">Chuyển khoản</th>
-              <th className="px-4 py-2.5 text-right">Tiền mặt</th>
+              <th className="px-4 py-2.5 text-right">Phải trả</th>
+              <th className="px-4 py-2.5 text-right">Đã trả</th>
               <th className="px-4 py-2.5 text-right" title="Phần nộp muộn (tính sang lương tháng sau) + phần chưa trả">
                 Dư nợ
               </th>
-              <th className="px-4 py-2.5">Ghi chú tự động</th>
+              <th className="px-4 py-2.5">Ghi chú</th>
               <th className="px-4 py-2.5">Tình trạng</th>
-              <th className="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
             {classRoom.periods.map((period) => {
-              const isCurrent = periodIndex(period.month, period.year) === currentIndex;
+              const index = periodIndex(period.month, period.year);
+              const isCurrent = index === currentIndex;
               const key = periodKey(classRoom.classId, period);
-              const notes = salaryLineNotes(period);
+              const showPay = period.mode === "percent" && period.difference !== 0;
+              const showWriteOff = period.writeOff || (period.mode === "percent" && period.cutoffPassed && period.debt !== 0);
               return (
                 <tr key={key} className={`align-top ${isCurrent ? "bg-indigo-50/30" : "hover:bg-stone-50/60"}`}>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  <td className="px-4 py-3">
                     <div className="font-semibold">
                       T{period.month}/{period.year}
                       {isCurrent ? <span className="ml-1.5 text-xs font-medium text-primary">tháng này</span> : null}
                     </div>
-                    <div className="text-xs text-stone-500">
-                      chốt {formatDayMonth(period.cutoffDate)}
-                      {period.cutoffFromPayout ? " (theo ngày trả lương)" : period.cutoffOverridden ? " (đặt riêng)" : ""}
-                      {period.cutoffPassed ? "" : " (chưa tới)"}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-stone-500">
+                      <span
+                        className={period.cutoffClassOverridden ? "font-semibold text-indigo-700" : ""}
+                        title={
+                          period.cutoffClassOverridden
+                            ? "Ngày chốt đặt riêng cho lớp này trong tháng này"
+                            : period.cutoffFromPayout
+                              ? "Ngày chốt lùi tới ngày chuyển lương đầu tiên"
+                              : period.cutoffOverridden
+                                ? "Ngày chốt đặt riêng cho tháng này (mọi lớp theo ngày chung)"
+                                : undefined
+                        }
+                      >
+                        chốt {formatDayMonth(period.cutoffDate)}
+                        {period.cutoffClassOverridden
+                          ? " · riêng"
+                          : period.cutoffFromPayout
+                            ? " · theo ngày trả"
+                            : period.cutoffOverridden
+                              ? " · đặt riêng"
+                              : ""}
+                        {period.cutoffPassed ? "" : " · chưa tới"}
+                      </span>
+                      {period.mode === "percent" ? (
+                        <ClassSalaryCutoffButton
+                          classId={classRoom.classId}
+                          className={classRoom.className}
+                          month={period.month}
+                          year={period.year}
+                          value={dateInputValue(period.cutoffDate)}
+                          min={dateInputValue(new Date(period.year, period.month - 1, 1))}
+                          max={dateInputValue(new Date(period.year, period.month + 1, 0))}
+                          classOverridden={period.cutoffClassOverridden}
+                        />
+                      ) : null}
                     </div>
                     <div className="text-xs text-stone-500">
                       {period.mode === "percent"
@@ -525,35 +627,27 @@ function ClassLedger({
                         : "nhập tay"}
                     </div>
                     {period.mode === "percent" && period.carriedInShare > 0 ? (
-                      <div className="text-xs text-stone-500">+ nộp muộn {formatCurrency(period.carriedInShare)}</div>
+                      <div className="text-xs text-emerald-700">+ nộp muộn {formatCurrency(period.carriedInShare)}</div>
                     ) : null}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                     {formatCurrency(period.grossDue)}
                   </td>
                   <td className="px-4 py-3">
                     <PayoutList
-                      payouts={period.payouts.filter((payout) => payout.paymentMethod !== "cash")}
+                      payouts={period.payouts}
                       className={classRoom.className}
                       month={period.month}
                       year={period.year}
                     />
                   </td>
-                  <td className="px-4 py-3">
-                    <PayoutList
-                      payouts={period.payouts.filter((payout) => payout.paymentMethod === "cash")}
-                      className={classRoom.className}
-                      month={period.month}
-                      year={period.year}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right">
                     {period.debt === 0 ? (
                       <span className="text-stone-400">—</span>
                     ) : (
                       <>
                         <div
-                          className={`font-bold ${
+                          className={`whitespace-nowrap font-bold tabular-nums ${
                             period.writeOff
                               ? "text-stone-400 line-through"
                               : period.debt > 0
@@ -563,104 +657,87 @@ function ClassLedger({
                         >
                           {formatCurrency(period.debt)}
                         </div>
-                        <div className="text-xs text-stone-500">
-                          {period.writeOff
-                            ? "đã bỏ qua"
-                            : [
-                                period.carriedOutShare > 0 ? `muộn ${formatCurrency(period.carriedOutShare)} → tháng sau` : "",
-                                period.difference > 0 ? `chưa trả ${formatCurrency(period.difference)}` : "",
-                                period.difference < 0 ? `trả dư ${formatCurrency(-period.difference)}` : ""
-                              ]
-                                .filter(Boolean)
-                                .join(" + ")}
+                        <div className="grid text-xs text-stone-500">
+                          {period.writeOff ? (
+                            <span>đã bỏ qua</span>
+                          ) : (
+                            <>
+                              {period.carriedOutShare > 0 ? (
+                                <span>muộn {formatCurrency(period.carriedOutShare)} → tháng sau</span>
+                              ) : null}
+                              {period.difference > 0 ? <span>chưa trả {formatCurrency(period.difference)}</span> : null}
+                              {period.difference < 0 ? <span>trả dư {formatCurrency(-period.difference)}</span> : null}
+                            </>
+                          )}
                         </div>
                       </>
                     )}
                   </td>
-                  <td className="max-w-[320px] px-4 py-3 text-xs leading-relaxed text-stone-600">
-                    {notes.length === 0 ? (
-                      <span className="text-stone-400">—</span>
-                    ) : (
-                      <div className="grid gap-1">
-                        {notes.map((note) => (
-                          <div key={note.tone}>
-                            <span
-                              className={`font-semibold ${
-                                note.tone === "in"
-                                  ? "text-emerald-700"
-                                  : note.tone === "out"
-                                    ? "text-amber-700"
-                                    : note.tone === "writeOff"
-                                      ? "text-stone-500"
-                                      : "text-primary"
-                              }`}
-                            >
-                              {note.label}:
-                            </span>{" "}
-                            {note.text}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <td className="px-4 py-3 text-xs leading-relaxed text-stone-600">
+                    <LedgerNotes period={period} />
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={period.status.tone} dot>
-                      {period.status.label}
+                      <span className="whitespace-nowrap">{period.status.label}</span>
                     </Badge>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      {period.mode === "percent" && period.difference !== 0 ? (
-                        <SalaryPayoutButton
-                          teacherName={teacherName}
-                          options={options}
-                          initialKeys={[key]}
-                          label={period.difference > 0 ? "Trả" : "Trừ lại"}
-                          variant={period.difference > 0 ? "accent" : "secondary"}
-                          compact
-                        />
-                      ) : null}
-                      {period.writeOff || (period.mode === "percent" && period.cutoffPassed && period.debt !== 0) ? (
-                        <SalaryWriteOffButton
-                          classId={classRoom.classId}
-                          className={classRoom.className}
-                          month={period.month}
-                          year={period.year}
-                          debt={period.debt}
-                          undo={Boolean(period.writeOff)}
-                        />
-                      ) : null}
-                    </div>
+                    {period.status.hint ? <p className="mt-1 text-xs text-stone-500">{period.status.hint}</p> : null}
+                    {showPay || showWriteOff ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {showPay ? (
+                          <SalaryPayoutButton
+                            teacherName={teacherName}
+                            options={options}
+                            initialKeys={[key]}
+                            label={period.difference > 0 ? "Trả" : "Trừ lại"}
+                            variant={period.difference > 0 ? "accent" : "secondary"}
+                            compact
+                          />
+                        ) : null}
+                        {showWriteOff ? (
+                          <SalaryWriteOffButton
+                            classId={classRoom.classId}
+                            className={classRoom.className}
+                            month={period.month}
+                            year={period.year}
+                            debt={period.debt}
+                            undo={Boolean(period.writeOff)}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot className="border-t border-stone-200 bg-stone-50/60 text-sm">
-            <tr>
+            <tr className="align-top">
               <td className="px-4 py-2.5 font-semibold text-stone-600">Cộng</td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold">
+              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold tabular-nums">
                 {formatCurrency(classRoom.periods.reduce((sum, period) => sum + period.grossDue, 0))}
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-success">
-                {formatCurrency(
-                  classRoom.periods.reduce((sum, period) => sum + period.paidBank, 0)
-                )}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-success">
-                {formatCurrency(
-                  classRoom.periods.reduce((sum, period) => sum + period.paidCash, 0)
-                )}
+              <td className="px-4 py-2.5 text-right">
+                <div className="whitespace-nowrap font-bold tabular-nums text-success">{formatCurrency(paidBank + paidCash)}</div>
+                {paidCash > 0 ? (
+                  <div className="text-xs text-stone-500">
+                    CK {formatCurrency(paidBank)} · TM {formatCurrency(paidCash)}
+                  </div>
+                ) : null}
               </td>
               <td
-                className={`whitespace-nowrap px-4 py-2.5 text-right font-bold ${
-                  classRoom.owed > 0 ? "text-warning" : "text-stone-400"
-                }`}
+                className="px-4 py-2.5 text-right"
                 title="Tổng phần chưa trả của các tháng (phần nộp muộn đã nằm trong tháng sau)"
               >
-                {classRoom.owed > 0 ? `chưa trả ${formatCurrency(classRoom.owed)}` : "—"}
+                {classRoom.owed > 0 ? (
+                  <>
+                    <div className="whitespace-nowrap font-bold tabular-nums text-warning">{formatCurrency(classRoom.owed)}</div>
+                    <div className="text-xs text-stone-500">chưa trả</div>
+                  </>
+                ) : (
+                  <span className="font-bold text-stone-400">—</span>
+                )}
               </td>
-              <td colSpan={3} className="px-4 py-2.5 text-xs text-stone-500">
+              <td colSpan={2} className="px-4 py-2.5 text-xs text-stone-500">
                 {classRoom.waitingShare > 0
                   ? `Chờ HS nộp trước ngày chốt: +${formatCurrency(classRoom.waitingShare)}`
                   : ""}

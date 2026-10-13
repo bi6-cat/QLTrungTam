@@ -6,6 +6,7 @@ import { periodIndex } from "@/lib/enrollment-period";
 import { prisma } from "@/lib/prisma";
 import {
   cutoffResolver,
+  withClassOverrides,
   withPayoutDates,
   DEFAULT_SALARY_CUTOFF,
   parseSalaryCutoff,
@@ -75,9 +76,16 @@ export function computeSalary(input: {
 
 export type SalaryStatus = {
   key: "manual" | "unpaid" | "partial" | "advance" | "over" | "waiting" | "done" | "empty" | "writtenOff";
+  /** Nhãn ngắn để badge không chiếm nhiều chỗ; chi tiết (số HS còn chờ) nằm ở `hint`. */
   label: string;
+  hint?: string;
   tone: "success" | "warning" | "primary" | "neutral";
 };
+
+/** Nhãn đầy đủ một dòng (xuất Excel, Google Sheet). */
+export function salaryStatusText(status: SalaryStatus) {
+  return status.hint ? `${status.label} · ${status.hint}` : status.label;
+}
 
 /**
  * `waitingCount/waitingShare`: học sinh chưa nộp mà nếu nộp sẽ còn tính vào tháng này (tức là
@@ -99,11 +107,11 @@ export function salaryStatus(input: {
   if (input.difference < 0) {
     // Chuyển trước nhiều hơn số đã thu nhưng vẫn còn HS chưa nộp trong hạn: khi họ nộp sẽ tự cân lại.
     return input.waitingCount > 0 && input.waitingShare >= -input.difference
-      ? { key: "advance", label: `Ứng trước · chờ ${input.waitingCount} HS nộp`, tone: "primary" }
+      ? { key: "advance", label: "Ứng trước", hint: `chờ ${input.waitingCount} HS nộp`, tone: "primary" }
       : { key: "over", label: "Chuyển dư", tone: "primary" };
   }
   if (input.waitingCount > 0) {
-    return { key: "waiting", label: `Đủ phần đã thu · chờ ${input.waitingCount} HS`, tone: "primary" };
+    return { key: "waiting", label: "Đủ phần đã thu", hint: `chờ ${input.waitingCount} HS nộp`, tone: "primary" };
   }
   return input.paidOut === 0
     ? { key: "empty", label: "Chưa có thu", tone: "neutral" }
@@ -149,6 +157,8 @@ export type SalaryLine = SalaryComputation & {
   cutoffDate: Date;
   /** Ngày chốt của tháng này được đặt riêng (không theo quy tắc chung). */
   cutoffOverridden: boolean;
+  /** Ngày chốt đặt riêng cho chính lớp này trong tháng này (ClassSalaryCutoff). */
+  cutoffClassOverridden: boolean;
   /** Ngày chốt lùi tới ngày chuyển lương đầu tiên vì tháng này trả lương muộn hơn ngày chốt. */
   cutoffFromPayout: boolean;
   cutoffPassed: boolean;
@@ -186,6 +196,8 @@ export type SalaryInput = {
   defaultCutoff: SalaryCutoff;
   /** Ngày chốt đặt riêng theo tháng (áp dụng cho lớp theo ngày chốt chung). */
   monthCutoffs?: Array<{ month: number; year: number; cutoffDate: Date }>;
+  /** Ngày chốt đặt riêng cho một lớp trong một tháng (thắng mọi quy tắc khác). */
+  classCutoffs?: Array<{ classId: string; month: number; year: number; cutoffDate: Date }>;
   classes: Array<{
     id: string;
     name: string;
@@ -251,6 +263,12 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
   const monthOverrides = new Map(
     (input.monthCutoffs ?? []).map((item) => [periodIndex(item.month, item.year), item.cutoffDate])
   );
+  const classOverrides = new Map<string, Map<number, Date>>();
+  for (const item of input.classCutoffs ?? []) {
+    const map = classOverrides.get(item.classId) ?? new Map<number, Date>();
+    map.set(periodIndex(item.month, item.year), item.cutoffDate);
+    classOverrides.set(item.classId, map);
+  }
   const lines: SalaryLine[] = [];
   for (const classRoom of input.classes) {
     const custom = parseSalaryCutoff(classRoom.salaryCutoff);
@@ -276,10 +294,14 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
       [...(recordsByIndex.get(index) ?? [])].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]
         ?.sharePercent ?? classRoom.teacherSharePercent;
     // Lớp có ngày chốt riêng giữ quy tắc của lớp; các lớp còn lại theo ngày chốt chung của tháng.
-    // Tháng nào chuyển lương muộn hơn ngày chốt thì ngày chốt lùi tới ngày chuyển đó.
-    const resolver = withPayoutDates(
-      custom ? cutoffResolver(custom) : cutoffResolver(input.defaultCutoff, monthOverrides),
-      (index) => firstPayoutAt(recordsByIndex.get(index) ?? [])
+    // Tháng nào chuyển lương muộn hơn ngày chốt thì ngày chốt lùi tới ngày chuyển đó. Ngày đặt
+    // riêng cho lớp-tháng thì thắng tất cả.
+    const resolver = withClassOverrides(
+      withPayoutDates(
+        custom ? cutoffResolver(custom) : cutoffResolver(input.defaultCutoff, monthOverrides),
+        (index) => firstPayoutAt(recordsByIndex.get(index) ?? [])
+      ),
+      classOverrides.get(classRoom.id) ?? new Map()
     );
 
     for (const invoice of invoicesByClass.get(classRoom.id) ?? []) {
@@ -370,6 +392,7 @@ export function computeSalaryLines(input: SalaryInput, options: { keepIdle?: boo
         ownCollected: current.onTime,
         cutoffDate: resolver.date(index),
         cutoffOverridden: resolver.overridden(index),
+        cutoffClassOverridden: resolver.classOverridden(index),
         cutoffFromPayout: resolver.fromPayout(index),
         cutoffPassed,
         ...computation,
@@ -421,6 +444,14 @@ export async function loadDefaultSalaryCutoff(db: Db = prisma) {
   return parseSalaryCutoff(row?.value) ?? DEFAULT_SALARY_CUTOFF;
 }
 
+/** Ngày chốt đặt riêng cho từng lớp-tháng. */
+export function loadClassSalaryCutoffs(db: Db = prisma, classIds?: string[]) {
+  return db.classSalaryCutoff.findMany({
+    where: classIds ? { classId: { in: classIds } } : {},
+    select: { classId: true, month: true, year: true, cutoffDate: true }
+  });
+}
+
 /** Ngày chốt đặt riêng của các tháng (ít dòng nên đọc hết). */
 export function loadSalaryMonthCutoffs(db: Db = prisma) {
   return db.salaryMonthCutoff.findMany({
@@ -445,9 +476,10 @@ async function loadSalaryInput(options: {
     year: { gte: Math.floor(options.fromIndex / 12), lte: Math.floor(options.toIndex / 12) }
   };
   const classFilter = options.classIds ? { in: options.classIds } : undefined;
-  const [defaultCutoff, monthCutoffs, writeOffs, classes, invoices, records] = await Promise.all([
+  const [defaultCutoff, monthCutoffs, classCutoffs, writeOffs, classes, invoices, records] = await Promise.all([
     loadDefaultSalaryCutoff(db),
     loadSalaryMonthCutoffs(db),
+    loadClassSalaryCutoffs(db, options.classIds),
     db.salaryWriteOff.findMany({
       where: classFilter ? { classId: classFilter } : {},
       select: { classId: true, month: true, year: true, note: true, createdAt: true }
@@ -496,6 +528,7 @@ async function loadSalaryInput(options: {
     now: options.now ?? new Date(),
     defaultCutoff,
     monthCutoffs,
+    classCutoffs,
     writeOffs,
     classes,
     invoices: invoices.map((invoice) => ({
@@ -615,14 +648,17 @@ export async function settledSalaryNote(invoiceId: string | null) {
       where: { category: "teacher_salary", classId },
       select: { month: true, year: true, amount: true, paidAt: true, createdAt: true }
     });
-    const resolver = withPayoutDates(
-      custom
-        ? cutoffResolver(custom)
-        : cutoffResolver(
-            await loadDefaultSalaryCutoff(),
-            new Map((await loadSalaryMonthCutoffs()).map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
-          ),
-      (index) => firstPayoutAt(classRecords.filter((record) => periodIndex(record.month, record.year) === index))
+    const resolver = withClassOverrides(
+      withPayoutDates(
+        custom
+          ? cutoffResolver(custom)
+          : cutoffResolver(
+              await loadDefaultSalaryCutoff(),
+              new Map((await loadSalaryMonthCutoffs()).map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
+            ),
+        (index) => firstPayoutAt(classRecords.filter((record) => periodIndex(record.month, record.year) === index))
+      ),
+      new Map((await loadClassSalaryCutoffs(prisma, [classId])).map((item) => [periodIndex(item.month, item.year), item.cutoffDate]))
     );
     const salaryIndex = salaryIndexForPayment(tuitionIndex, invoice.paidAt, resolver);
     const month = (salaryIndex % 12) + 1;
