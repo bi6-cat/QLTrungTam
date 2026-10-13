@@ -8,3 +8,8 @@ db_data
 backups
 *.dump
 .deploy
+# Không cần cho build: sửa tài liệu / cấu hình giám sát không làm build lại ứng dụng.
+docs
+monitoring
+deploy
+tests
