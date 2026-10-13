@@ -183,7 +183,7 @@ compose build app
 
 log "Đang chạy Prisma migrations và đối soát dữ liệu tài chính..."
 compose --profile tools run --rm migrate \
-  sh -ceu 'npm ci && npx prisma migrate deploy && npm run audit:data'
+  sh -ceu 'npm ci --prefer-offline --no-audit --no-fund && npx prisma migrate deploy && npm run audit:data'
 
 log "Đang thay container ứng dụng..."
 compose up -d --no-deps app

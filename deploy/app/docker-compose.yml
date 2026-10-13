@@ -108,6 +108,8 @@ services:
     volumes:
       - ../..:/app
       - node_modules_tools:/app/node_modules
+      # Cache tải gói của npm: npm ci mỗi lần deploy cài từ cache thay vì tải lại toàn bộ.
+      - npm_cache_tools:/root/.npm
     depends_on:
       db:
         condition: service_healthy
@@ -116,6 +118,7 @@ volumes:
   db_data:
     name: qltrungtam_db_data
   node_modules_tools:
+  npm_cache_tools:
 
 secrets:
   postgres_exporter_password:

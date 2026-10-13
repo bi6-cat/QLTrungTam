@@ -1,15 +1,17 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Cache tải gói của npm giữ lại giữa các lần build: đổi package-lock chỉ tải gói mới.
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
-RUN npm run build
+# "npm run build" đã chạy prisma generate trước next build.
+# Cache biên dịch của Next (.next/cache) giữ lại giữa các lần deploy: chỉ build lại phần code đổi.
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
