@@ -1,5 +1,4 @@
 import type { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
 import { errorState, type ResultState } from "@/lib/action-states";
 import { InvoiceLifecycleError } from "@/lib/invoice-lifecycle";
 import { LedgerError } from "@/lib/ledger";
@@ -29,25 +28,10 @@ export function actionFailure(error: unknown, fallback: string): ResultState {
   return errorState(`${fallback} Vui lòng tải lại trang và thử lại.`);
 }
 
-export function revalidateFinancialPaths() {
-  revalidatePath("/admin");
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/debts");
-  revalidatePath("/admin/transactions");
-  revalidatePath("/admin/finance");
-  revalidatePath("/admin/salary");
-  revalidatePath("/pay/[short_code]", "page");
-  revalidatePath("/teacher/classes/[short_code]", "page");
-}
-
-export function revalidateRosterPaths() {
-  revalidatePath("/admin");
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/students", "layout");
-  revalidatePath("/admin/transactions");
-  revalidatePath("/pay/[short_code]", "page");
-  revalidatePath("/teacher/classes/[short_code]", "page");
-}
+// Action không gọi revalidatePath: kèm cây RSC của trang trong response làm transition của
+// action (nút "Đang lưu...") treo mãi khi các <Link> đã prefetch xong, dù dữ liệu đã lưu.
+// Mọi trang đều force-dynamic, không có data cache, nên client chỉ cần router.refresh() sau
+// khi nút hết pending: xem useResultToast và useRefreshWhenIdle.
 
 /** Chuỗi "YYYY-MM-DD" (ô input type=date) → Date lúc 0h theo giờ máy chủ (Asia/Ho_Chi_Minh). */
 export function parseDateInput(value: string) {

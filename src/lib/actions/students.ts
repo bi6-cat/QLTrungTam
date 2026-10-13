@@ -1,10 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { errorState, successState, type CreateStudentState, type ResultState } from "@/lib/action-states";
-import { actionFailure, revalidateRosterPaths } from "@/lib/actions/shared";
+import { actionFailure } from "@/lib/actions/shared";
 import { changeArchiveState, parseArchiveInput } from "@/lib/archive";
-import { requireAdmin, requireStaff } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncUnpaidInvoicesWithStudent } from "@/lib/student-invoice-sync";
 import { createStudentSchema, safeParseForm, updateStudentSchema } from "@/lib/validation";
@@ -57,9 +56,6 @@ export async function createStudentAction(
   });
 
   const activeSiblings = samePhone.filter((student) => !student.archivedAt);
-  // Không revalidatePath ở đây: để form tự router.refresh() sau khi nhận kết quả (xem AddStudentForm),
-  // vì kèm cây RSC của trang trong response của action làm nút "Đang thêm..." treo mãi khi các
-  // Link trong danh sách đã prefetch xong.
   return {
     error: "",
     success: `Đã thêm học sinh ${created.fullName}.`,
@@ -99,7 +95,6 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
   } catch (updateError) {
     return actionFailure(updateError, "Không thể lưu thông tin học sinh.");
   }
-  revalidateRosterPaths();
   return successState(
     changedMemos.length > 0
       ? `Đã lưu thông tin ${data.fullName}. Memo đã đổi: ${changedMemos.map((item) => `${item.from} → ${item.to}`).join("; ")}. Nhớ báo phụ huynh memo mới.`
@@ -116,7 +111,6 @@ async function changeStudentArchive(formData: FormData, mode: "archive" | "resto
   } catch (archiveError) {
     return actionFailure(archiveError, mode === "archive" ? "Không thể lưu trữ học sinh." : "Không thể khôi phục học sinh.");
   }
-  revalidateRosterPaths();
   return successState(mode === "archive" ? "Đã lưu trữ hồ sơ học sinh." : "Đã khôi phục hồ sơ học sinh.");
 }
 
@@ -126,11 +120,4 @@ export async function archiveStudentAction(formData: FormData) {
 
 export async function restoreStudentAction(formData: FormData) {
   return changeStudentArchive(formData, "restore");
-}
-
-// Import Excel lưu qua API route (payload lớn); sau đó client gọi action này thay cho
-// router.refresh() để nhận dữ liệu mới trong response của action.
-export async function refreshAfterStudentImportAction() {
-  await requireAdmin();
-  revalidateRosterPaths();
 }

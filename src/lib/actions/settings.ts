@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
 import { requireAdmin } from "@/lib/auth";
 import { getAppSettings, saveAppSettings } from "@/lib/settings";
@@ -24,11 +23,5 @@ export async function updateSettingsAction(_prevState: ResultState, formData: Fo
     return errorState("Không lưu được cài đặt. Vui lòng tải lại trang và thử lại.");
   }
 
-  revalidatePath("/admin/settings");
-  revalidatePath("/admin/debts");
-  revalidatePath("/admin/salary");
-  revalidatePath("/admin/finance");
-  revalidatePath("/admin");
-  revalidatePath("/pay/[short_code]", "page");
   return successState("Đã lưu cài đặt.");
 }

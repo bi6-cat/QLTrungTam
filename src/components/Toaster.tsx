@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 
 type ToastTone = "success" | "error" | "info";
@@ -39,16 +40,23 @@ export const toast = {
 /**
  * Hiện thông báo theo kết quả của server action ({ error, success }). Mỗi lần action trả
  * về là một object mới nên effect chạy đúng một lần cho mỗi kết quả.
+ *
+ * Thành công thì nạp lại dữ liệu trang: action không revalidatePath (xem
+ * src/lib/actions/shared.ts). Effect chạy sau khi useActionState đã hết pending nên
+ * router.refresh() không giữ nút ở trạng thái "Đang lưu...".
  */
 export function useResultToast(
   state: { error?: string; success?: string },
   options: { showError?: boolean } = {}
 ) {
   const showError = options.showError ?? false;
+  const router = useRouter();
   useEffect(() => {
-    if (state.success) toast.success(state.success);
-    else if (showError && state.error) toast.error(state.error);
-  }, [state, showError]);
+    if (state.success) {
+      toast.success(state.success);
+      router.refresh();
+    } else if (showError && state.error) toast.error(state.error);
+  }, [state, showError, router]);
 }
 
 const TONE_STYLE: Record<ToastTone, { box: string; icon: React.ReactNode }> = {

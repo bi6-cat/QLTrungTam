@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { Badge, EmptyState, Panel, PageHeader, StatCard } from "@/components/ui";
-import { getDashboard } from "@/lib/dashboard";
+import { getDashboard, type TrendPoint } from "@/lib/dashboard";
 import { getDashboardInsights } from "@/lib/dashboard-insights";
 import { formatCurrency, formatDayMonth, formatMonth } from "@/lib/format";
 import { formatIsoDayMonth } from "@/lib/class-sessions";
@@ -31,8 +31,8 @@ import { MonthSwitcher } from "@/components/MonthSwitcher";
 export const dynamic = "force-dynamic";
 
 /** Chiều cao vùng vẽ cột của biểu đồ học phí / học sinh, tính bằng pixel. */
-const CHART_HEIGHT = 150;
-const STUDENT_CHART_HEIGHT = 56;
+const CHART_HEIGHT = 200;
+const STUDENT_CHART_HEIGHT = 80;
 
 /** Số tiền rút gọn cho nhãn trên cột (31,6tr, 850k) để vừa cột hẹp trên điện thoại. */
 function formatCompact(value: number) {
@@ -91,6 +91,266 @@ function SectionLink({ href, children }: { href: string; children: React.ReactNo
   );
 }
 
+/** Làm tròn lên mức chia đẹp để trục học phí có 4 khoảng dễ đọc (10tr, 20tr, 30tr, 40tr…). */
+function niceCeil(value: number) {
+  if (value <= 0) return 4;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const step = [1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10].find((candidate) => candidate * magnitude >= value) ?? 10;
+  return step * magnitude;
+}
+
+/**
+ * Lưới chung của hai biểu đồ xu hướng: cột đầu là nhãn dòng / trục, sau đó mỗi tháng một cột.
+ * Điện thoại chỉ hiện 6 tháng cuối cho cột đủ rộng (8 = TREND_MONTHS trong lib/dashboard).
+ */
+const TREND_GRID = "grid grid-cols-[3.25rem_repeat(6,minmax(0,1fr))] sm:grid-cols-[4.5rem_repeat(8,minmax(0,1fr))]";
+
+type TrendProps = { trend: TrendPoint[]; month: number; year: number };
+
+function trendColumnClass(index: number, length: number, isSelected: boolean) {
+  return clsx(
+    "group min-w-0 flex-col rounded-t-lg transition-colors",
+    index < length - 6 ? "hidden sm:flex" : "flex",
+    isSelected ? "bg-indigo-50/80" : "hover:bg-stone-50"
+  );
+}
+
+/** Ô nhãn dòng ở cột đầu, cùng chiều cao và đường kẻ với các ô số của từng tháng. */
+function TrendRowLabel({ children, short, strong = false }: { children?: React.ReactNode; short?: string; strong?: boolean }) {
+  return (
+    <span
+      className={clsx(
+        "h-7 truncate border-t text-[10px] font-semibold uppercase leading-7 tracking-wide text-stone-400 sm:text-[11px]",
+        strong ? "border-stone-300" : "border-stone-100"
+      )}
+    >
+      {short ? (
+        <>
+          <span className="sm:hidden">{short}</span>
+          <span className="hidden sm:inline">{children}</span>
+        </>
+      ) : (
+        children
+      )}
+    </span>
+  );
+}
+
+function TrendCell({ children, strong = false, className }: { children: React.ReactNode; strong?: boolean; className?: string }) {
+  return (
+    <span
+      className={clsx(
+        "h-7 truncate border-t text-center text-[11px] font-semibold leading-7 tabular-nums sm:text-xs",
+        strong ? "border-stone-300" : "border-stone-100",
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TrendHeader({ title, hint, legend }: { title: string; hint: string; legend: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
+      <div>
+        <p className="text-sm font-bold text-neutralText">{title}</p>
+        <p className="text-xs text-stone-500">{hint}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-600">{legend}</div>
+    </div>
+  );
+}
+
+function LegendSwatch({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={clsx("h-2.5 w-2.5 rounded-sm", className)} />
+      {children}
+    </span>
+  );
+}
+
+/** Học phí từng tháng: cột xanh là đã thu, phần vàng chồng lên là còn nợ; dưới cột là tỷ lệ thu. */
+function FeeTrend({ trend, month, year }: TrendProps) {
+  const axisMax = niceCeil(Math.max(0, ...trend.map((point) => point.collected + point.outstanding)));
+  const ticks = [1, 0.75, 0.5, 0.25];
+  const scale = (value: number) => (value <= 0 ? 0 : Math.max(3, Math.round((value / axisMax) * CHART_HEIGHT)));
+
+  return (
+    <div className="rounded-xl border border-stone-200/80 p-3 sm:p-4">
+      <TrendHeader
+        title="Học phí"
+        hint="Số trên cột là tổng hóa đơn đã phát hành của tháng."
+        legend={
+          <>
+            <LegendSwatch className="bg-indigo-400">Đã thu</LegendSwatch>
+            <LegendSwatch className="bg-amber-300">Chưa thu</LegendSwatch>
+          </>
+        }
+      />
+      <div className={clsx(TREND_GRID, "mt-3")}>
+        <div className="flex min-w-0 flex-col">
+          <span className="h-5" />
+          {/* Trục giá trị: nhãn nằm ngang đúng vạch kẻ của vùng cột bên phải. */}
+          <div className="relative" style={{ height: `${CHART_HEIGHT}px` }}>
+            {ticks.map((tick) => (
+              <span
+                key={tick}
+                className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-stone-400 sm:text-[11px]"
+                style={{ top: `${(1 - tick) * 100}%` }}
+              >
+                {formatCompact(axisMax * tick)}
+              </span>
+            ))}
+          </div>
+          <TrendRowLabel strong>Tháng</TrendRowLabel>
+          <TrendRowLabel short="% thu">Tỷ lệ thu</TrendRowLabel>
+        </div>
+        {trend.map((point, index) => {
+          const total = point.collected + point.outstanding;
+          const collectedHeight = scale(point.collected);
+          const outstandingHeight = scale(point.outstanding);
+          const rate = total > 0 ? point.collected / total : null;
+          const isSelected = point.month === month && point.year === year;
+          return (
+            <Link
+              key={`${point.year}-${point.month}`}
+              href={`/admin?month=${point.month}&year=${point.year}`}
+              className={trendColumnClass(index, trend.length, isSelected)}
+              title={`${formatMonth(point.month, point.year)}: đã thu ${formatCurrency(point.collected)}, chưa thu ${formatCurrency(point.outstanding)}`}
+            >
+              <span
+                className={clsx(
+                  "h-5 truncate text-center text-[10px] font-bold leading-5 tabular-nums sm:text-[11px]",
+                  isSelected ? "text-primary" : "text-stone-600"
+                )}
+              >
+                {total > 0 ? formatCompact(total) : ""}
+              </span>
+              <div className="relative" style={{ height: `${CHART_HEIGHT}px` }}>
+                {ticks.map((tick) => (
+                  <span
+                    key={tick}
+                    className="absolute inset-x-0 border-t border-dashed border-stone-200/80"
+                    style={{ top: `${(1 - tick) * 100}%` }}
+                  />
+                ))}
+                <div className="absolute inset-x-1 bottom-0 flex justify-center sm:inset-x-1.5">
+                  <div className="flex w-full max-w-12 flex-col justify-end">
+                    {outstandingHeight > 0 ? (
+                      <div className="w-full rounded-t-md bg-amber-300" style={{ height: `${outstandingHeight}px` }} />
+                    ) : null}
+                    {collectedHeight > 0 ? (
+                      <div
+                        className={clsx(
+                          "w-full",
+                          outstandingHeight > 0 ? "" : "rounded-t-md",
+                          isSelected ? "bg-gradient-to-b from-indigo-500 to-primary" : "bg-indigo-300 transition-colors group-hover:bg-indigo-400"
+                        )}
+                        style={{ height: `${collectedHeight}px` }}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <TrendCell strong className={isSelected ? "text-primary" : "text-stone-600"}>
+                {point.label}
+              </TrendCell>
+              <TrendCell
+                className={
+                  rate === null
+                    ? "text-stone-300"
+                    : rate >= 0.8
+                      ? "text-emerald-600"
+                      : rate >= 0.5
+                        ? "text-amber-600"
+                        : "text-rose-600"
+                }
+              >
+                {rate === null ? "—" : percent(rate)}
+              </TrendCell>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Học sinh từng tháng: số đang học (trên cột), lượt vào học và lượt nghỉ mới ở hai dòng riêng. */
+function StudentTrend({ trend, month, year }: TrendProps) {
+  const studentMax = Math.max(1, ...trend.map((point) => point.students));
+
+  return (
+    <div className="rounded-xl border border-stone-200/80 p-3 sm:p-4">
+      <TrendHeader
+        title="Học sinh"
+        hint="Số học sinh có học trong tháng, kèm lượt vào học và lượt nghỉ mới."
+        legend={
+          <>
+            <LegendSwatch className="bg-sky-400">Đang học</LegendSwatch>
+            <span className="font-semibold text-emerald-600">+ vào học</span>
+            <span className="font-semibold text-rose-600">− nghỉ</span>
+          </>
+        }
+      />
+      <div className={clsx(TREND_GRID, "mt-3")}>
+        <div className="flex min-w-0 flex-col">
+          <span className="h-6 truncate text-[10px] font-semibold uppercase leading-6 tracking-wide text-stone-400 sm:text-[11px]">Số HS</span>
+          <div style={{ height: `${STUDENT_CHART_HEIGHT}px` }} />
+          <TrendRowLabel strong>Tháng</TrendRowLabel>
+          <TrendRowLabel short="Vào">Vào học</TrendRowLabel>
+          <TrendRowLabel>Nghỉ</TrendRowLabel>
+        </div>
+        {trend.map((point, index) => {
+          const isSelected = point.month === month && point.year === year;
+          const height = point.students > 0 ? Math.max(4, Math.round((point.students / studentMax) * STUDENT_CHART_HEIGHT)) : 0;
+          return (
+            <Link
+              key={`${point.year}-${point.month}`}
+              href={`/admin?month=${point.month}&year=${point.year}`}
+              className={trendColumnClass(index, trend.length, isSelected)}
+              title={`${formatMonth(point.month, point.year)}: ${point.students} học sinh, +${point.joined} vào học, −${point.left} nghỉ`}
+            >
+              <span
+                className={clsx(
+                  "h-6 text-center text-sm font-bold leading-6 tabular-nums",
+                  isSelected ? "text-sky-700" : point.students > 0 ? "text-neutralText" : "text-stone-300"
+                )}
+              >
+                {point.students}
+              </span>
+              <div className="flex justify-center px-1 sm:px-1.5" style={{ height: `${STUDENT_CHART_HEIGHT}px` }}>
+                <div className="flex w-full max-w-12 flex-col justify-end">
+                  {height > 0 ? (
+                    <div
+                      className={clsx(
+                        "w-full rounded-t-md",
+                        isSelected ? "bg-gradient-to-b from-sky-400 to-sky-600" : "bg-sky-200 transition-colors group-hover:bg-sky-300"
+                      )}
+                      style={{ height: `${height}px` }}
+                    />
+                  ) : null}
+                </div>
+              </div>
+              <TrendCell strong className={isSelected ? "text-primary" : "text-stone-600"}>
+                {point.label}
+              </TrendCell>
+              <TrendCell className={point.joined > 0 ? "text-emerald-600" : "text-stone-300"}>
+                {point.joined > 0 ? `+${point.joined}` : "0"}
+              </TrendCell>
+              <TrendCell className={point.left > 0 ? "text-rose-600" : "text-stone-300"}>
+                {point.left > 0 ? `−${point.left}` : "0"}
+              </TrendCell>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default async function AdminHomePage({
   searchParams
 }: {
@@ -115,8 +375,6 @@ export default async function AdminHomePage({
 
   const [dashboard, insights] = await Promise.all([getDashboard(month, year), getDashboardInsights(month, year)]);
   const { totals, alerts, outstandingAllTime, trend } = dashboard;
-  const trendMax = Math.max(1, ...trend.map((point) => point.collected + point.outstanding));
-  const studentMax = Math.max(1, ...trend.map((point) => point.students));
 
   const actionItems = [
     // Tạo hóa đơn là việc của chủ trung tâm; quản lý phụ chỉ nhập số buổi.
@@ -174,11 +432,13 @@ export default async function AdminHomePage({
 
   // Cơ cấu hóa đơn tháng: đã đóng / chưa đóng / chưa phát hành / miễn.
   const waivedCount = dashboard.classes.reduce((sum, row) => sum + row.waivedCount, 0);
+  const waivedAmount = dashboard.classes.reduce((sum, row) => sum + row.waivedAmount, 0);
+  // "Chưa phát hành" là học sinh đang học chưa có hóa đơn nên không có số tiền.
   const mix = [
-    { key: "paid", label: "Đã đóng", count: totals.paidCount, color: "#10b981", dot: "bg-emerald-500" },
-    { key: "unpaid", label: "Chưa đóng", count: totals.unpaidCount, color: "#f59e0b", dot: "bg-amber-500" },
-    { key: "unissued", label: "Chưa phát hành", count: totals.unissued, color: "#d6d3d1", dot: "bg-stone-300" },
-    { key: "waived", label: "Miễn học phí", count: waivedCount, color: "#818cf8", dot: "bg-indigo-400" }
+    { key: "paid", label: "Đã đóng", count: totals.paidCount, amount: totals.paid, color: "#10b981", dot: "bg-emerald-500" },
+    { key: "unpaid", label: "Chưa đóng", count: totals.unpaidCount, amount: totals.remaining, color: "#f59e0b", dot: "bg-amber-500" },
+    { key: "unissued", label: "Chưa phát hành", count: totals.unissued, amount: null, color: "#d6d3d1", dot: "bg-stone-300" },
+    { key: "waived", label: "Miễn học phí", count: waivedCount, amount: waivedAmount, color: "#818cf8", dot: "bg-indigo-400" }
   ];
   const mixTotal = mix.reduce((sum, item) => sum + item.count, 0);
   let mixCursor = 0;
@@ -201,11 +461,11 @@ export default async function AdminHomePage({
     { key: "pending", label: "Chưa điểm danh", value: attendance.pending, bar: "bg-amber-400" },
     { key: "upcoming", label: "Sắp tới", value: attendance.upcoming, bar: "bg-stone-200" }
   ];
-  // Lớp thu thấp nhất lên đầu, tối đa 6 lớp (bảng "Theo lớp" bên dưới có đủ mọi lớp).
+  // Lớp thu thấp nhất lên đầu, tối đa 4 lớp (bảng "Theo lớp" bên dưới có đủ mọi lớp).
   const rankedClasses = [...dashboard.classes]
     .filter((row) => row.expectedAmount > 0)
     .sort((left, right) => left.collectionRate - right.collectionRate);
-  const classRanking = rankedClasses.slice(0, 6);
+  const classRanking = rankedClasses.slice(0, 4);
 
   return (
     <div className="grid gap-6">
@@ -300,164 +560,76 @@ export default async function AdminHomePage({
         ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel>
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Panel className="xl:col-span-2">
           <SectionTitle
             icon={<TrendingUp className="h-5 w-5" />}
             tone="indigo"
-            title="Xu hướng 6 tháng"
-            description="Học phí đã thu, còn nợ và số học sinh theo từng tháng. Bấm vào cột để xem tháng đó."
+            title={`Xu hướng ${trend.length} tháng`}
+            description="Học phí và học sinh theo từng tháng. Bấm vào một cột để xem số liệu tháng đó."
           />
-
-          {/* Học phí: cột đậm là đã thu, phần vàng phía trên là còn nợ của tháng đó. */}
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Học phí</p>
-            <div className="flex items-center gap-3 text-xs text-stone-500">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm bg-primary" /> Đã thu
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm bg-amber-200" /> Chưa thu
-              </span>
-            </div>
-          </div>
-          {/* Chiều cao cột tính bằng pixel: phần trăm không dùng được ở đây vì
-              container flex không truyền xuống chiều cao xác định. */}
-          <div className="relative mt-2">
-            <div className="pointer-events-none absolute inset-x-0 top-5 grid" style={{ height: `${CHART_HEIGHT}px` }}>
-              {[0, 1, 2, 3].map((line) => (
-                <div key={line} className="border-t border-dashed border-stone-100" />
-              ))}
-            </div>
-            <div className="relative grid grid-cols-6 items-end gap-2 sm:gap-3">
-              {trend.map((point) => {
-                const total = point.collected + point.outstanding;
-                const scale = (value: number) =>
-                  value <= 0 ? 0 : Math.max(3, Math.round((value / trendMax) * CHART_HEIGHT));
-                const collectedHeight = scale(point.collected);
-                const outstandingHeight = scale(point.outstanding);
-                const isSelected = point.month === month && point.year === year;
-                return (
-                  <Link
-                    key={`${point.year}-${point.month}`}
-                    href={`/admin?month=${point.month}&year=${point.year}`}
-                    className="group flex min-w-0 flex-col items-center gap-1.5"
-                    title={`${formatMonth(point.month, point.year)}: thu ${formatCurrency(point.collected)}, nợ ${formatCurrency(point.outstanding)}`}
-                  >
-                    <span
-                      className={clsx(
-                        "h-4 max-w-full truncate text-[11px] font-semibold text-stone-500 transition-opacity",
-                        isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      )}
-                    >
-                      {total > 0 ? formatCompact(total) : ""}
-                    </span>
-                    <div className="flex w-full max-w-14 flex-col justify-end" style={{ height: `${CHART_HEIGHT}px` }}>
-                      {outstandingHeight > 0 ? (
-                        <div className="w-full rounded-t-md bg-amber-200" style={{ height: `${outstandingHeight}px` }} />
-                      ) : null}
-                      {collectedHeight > 0 ? (
-                        <div
-                          className={clsx(
-                            "w-full",
-                            outstandingHeight > 0 ? "" : "rounded-t-md",
-                            isSelected ? "bg-gradient-to-b from-indigo-500 to-primary" : "bg-indigo-200 transition-colors group-hover:bg-indigo-400"
-                          )}
-                          style={{ height: `${collectedHeight}px` }}
-                        />
-                      ) : null}
-                      {total === 0 ? <div className="w-full rounded-t-md border-b-2 border-dashed border-stone-200" /> : null}
-                    </div>
-                    <span className={clsx("text-xs font-semibold", isSelected ? "text-primary" : "text-stone-500")}>{point.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Học sinh: số học sinh đang học, kèm lượt vào học / nghỉ trong tháng. */}
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Học sinh đang học</p>
-            <div className="flex items-center gap-3 text-xs text-stone-500">
-              <span className="font-semibold text-emerald-600">+ vào học</span>
-              <span className="font-semibold text-rose-600">− nghỉ</span>
-            </div>
-          </div>
-          <div className="mt-2 grid grid-cols-6 items-end gap-2 sm:gap-3">
-            {trend.map((point) => {
-              const isSelected = point.month === month && point.year === year;
-              const height = point.students > 0 ? Math.max(4, Math.round((point.students / studentMax) * STUDENT_CHART_HEIGHT)) : 0;
-              return (
-                <Link
-                  key={`${point.year}-${point.month}`}
-                  href={`/admin?month=${point.month}&year=${point.year}`}
-                  className="group flex min-w-0 flex-col items-center gap-1"
-                  title={`${formatMonth(point.month, point.year)}: ${point.students} học sinh, +${point.joined} vào học, −${point.left} nghỉ`}
-                >
-                  <span className={clsx("text-sm font-bold tabular-nums", isSelected ? "text-sky-700" : "text-neutralText")}>{point.students}</span>
-                  <div className="flex w-full max-w-14 flex-col justify-end" style={{ height: `${STUDENT_CHART_HEIGHT}px` }}>
-                    {height > 0 ? (
-                      <div
-                        className={clsx(
-                          "w-full rounded-t-md",
-                          isSelected ? "bg-gradient-to-b from-sky-400 to-sky-600" : "bg-sky-100 transition-colors group-hover:bg-sky-300"
-                        )}
-                        style={{ height: `${height}px` }}
-                      />
-                    ) : (
-                      <div className="w-full border-b-2 border-dashed border-stone-200" />
-                    )}
-                  </div>
-                  <span className="flex flex-wrap justify-center gap-x-1 text-[11px] font-semibold tabular-nums">
-                    <span className={point.joined > 0 ? "text-emerald-600" : "text-stone-300"}>+{point.joined}</span>
-                    <span className={point.left > 0 ? "text-rose-600" : "text-stone-300"}>−{point.left}</span>
-                  </span>
-                  <span className={clsx("text-xs font-semibold", isSelected ? "text-primary" : "text-stone-500")}>{point.label}</span>
-                </Link>
-              );
-            })}
+          <div className="mt-5 grid gap-4">
+            <FeeTrend trend={trend} month={month} year={year} />
+            <StudentTrend trend={trend} month={month} year={year} />
           </div>
         </Panel>
 
         <Panel>
           <SectionTitle icon={<PieChart className="h-5 w-5" />} tone="emerald" title="Tình trạng hóa đơn" description={formatMonth(month, year)} />
-          <div className="mt-5 flex items-center gap-6">
-            <div className="relative h-32 w-32 shrink-0 rounded-full" style={{ background: `conic-gradient(${donut})` }}>
-              <div className="absolute inset-[18px] grid place-items-center rounded-full bg-white text-center">
+          <div className="mt-5 flex items-center gap-5">
+            <div className="relative h-28 w-28 shrink-0 rounded-full" style={{ background: `conic-gradient(${donut})` }}>
+              <div className="absolute inset-[16px] grid place-items-center rounded-full bg-white text-center">
                 <div>
-                  <p className="text-2xl font-bold tracking-tight text-neutralText">{percent(totals.collectionRate)}</p>
-                  <p className="text-[11px] font-medium text-stone-500">đã thu</p>
+                  <p className="text-xl font-bold tracking-tight text-neutralText">{percent(totals.collectionRate)}</p>
+                  <p className="text-[11px] font-medium text-stone-500">tiền đã thu</p>
                 </div>
               </div>
             </div>
-            <ul className="grid flex-1 gap-2.5 text-sm">
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="text-xs text-stone-500">Đã thu</p>
+              <p className="font-bold tabular-nums text-emerald-700">{formatCurrency(totals.paid)}</p>
+              <p className="mt-2 text-xs text-stone-500">Trên tổng đã phát hành</p>
+              <p className="font-bold tabular-nums text-neutralText">{formatCurrency(totals.expected)}</p>
+            </div>
+          </div>
+          {/* Mỗi trạng thái một dòng: số hóa đơn và số tiền tách cột để không đọc lẫn. */}
+          <div className="mt-5 overflow-hidden rounded-xl border border-stone-200/80">
+            <div className="grid grid-cols-[minmax(0,1fr)_3rem_6.5rem] gap-2 bg-stone-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+              <span>Trạng thái</span>
+              <span className="text-right">Số HĐ</span>
+              <span className="text-right">Số tiền</span>
+            </div>
+            <ul className="divide-y divide-stone-100 text-sm">
               {mix.map((item) => (
-                <li key={item.key} className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-stone-600">
-                    <span className={clsx("h-2.5 w-2.5 rounded-full", item.dot)} />
-                    {item.label}
+                <li key={item.key} className="grid grid-cols-[minmax(0,1fr)_3rem_6.5rem] items-center gap-2 px-3 py-2">
+                  <span className="flex min-w-0 items-center gap-2 text-stone-700">
+                    <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", item.dot)} />
+                    <span className="truncate">{item.label}</span>
                   </span>
-                  <span className="font-semibold tabular-nums text-neutralText">{item.count}</span>
+                  <span className="text-right font-semibold tabular-nums text-neutralText">{item.count}</span>
+                  <span className="truncate text-right tabular-nums text-stone-600">
+                    {item.amount === null ? "—" : formatCurrency(item.amount)}
+                  </span>
                 </li>
               ))}
             </ul>
           </div>
           {classRanking.length > 0 ? (
-            <div className="mt-6 border-t border-stone-100 pt-4">
+            <div className="mt-5">
               <p className="flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
                 Lớp thu thấp nhất
                 {rankedClasses.length > classRanking.length ? (
                   <span className="font-medium normal-case tracking-normal text-stone-400">+{rankedClasses.length - classRanking.length} lớp khác</span>
                 ) : null}
               </p>
-              <ul className="mt-3 grid gap-2.5">
+              <ul className="mt-2 divide-y divide-stone-100">
                 {classRanking.map((row) => (
-                  <li key={row.id}>
+                  <li key={row.id} className="py-2.5">
                     <div className="flex items-baseline justify-between gap-2 text-sm">
-                      <span className="truncate text-stone-700">{row.name}</span>
+                      <span className="truncate font-medium text-stone-700">{row.name}</span>
                       <span className="shrink-0 font-semibold tabular-nums text-neutralText">{percent(row.collectionRate)}</span>
                     </div>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-100">
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-100">
                       <div
                         className={clsx(
                           "h-full rounded-full",
@@ -466,6 +638,12 @@ export default async function AdminHomePage({
                         style={{ width: `${Math.max(2, Math.round(row.collectionRate * 100))}%` }}
                       />
                     </div>
+                    <p className="mt-1 flex justify-between gap-2 text-xs tabular-nums text-stone-500">
+                      <span>
+                        {row.paidCount}/{row.paidCount + row.unpaidCount} HĐ đã đóng
+                      </span>
+                      <span>còn {formatCurrency(row.remainingAmount)}</span>
+                    </p>
                   </li>
                 ))}
               </ul>

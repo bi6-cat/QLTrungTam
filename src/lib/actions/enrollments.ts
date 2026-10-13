@@ -1,13 +1,7 @@
 "use server";
 
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import {
-  actionFailure,
-  parseDateInput,
-  revalidateFinancialPaths,
-  revalidateRosterPaths,
-  runSerializableAction
-} from "@/lib/actions/shared";
+import { actionFailure, parseDateInput, runSerializableAction } from "@/lib/actions/shared";
 import { requireStaff } from "@/lib/auth";
 import { periodIndex, periodStartDate } from "@/lib/enrollment-period";
 import { formatMonth } from "@/lib/format";
@@ -85,7 +79,6 @@ export async function createEnrollmentAction(formData: FormData): Promise<Result
       return { studentName: student.fullName, rejoined: true };
     });
 
-    revalidateRosterPaths();
     return successState(
       result.rejoined
         ? `${result.studentName} quay lại học từ ${dateFormatter.format(startDate)}.`
@@ -219,8 +212,6 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
       return { studentName: enrollment.student.fullName, className: enrollment.classRoom.name };
     });
 
-    revalidateFinancialPaths();
-    revalidateRosterPaths();
     return successState(
       `${names.studentName} nghỉ lớp ${names.className} từ ${formatMonth(fromMonth, fromYear).toLowerCase()}.`
     );

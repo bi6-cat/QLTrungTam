@@ -5,6 +5,7 @@ import { Check, Plus, Search } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 import { createEnrollmentAction } from "@/lib/actions/enrollments";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Button, Field, Input, Select } from "@/components/ui";
 
 type StudentOption = {
@@ -34,6 +35,7 @@ export function StudentEnrollmentPicker({
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
+  const markStale = useRefreshWhenIdle(pending);
   const [error, setError] = useState("");
 
   function toggleSelected(id: string) {
@@ -73,6 +75,7 @@ export function StudentEnrollmentPicker({
         failed.push({ id: studentId, message: "Không kết nối được máy chủ." });
       }
     }
+    if (succeeded.length > 0) markStale();
     setPending(false);
 
     if (succeeded.length === 1) toast.success(succeeded[0]);

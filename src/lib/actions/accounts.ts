@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
 import { requireAdmin } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
@@ -42,7 +41,6 @@ export async function createManagerAction(_prevState: ResultState, formData: For
     return errorState("Không tạo được tài khoản. Tên đăng nhập có thể vừa được dùng, vui lòng thử lại.");
   }
 
-  revalidatePath("/admin/settings");
   return successState(`Đã tạo tài khoản quản lý phụ "${data.username}".`);
 }
 
@@ -96,6 +94,5 @@ export async function deleteManagerAction(userId: string): Promise<ResultState> 
     prisma.adminUser.delete({ where: { id: user.id } })
   ]);
 
-  revalidatePath("/admin/settings");
   return successState(`Đã xóa tài khoản "${user.username}". Phiên đăng nhập của tài khoản này hết hiệu lực ngay.`);
 }

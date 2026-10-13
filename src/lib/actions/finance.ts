@@ -1,7 +1,7 @@
 "use server";
 
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { actionFailure, parseDateInput, revalidateFinancialPaths } from "@/lib/actions/shared";
+import { actionFailure, parseDateInput } from "@/lib/actions/shared";
 import { requireAdmin } from "@/lib/auth";
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +40,6 @@ export async function createExpenseAction(_prevState: ResultState, formData: For
     }
   });
 
-  revalidateFinancialPaths();
   return successState(`Đã thêm chi phí ${expenseCategoryLabel(data.category).toLowerCase()} ${formatCurrency(data.amount)}.`);
 }
 
@@ -73,7 +72,6 @@ export async function deleteExpenseAction(expenseId: string): Promise<ResultStat
     })
   ]);
 
-  revalidateFinancialPaths();
   return successState(
     expense.category === "teacher_salary"
       ? `Đã xóa lần chuyển lương ${formatCurrency(expense.amount)}; số này quay lại phần còn nợ giáo viên.`
@@ -91,7 +89,6 @@ export async function recordSalaryPayoutAction(_prevState: ResultState, formData
 
   try {
     const recorded = await recordSalaryPayout({ actor, paidAt, note: data.note, lines: data.lines });
-    revalidateFinancialPaths();
     const total = recorded.reduce((sum, item) => sum + item.amount, 0);
     const bank = recorded.filter((item) => item.method === "bank_transfer").reduce((sum, item) => sum + item.amount, 0);
     const cash = total - bank;
@@ -140,7 +137,6 @@ export async function setSalaryMonthCutoffAction(_prevState: ResultState, formDa
       prisma.salaryMonthCutoff.deleteMany({ where: { year, month } }),
       audit({ cutoffDate: null })
     ]);
-    revalidateFinancialPaths();
     return successState(`Lương T${month}/${year} quay về ngày chốt chung.`);
   }
 
@@ -159,7 +155,6 @@ export async function setSalaryMonthCutoffAction(_prevState: ResultState, formDa
     }),
     audit({ cutoffDate: data.cutoffDate })
   ]);
-  revalidateFinancialPaths();
   return successState(
     `Đã đặt ngày chốt lương T${month}/${year} là ${formatDayMonth(cutoffDate)}: HS nộp sau ngày này tính sang lương tháng sau.`
   );
@@ -206,7 +201,6 @@ export async function setSalaryWriteOffAction(input: {
       }
     })
   ]);
-  revalidateFinancialPaths();
   return successState(
     input.undo
       ? `Đã hoàn tác: dư nợ ${classRoom.name} T${month}/${year} được tính lại.`

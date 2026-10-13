@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { UserMinus } from "lucide-react";
 import { leaveClassAction } from "@/lib/actions/enrollments";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 import { formatMonth } from "@/lib/format";
@@ -35,6 +36,7 @@ export function LeaveClassButton({
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const markStale = useRefreshWhenIdle(pending);
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,6 +55,7 @@ export function LeaveClassButton({
           return;
         }
         toast.success(result.success);
+        markStale();
         setOpen(false);
       } catch {
         setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");

@@ -1,7 +1,7 @@
 "use server";
 
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { actionFailure, revalidateFinancialPaths } from "@/lib/actions/shared";
+import { actionFailure } from "@/lib/actions/shared";
 import { requireAdmin } from "@/lib/auth";
 import {
   assignTransactionToInvoice,
@@ -33,7 +33,6 @@ export async function assignTransactionAction(_prevState: ResultState, formData:
       force: data.allowAmountMismatch,
       reason: data.reason
     });
-    revalidateFinancialPaths();
     const note = await settledSalaryNote(result.invoiceId);
     return successState(`Đã gán giao dịch và ghi nhận thanh toán.${note}`);
   } catch (ledgerError) {
@@ -48,7 +47,6 @@ export async function resolveTransactionAction(_prevState: ResultState, formData
 
   try {
     await resolveUnmatchedTransaction({ transactionId: data.transactionId, actor: session, reason: data.reason });
-    revalidateFinancialPaths();
     return successState("Đã đánh dấu giao dịch là đã xử lý.");
   } catch (ledgerError) {
     return actionFailure(ledgerError, FAILURE);
@@ -62,7 +60,6 @@ export async function unassignTransactionAction(_prevState: ResultState, formDat
 
   try {
     const result = await unassignTransaction({ transactionId: data.transactionId, actor: session, reason: data.reason });
-    revalidateFinancialPaths();
     const note = await settledSalaryNote(result.invoiceId);
     return successState(`Đã bỏ gán; hóa đơn trở lại trạng thái chưa đóng.${note}`);
   } catch (ledgerError) {
@@ -77,7 +74,6 @@ export async function reverseTransactionAction(_prevState: ResultState, formData
 
   try {
     const result = await reverseTransaction({ transactionId: data.transactionId, actor: session, reason: data.reason });
-    revalidateFinancialPaths();
     const note = await settledSalaryNote(result.invoiceId);
     return successState(`Đã hoàn tác giao dịch và giữ lại lịch sử đối soát.${note}`);
   } catch (ledgerError) {

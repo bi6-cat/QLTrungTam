@@ -14,13 +14,15 @@ import { formatIsoDayMonth, isoWeekdayOf, type CalendarSession, type IsoDate } f
 import { weekdayLabel } from "@/lib/schedule";
 import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Button, Field, Input, Select } from "@/components/ui";
 import { CANCEL_REASONS, STATUS_STYLE, classDot } from "@/components/schedule/styles";
 
-/** Gọi action, báo toast; thành công thì đóng hộp thoại. */
+/** Gọi action, báo toast; thành công thì nạp lại lịch rồi đóng hộp thoại. */
 function useActionRunner(onDone: () => void) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const markStale = useRefreshWhenIdle(pending, onDone);
   function run(action: () => Promise<ResultState>) {
     setError("");
     startTransition(async () => {
@@ -31,7 +33,7 @@ function useActionRunner(onDone: () => void) {
           return;
         }
         toast.success(result.success);
-        onDone();
+        markStale();
       } catch {
         setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
       }

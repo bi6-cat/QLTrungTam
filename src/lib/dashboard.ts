@@ -71,6 +71,9 @@ export type DashboardData = {
   trend: TrendPoint[];
 };
 
+/** Số tháng của biểu đồ xu hướng trên trang tổng quan. */
+export const TREND_MONTHS = 8;
+
 function monthIndex(month: number, year: number) {
   return year * 12 + (month - 1);
 }
@@ -94,8 +97,10 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
   const periodEnd = new Date(year, month, 1);
   const currentIndex = monthIndex(currentMonth, currentYear);
 
-  // 6 tháng gần nhất tính lùi từ tháng đang xem, dùng cho biểu đồ xu hướng.
-  const trendPeriods = Array.from({ length: 6 }, (_, offset) => shiftMonth(month, year, offset - 5));
+  // TREND_MONTHS tháng gần nhất tính lùi từ tháng đang xem, dùng cho biểu đồ xu hướng.
+  const trendPeriods = Array.from({ length: TREND_MONTHS }, (_, offset) =>
+    shiftMonth(month, year, offset - (TREND_MONTHS - 1))
+  );
 
   const trendStart = new Date(trendPeriods[0].year, trendPeriods[0].month - 1, 1);
 
@@ -153,7 +158,7 @@ export async function getDashboard(month: number, year: number): Promise<Dashboa
       _sum: { amount: true, paidAmount: true }
     }),
     getPendingSalaryLines(now),
-    // Ghi danh có mặt trong khoảng 6 tháng, cùng điều kiện với ô "Học sinh đang học".
+    // Ghi danh có mặt trong khoảng xu hướng, cùng điều kiện với ô "Học sinh đang học".
     prisma.enrollment.findMany({
       where: {
         status: "active",

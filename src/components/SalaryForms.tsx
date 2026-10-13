@@ -1,12 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Ban, Check, Copy, FileText, RotateCcw, Send } from "lucide-react";
 import { recordSalaryPayoutAction, setSalaryWriteOffAction } from "@/lib/actions/finance";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { Modal } from "@/components/Modal";
 import { MoneyInput } from "@/components/MoneyInput";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Button, Field, Input } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 
@@ -80,6 +82,7 @@ function PayoutDialog({
   onClose: () => void;
 }) {
   const [state, action, pending] = useActionState(recordSalaryPayoutAction, EMPTY_RESULT_STATE);
+  const router = useRouter();
   const [selected, setSelected] = useState(() => new Set(initialKeys));
   // Mỗi lớp/tháng có thể trả hai phần: chuyển khoản và tiền mặt đưa thêm (như sổ tay).
   const [amounts, setAmounts] = useState<Record<string, { bank: number | null; cash: number | null }>>(() =>
@@ -91,6 +94,7 @@ function PayoutDialog({
   useEffect(() => {
     if (!state.success) return;
     toast.success(state.success);
+    router.refresh();
     onClose();
   }, [state]);
 
@@ -369,13 +373,17 @@ export function SalaryWriteOffButton({
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
+  const markStale = useRefreshWhenIdle(pending);
 
   function submit() {
     startTransition(async () => {
       try {
         const result = await setSalaryWriteOffAction({ classId, month, year, note, undo });
         if (result.error) toast.error(result.error);
-        else toast.success(result.success);
+        else {
+          toast.success(result.success);
+          markStale();
+        }
       } catch {
         toast.error("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
       } finally {

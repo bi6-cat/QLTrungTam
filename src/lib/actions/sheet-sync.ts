@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
 import { requireAdmin } from "@/lib/auth";
 import { extractSpreadsheetId, listSheetTabs, parseServiceAccount } from "@/lib/google-sheets";
@@ -20,7 +19,6 @@ export async function saveSheetSyncConfigAction(_prevState: ResultState, formDat
     const account = parseServiceAccount(serviceAccountJson);
     const spreadsheet = await listSheetTabs(account, spreadsheetId);
     await saveSheetSyncConfig({ spreadsheetId, serviceAccountJson });
-    revalidatePath("/admin/settings");
     return successState(`Đã kết nối file “${spreadsheet.title}”.`);
   } catch (error) {
     return errorState(error instanceof Error ? error.message : "Không kết nối được Google Sheet.");
@@ -36,6 +34,5 @@ export async function runSheetSyncAction(_prevState: ResultState, formData: Form
   } catch (error) {
     return errorState(error instanceof Error ? error.message : "Không đồng bộ được Google Sheet.");
   } finally {
-    revalidatePath("/admin/settings");
   }
 }

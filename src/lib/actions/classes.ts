@@ -1,9 +1,8 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { actionFailure, revalidateRosterPaths } from "@/lib/actions/shared";
+import { actionFailure } from "@/lib/actions/shared";
 import { changeArchiveState, parseArchiveInput } from "@/lib/archive";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -43,7 +42,6 @@ export async function createClassAction(_prevState: ResultState, formData: FormD
       return actionFailure(createError, "Không tạo được lớp.");
     }
   }
-  revalidatePath("/admin/classes");
   return successState(`Đã tạo lớp ${data.name} (${data.shortCode}).`);
 }
 
@@ -66,10 +64,6 @@ export async function updateClassAction(_prevState: ResultState, formData: FormD
   if (updated.count !== 1) {
     return errorState("Lớp đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục lớp trước khi sửa.");
   }
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin");
-  revalidatePath("/admin/finance");
-  revalidatePath("/admin/salary");
   return successState(`Đã lưu thông tin lớp ${data.name}.`);
 }
 
@@ -81,7 +75,6 @@ async function changeClassArchive(formData: FormData, mode: "archive" | "restore
   } catch (archiveError) {
     return actionFailure(archiveError, mode === "archive" ? "Không thể lưu trữ lớp học." : "Không thể khôi phục lớp học.");
   }
-  revalidateRosterPaths();
   return successState(mode === "archive" ? "Đã lưu trữ lớp học." : "Đã khôi phục lớp học.");
 }
 

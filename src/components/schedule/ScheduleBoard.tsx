@@ -16,6 +16,7 @@ import {
 } from "@/lib/class-sessions";
 import { weekdayShort } from "@/lib/schedule";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Button, EmptyState, Panel, Select } from "@/components/ui";
 import { CancelDayDialog, MakeupDialog, SessionDialog } from "@/components/schedule/SessionDialogs";
 import { STATUS_STYLE, classDot } from "@/components/schedule/styles";
@@ -67,6 +68,7 @@ export function ScheduleBoard(props: {
   const [cancelDay, setCancelDay] = useState<IsoDate | null>(null);
   const [makeupDate, setMakeupDate] = useState<IsoDate | null>(null);
   const [bulkPending, startBulk] = useTransition();
+  const markStale = useRefreshWhenIdle(bulkPending);
   const classById = new Map(props.allClasses.map((classRoom) => [classRoom.id, classRoom]));
   const classId = classFilter || undefined;
 
@@ -93,7 +95,10 @@ export function ScheduleBoard(props: {
       try {
         const result = await markPendingHeldAction({ from: props.from, to: props.to, classId });
         if (result.error) toast.error(result.error);
-        else toast.success(result.success);
+        else {
+          toast.success(result.success);
+          markStale();
+        }
       } catch {
         toast.error("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
       }

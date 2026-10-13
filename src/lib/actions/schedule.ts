@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import type { z } from "zod";
 import { successState, errorState, type ResultState } from "@/lib/action-states";
 import { actionFailure, runSerializableAction } from "@/lib/actions/shared";
@@ -30,13 +29,6 @@ import {
 
 // Toàn bộ thời khóa biểu (lịch cố định + điểm danh) do chủ và quản lý phụ cùng quản lý.
 
-function revalidateSchedulePaths() {
-  revalidatePath("/admin/schedule");
-  revalidatePath("/admin/classes");
-  revalidatePath("/admin/finance");
-  revalidatePath("/teacher/classes/[short_code]", "page");
-}
-
 function parseInput<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<T> {
   const result = schema.safeParse(input);
   if (!result.success) throw new Error(result.error.issues.map((issue) => issue.message).join("; "));
@@ -49,7 +41,6 @@ export async function createScheduleAction(_prevState: ResultState, formData: Fo
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   try {
     const classRoom = await runSerializableAction((tx) => createScheduleSlot(tx, data));
-    revalidateSchedulePaths();
     return successState(
       `Đã thêm buổi ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime} cho lớp ${classRoom.name}.`
     );
@@ -67,7 +58,6 @@ export async function updateScheduleAction(_prevState: ResultState, formData: Fo
   } catch (updateError) {
     return actionFailure(updateError, "Không thể sửa lịch học.");
   }
-  revalidateSchedulePaths();
   return successState(`Đã sửa lịch thành ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime}.`);
 }
 
@@ -77,7 +67,6 @@ export async function stopScheduleAction(scheduleId: string, fromDate: string): 
   if (!date) return errorState("Ngày ngừng không hợp lệ.");
   try {
     const result = await stopScheduleSlot(prisma, { id: String(scheduleId), fromDate: date });
-    revalidateSchedulePaths();
     return successState(result === "deleted" ? "Đã xóa buổi học khỏi lịch." : `Đã ngừng buổi học từ ${formatIsoDayMonth(date)}.`);
   } catch (stopError) {
     return actionFailure(stopError, "Không thể ngừng buổi học.");
@@ -95,7 +84,6 @@ export async function markSessionAction(input: {
   try {
     const data = parseInput(markSessionSchema, input);
     const warning = await runSerializableAction((tx) => markSession(tx, data, actor.username));
-    revalidateSchedulePaths();
     return successState(
       `${data.status === "held" ? "Đã điểm danh đã học" : "Đã ghi lớp nghỉ"} buổi ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
     );
@@ -111,7 +99,6 @@ export async function clearSessionAction(recordId: string): Promise<ResultState>
   } catch (clearError) {
     return actionFailure(clearError, "Không thể bỏ điểm danh.");
   }
-  revalidateSchedulePaths();
   return successState("Đã bỏ điểm danh buổi học.");
 }
 
@@ -129,7 +116,6 @@ export async function addMakeupSessionAction(input: {
   try {
     const data = parseInput(makeupSessionSchema, input);
     const warning = await runSerializableAction((tx) => addMakeupSession(tx, data, actor.username));
-    revalidateSchedulePaths();
     return successState(
       data.fromDate
         ? `Đã dời buổi ${formatIsoDayMonth(data.fromDate)} sang ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
@@ -145,7 +131,6 @@ export async function markPendingHeldAction(input: { from: string; to: string; c
   try {
     const data = parseInput(bulkHeldSchema, input);
     const count = await runSerializableAction((tx) => markPendingSessionsHeld(tx, data, actor.username));
-    revalidateSchedulePaths();
     return successState(count > 0 ? `Đã điểm danh đã học ${count} buổi.` : "Không còn buổi nào chưa điểm danh.");
   } catch (bulkError) {
     return actionFailure(bulkError, "Không thể điểm danh hàng loạt.");
@@ -157,7 +142,6 @@ export async function cancelDayAction(input: { date: string; reason: string }): 
   try {
     const data = parseInput(cancelDaySchema, input);
     const result = await runSerializableAction((tx) => cancelDay(tx, data, actor.username));
-    revalidateSchedulePaths();
     return successState(
       result.count > 0
         ? `Đã ghi nghỉ ${result.count} buổi ngày ${formatIsoDayMonth(data.date)} (${data.reason}).${result.warning}`

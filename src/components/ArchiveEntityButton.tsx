@@ -5,6 +5,7 @@ import { Archive, RotateCcw } from "lucide-react";
 import { archiveClassAction, restoreClassAction } from "@/lib/actions/classes";
 import { archiveStudentAction, restoreStudentAction } from "@/lib/actions/students";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -29,6 +30,7 @@ export function ArchiveEntityButton({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const markStale = useRefreshWhenIdle(pending);
   const label = archived ? "Khôi phục" : "Lưu trữ";
   const entityLabel = kind === "class" ? "lớp" : "học sinh";
 
@@ -53,7 +55,7 @@ export function ArchiveEntityButton({
           return;
         }
         toast.success(result.success);
-        // Action đã revalidatePath và trả kèm dữ liệu mới, không cần router.refresh().
+        markStale();
         setOpen(false);
       } catch (actionError) {
         setError(actionError instanceof Error ? actionError.message : `Không thể ${label.toLowerCase()} ${entityLabel}.`);

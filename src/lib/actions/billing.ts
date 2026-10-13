@@ -1,7 +1,7 @@
 "use server";
 
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { actionFailure, revalidateFinancialPaths, runSerializableAction } from "@/lib/actions/shared";
+import { actionFailure, runSerializableAction } from "@/lib/actions/shared";
 import { requireAdmin, requireStaff, type StaffUser } from "@/lib/auth";
 import { isEnrollmentActiveInPeriod, latestMonthUpToPeriodArgs, resolveMonthPlan } from "@/lib/enrollment-period";
 import { changeInvoiceLifecycle, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
@@ -18,8 +18,8 @@ function clampSessions(value: FormDataEntryValue | null) {
 }
 
 // Không redirect sau khi lưu: redirect về chính URL đang xem dễ đua với request
-// prefetch của <Link> và làm vùng nội dung trắng. revalidatePath đã gửi kèm dữ
-// liệu mới trong response của action; client tự thoát chế độ sửa khi thành công.
+// prefetch của <Link> và làm vùng nội dung trắng. Client tự thoát chế độ sửa và
+// router.refresh() khi thành công (xem ClassInvoiceEditor).
 // Quản lý phụ cũng dùng action này nhưng chỉ đổi được số buổi và ghi chú, không tạo hóa đơn
 // (xem saveClassDetails).
 export async function updateClassDetailsAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
@@ -35,7 +35,6 @@ export async function updateClassDetailsAction(_prevState: ResultState, formData
     return actionFailure(saveError, "Không lưu được thay đổi.");
   }
 
-  revalidateFinancialPaths();
   const parts = [
     summary.created > 0 ? `tạo ${summary.created} hóa đơn` : "",
     summary.updated > 0 ? `cập nhật ${summary.updated} học sinh` : "",
@@ -323,6 +322,5 @@ export async function changeInvoiceStatusAction(
     return actionFailure(error, "Không thể đổi trạng thái hóa đơn.");
   }
 
-  revalidateFinancialPaths();
   return successState(LIFECYCLE_SUCCESS[targetStatus]);
 }

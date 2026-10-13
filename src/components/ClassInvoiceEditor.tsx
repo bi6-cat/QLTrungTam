@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, FilePlus2, Lock, Pencil, X } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 import { updateClassDetailsAction } from "@/lib/actions/billing";
@@ -98,6 +99,11 @@ export function ClassInvoiceEditor({
     },
     EMPTY_RESULT_STATE
   );
+  const router = useRouter();
+  // Nạp lại sau khi đã hết "Đang lưu..." (action không revalidatePath, xem src/lib/actions/shared.ts).
+  useEffect(() => {
+    if (saveState.success) router.refresh();
+  }, [saveState, router]);
   useEffect(() => {
     if (!billingLocked) return;
     setEditing(false);

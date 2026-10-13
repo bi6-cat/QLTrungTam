@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Ban, Gift, MoreHorizontal, RotateCcw } from "lucide-react";
 import { changeInvoiceStatusAction } from "@/lib/actions/billing";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Modal } from "@/components/Modal";
 import { Button, Field, Textarea } from "@/components/ui";
 
@@ -41,6 +42,7 @@ export function InvoiceLifecycleActions({
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const markStale = useRefreshWhenIdle(pending);
 
   function open(nextTarget: InvoiceStatus) {
     if (disabled) return;
@@ -56,13 +58,13 @@ export function InvoiceLifecycleActions({
     setPending(true);
     setError("");
     try {
-      // Action trả kèm dữ liệu mới của trang nên không cần router.refresh().
       const result = await changeInvoiceStatusAction(invoiceId, target, reason);
       if (result.error) {
         setError(result.error);
         return;
       }
       toast.success(result.success);
+      markStale();
       setTarget(null);
     } catch {
       setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");

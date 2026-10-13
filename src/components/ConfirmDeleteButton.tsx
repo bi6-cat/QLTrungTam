@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import type { ResultState } from "@/lib/action-states";
 import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Button } from "@/components/ui";
 
 /** Nút xóa có hỏi lại trước khi gọi server action `action(id)`, báo kết quả bằng toast. */
@@ -21,13 +22,17 @@ export function ConfirmDeleteButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const markStale = useRefreshWhenIdle(pending);
 
   function confirm() {
     startTransition(async () => {
       try {
         const result = await action(id);
         if (result.error) toast.error(result.error);
-        else toast.success(result.success);
+        else {
+          toast.success(result.success);
+          markStale();
+        }
       } catch {
         toast.error("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
       } finally {

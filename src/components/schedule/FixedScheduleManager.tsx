@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { CalendarOff, ChevronDown, Pencil, Settings2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { stopScheduleAction, updateScheduleAction } from "@/lib/actions/schedule";
@@ -10,6 +11,7 @@ import { WEEKDAYS, weekdayLabel } from "@/lib/schedule";
 import { AddScheduleForm } from "@/components/AddScheduleForm";
 import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toaster";
+import { useRefreshWhenIdle } from "@/components/useRefreshWhenIdle";
 import { Button, Field, Input, Panel, Select } from "@/components/ui";
 import { classDot } from "@/components/schedule/styles";
 
@@ -121,11 +123,13 @@ export function FixedScheduleManager({
 
 function EditSlotDialog({ slot, onClose }: { slot: ManagedSlot; onClose: () => void }) {
   const [state, action, pending] = useActionState(updateScheduleAction, EMPTY_RESULT_STATE);
+  const router = useRouter();
   useEffect(() => {
     if (!state.success) return;
     toast.success(state.success);
+    router.refresh();
     onClose();
-  }, [state, onClose]);
+  }, [state, onClose, router]);
 
   return (
     <Modal title="Sửa lịch cố định" onClose={onClose} closeDisabled={pending}>
@@ -181,6 +185,7 @@ function StopSlotDialog({
   const [fromDate, setFromDate] = useState(today);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const markStale = useRefreshWhenIdle(pending, onClose);
 
   function confirm() {
     setError("");
@@ -192,7 +197,7 @@ function StopSlotDialog({
           return;
         }
         toast.success(result.success);
-        onClose();
+        markStale();
       } catch {
         setError("Không kết nối được máy chủ. Vui lòng tải lại trang và thử lại.");
       }
