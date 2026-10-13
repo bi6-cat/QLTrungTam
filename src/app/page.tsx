@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Newsreader } from "next/font/google";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -25,14 +24,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { CENTER_INFO } from "@/lib/center";
-
-// Font serif cho tiêu đề, chỉ nạp ở trang chủ (khu quản trị vẫn dùng Inter).
-const display = Newsreader({
-  subsets: ["latin", "vietnamese"],
-  style: ["normal", "italic"],
-  display: "swap",
-  variable: "--font-display"
-});
+import { displayFont } from "./fonts";
 
 export const metadata: Metadata = {
   title: { absolute: "APLUS ACADEMY · Dạy thêm cấp 2 & cấp 3" },
@@ -278,7 +270,7 @@ export default function LandingPage() {
 
   return (
     // Phủ nền ngà lên nền gradient chung của body; chừa chỗ cho thanh liên hệ dưới cùng trên điện thoại.
-    <div className={`${display.variable} min-h-screen bg-ivory pb-20 text-ink md:pb-0`}>
+    <div className={`${displayFont.variable} min-h-screen bg-ivory pb-20 text-ink md:pb-0`}>
       {/* NAV */}
       <header className="sticky top-0 z-40 border-b border-ink/5 bg-ivory/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
