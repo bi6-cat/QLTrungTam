@@ -370,10 +370,14 @@ function MonthView({
     byCell.set(key, [...(byCell.get(key) ?? []), session]);
   }
   const scheduledDays = new Set(sessions.filter((session) => session.scheduled).map((session) => session.date));
+  // Ngày đang rê chuột: tô mờ cả cột để gióng ô với tiêu đề ngày (dòng đã có hover riêng).
+  const [hoverDay, setHoverDay] = useState<IsoDate | null>(null);
+  const dayBg = (day: IsoDate, weekend: string, todayBg: string) =>
+    day === hoverDay ? "bg-indigo-100/50" : day === today ? todayBg : isoWeekdayOf(day) >= 6 ? weekend : "";
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0 text-sm">
+      <table className="w-full border-separate border-spacing-0 text-sm" onMouseLeave={() => setHoverDay(null)}>
         <thead>
           <tr className="text-xs text-stone-500">
             <th className="sticky left-0 z-10 min-w-40 border-b border-stone-200 bg-white px-3 py-2 text-left font-semibold">Lớp</th>
@@ -382,11 +386,12 @@ function MonthView({
               return (
                 <th
                   key={day}
+                  onMouseEnter={() => setHoverDay(day)}
                   className={clsx(
                     "border-b border-l border-stone-200 px-0.5 py-1 text-center font-semibold",
                     weekday === 1 ? "border-l-stone-300" : "border-l-stone-100",
-                    weekday >= 6 && "bg-stone-50",
-                    day === today && "bg-indigo-50 text-primary"
+                    dayBg(day, "bg-stone-50", "bg-indigo-50"),
+                    (day === today || day === hoverDay) && "text-primary"
                   )}
                 >
                   {scheduledDays.has(day) ? (
@@ -419,8 +424,8 @@ function MonthView({
         </thead>
         <tbody>
           {classes.map((classRoom) => (
-            <tr key={classRoom.id} className="hover:bg-stone-50/60">
-              <td className="sticky left-0 z-10 border-b border-stone-100 bg-white px-3 py-2">
+            <tr key={classRoom.id} className="group hover:bg-indigo-50/40">
+              <td className="sticky left-0 z-10 border-b border-stone-100 bg-white px-3 py-2 group-hover:bg-indigo-50" onMouseEnter={() => setHoverDay(null)}>
                 <p className="flex items-center gap-1.5 font-semibold">
                   <span className={clsx("h-2 w-2 shrink-0 rounded-full", classDot(classRoom.colorIndex))} />
                   <span className="truncate">{classRoom.name}</span>
@@ -432,11 +437,11 @@ function MonthView({
                 return (
                   <td
                     key={day}
+                    onMouseEnter={() => setHoverDay(day)}
                     className={clsx(
                       "border-b border-l border-stone-100 px-0.5 py-1 text-center align-middle",
                       isoWeekdayOf(day) === 1 && "border-l-stone-300",
-                      isoWeekdayOf(day) >= 6 && "bg-stone-50/70",
-                      day === today && "bg-indigo-50/60"
+                      dayBg(day, "bg-stone-50/70 group-hover:bg-indigo-50/60", "bg-indigo-50/60 group-hover:bg-indigo-100/40")
                     )}
                   >
                     <div className="flex flex-col items-center gap-0.5">
@@ -454,7 +459,7 @@ function MonthView({
                   </td>
                 );
               })}
-              <td className="border-b border-l border-stone-100 px-2 py-2 text-right tabular-nums">
+              <td className="border-b border-l border-stone-100 px-2 py-2 text-right tabular-nums" onMouseEnter={() => setHoverDay(null)}>
                 {classRoom.summary.held}/{classRoom.summary.total}
               </td>
               <td className={clsx("border-b border-stone-100 px-2 py-2 text-right tabular-nums", classRoom.summary.cancelled > 0 && "font-semibold text-rose-700")}>

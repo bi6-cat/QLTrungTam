@@ -328,7 +328,7 @@ export function ClassInvoiceEditor({
                           <span className="inline-flex items-center gap-1">
                             <input type="hidden" name={`status:${row.enrollmentId}`} value={row.monthlyStatus} />
                             {planningLocked ? <Lock className="h-3.5 w-3.5 text-stone-500" /> : null}
-                            <span className={row.monthlyStatus === "active" ? "font-semibold text-primary" : "font-semibold text-amber-700"}>
+                            <span className={row.monthlyStatus === "active" ? "font-semibold text-neutralText" : "font-semibold text-amber-700"}>
                               {row.monthlyStatus === "active" ? "Đang học" : "Bảo lưu"}
                             </span>
                           </span>

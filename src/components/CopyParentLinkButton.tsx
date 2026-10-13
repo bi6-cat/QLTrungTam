@@ -7,6 +7,7 @@ import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { toast } from "@/components/Toaster";
 import { buildParentNotice } from "@/lib/parent-notice";
+import { renderTuitionOverviewImage } from "@/lib/tuition-overview-image";
 
 type OverviewStatus = "unpaid" | "paid" | "waived" | "void" | "not_created" | "on_leave";
 
@@ -116,128 +117,7 @@ function ParentLinkDialog({
     setExportError("");
 
     try {
-      await document.fonts?.ready;
-
-      const width = 1200;
-      const sidePadding = 64;
-      const headerHeight = 190;
-      const tableHeaderHeight = 58;
-      const rowHeight = 62;
-      const summaryHeight = 72;
-      const footerHeight = 70;
-      const bodyRows = Math.max(rows.length, 1);
-      const height = headerHeight + tableHeaderHeight + bodyRows * rowHeight + summaryHeight + footerHeight;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Trình duyệt không hỗ trợ tạo ảnh.");
-
-      const drawText = (
-        value: string,
-        x: number,
-        y: number,
-        maxWidth: number,
-        align: CanvasTextAlign = "left"
-      ) => {
-        context.textAlign = align;
-        if (context.measureText(value).width <= maxWidth) {
-          context.fillText(value, x, y);
-          return;
-        }
-
-        let shortened = value;
-        while (shortened.length > 1 && context.measureText(`${shortened}…`).width > maxWidth) {
-          shortened = shortened.slice(0, -1);
-        }
-        context.fillText(`${shortened}…`, x, y);
-      };
-
-      context.fillStyle = "#f5f5f4";
-      context.fillRect(0, 0, width, height);
-      context.fillStyle = "#3730a3";
-      context.fillRect(0, 0, width, headerHeight);
-      context.fillStyle = "#ffffff";
-      context.font = "700 25px Arial, sans-serif";
-      context.fillText("APLUS ACADEMY", sidePadding, 58);
-      context.font = "700 38px Arial, sans-serif";
-      drawText(className, sidePadding, 112, width - sidePadding * 2);
-      context.fillStyle = "#e0e7ff";
-      context.font = "500 22px Arial, sans-serif";
-      context.fillText(`Tổng quan học phí · ${formatMonth(month, year)}`, sidePadding, 153);
-
-      const tableLeft = sidePadding;
-      const tableWidth = width - sidePadding * 2;
-      const orderX = tableLeft + 24;
-      const studentX = tableLeft + 90;
-      const statusX = tableLeft + 445;
-      const sessionsX = tableLeft + 720;
-      const priceX = tableLeft + 900;
-      const amountX = tableLeft + tableWidth - 24;
-
-      context.fillStyle = "#e7e5e4";
-      context.fillRect(tableLeft, headerHeight, tableWidth, tableHeaderHeight);
-      context.fillStyle = "#57534e";
-      context.font = "700 18px Arial, sans-serif";
-      context.fillText("STT", orderX, headerHeight + 37);
-      context.fillText("HỌC SINH", studentX, headerHeight + 37);
-      context.fillText("TRẠNG THÁI", statusX, headerHeight + 37);
-      context.textAlign = "right";
-      context.fillText("SỐ BUỔI", sessionsX, headerHeight + 37);
-      context.fillText("TIỀN / BUỔI", priceX, headerHeight + 37);
-      context.fillText("SỐ TIỀN", amountX, headerHeight + 37);
-      context.textAlign = "left";
-
-      if (rows.length === 0) {
-        context.fillStyle = "#ffffff";
-        context.fillRect(tableLeft, headerHeight + tableHeaderHeight, tableWidth, rowHeight);
-        context.fillStyle = "#78716c";
-        context.font = "500 20px Arial, sans-serif";
-        context.fillText("Chưa có học sinh trong tháng này", studentX, headerHeight + tableHeaderHeight + 39);
-      } else {
-        rows.forEach((row, index) => {
-          const top = headerHeight + tableHeaderHeight + index * rowHeight;
-          context.fillStyle = index % 2 === 0 ? "#ffffff" : "#fafaf9";
-          context.fillRect(tableLeft, top, tableWidth, rowHeight);
-          context.fillStyle = "#1c1917";
-          context.font = "500 20px Arial, sans-serif";
-          context.fillText(String(index + 1), orderX, top + 39);
-          context.font = "600 21px Arial, sans-serif";
-          drawText(row.studentName, studentX, top + 39, 310);
-
-          const meta = STATUS_META[row.status];
-          context.fillStyle = row.status === "paid" ? "#15803d" : row.status === "unpaid" ? "#c2410c" : "#57534e";
-          context.font = "600 19px Arial, sans-serif";
-          drawText(meta.label, statusX, top + 39, 250);
-          context.fillStyle = "#292524";
-          context.textAlign = "right";
-          context.font = "500 20px Arial, sans-serif";
-          context.fillText(String(row.sessions), sessionsX, top + 39);
-          context.fillText(formatCurrency(row.pricePerSession), priceX, top + 39);
-          context.font = "600 20px Arial, sans-serif";
-          context.fillText(formatCurrency(row.amount), amountX, top + 39);
-          context.textAlign = "left";
-        });
-      }
-
-      const summaryTop = headerHeight + tableHeaderHeight + bodyRows * rowHeight;
-      context.fillStyle = "#ffffff";
-      context.fillRect(tableLeft, summaryTop, tableWidth, summaryHeight);
-      context.strokeStyle = "#d6d3d1";
-      context.beginPath();
-      context.moveTo(tableLeft, summaryTop);
-      context.lineTo(tableLeft + tableWidth, summaryTop);
-      context.stroke();
-      context.fillStyle = "#57534e";
-      context.font = "600 21px Arial, sans-serif";
-      context.fillText(`Tổng số: ${rows.length} học sinh`, studentX, summaryTop + 45);
-
-      context.fillStyle = "#78716c";
-      context.font = "400 17px Arial, sans-serif";
-      context.fillText("Danh sách được xuất từ hệ thống quản lý APLUS ACADEMY.", sidePadding, height - 30);
-
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("Không thể tạo file ảnh.");
+      const blob = await renderTuitionOverviewImage({ centerName: "APLUS ACADEMY", className, month, year, rows });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

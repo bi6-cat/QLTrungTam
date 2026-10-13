@@ -138,10 +138,12 @@ const statTone = {
   success: { chip: "bg-emerald-50 text-success", value: "text-success" },
   warning: { chip: "bg-rose-50 text-warning", value: "text-warning" },
   neutral: { chip: "bg-stone-100 text-stone-600", value: "text-neutralText" },
-  info: { chip: "bg-sky-50 text-sky-600", value: "text-sky-700" },
-  accent: { chip: "bg-amber-50 text-amber-600", value: "text-amber-700" },
-  violet: { chip: "bg-violet-50 text-violet-600", value: "text-violet-700" },
-  teal: { chip: "bg-teal-50 text-teal-600", value: "text-teal-700" }
+  // Tông phụ quy về màu chủ đạo để mọi tab dùng cùng một bảng màu
+  // (chỉ giữ xanh lá = tốt, đỏ = cần xử lý).
+  info: { chip: "bg-indigo-50 text-primary", value: "text-primary" },
+  accent: { chip: "bg-indigo-50 text-primary", value: "text-primary" },
+  violet: { chip: "bg-indigo-50 text-primary", value: "text-primary" },
+  teal: { chip: "bg-indigo-50 text-primary", value: "text-primary" }
 } as const;
 
 export function StatCard({
