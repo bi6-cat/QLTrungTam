@@ -29,4 +29,7 @@ Ghi chép:
   số đo, câu hỏi phỏng vấn). Người dùng duyệt rồi mới commit.
 - Cuối mỗi buổi: 3–5 dòng trong `docs/labs/gcp/journal.md` (làm gì, dừng ở đâu, chi phí).
 
+- Khi người dùng hỏi một khái niệm họ chưa biết ("X là gì", "để làm gì", "tại sao"): trả lời, rồi thêm một mục
+  vào `docs/labs/gcp/hoi-dap.md` (câu hỏi, trả lời ngắn, cách nói khi phỏng vấn) để họ ôn một thể.
+
 Chi phí: luôn nhắc stop VM khi không dùng và destroy theo mục 2 của README.

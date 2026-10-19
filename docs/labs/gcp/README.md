@@ -115,11 +115,11 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 
 ### M0 · Chuẩn bị (1–2h)
 - [x] 0.1 Chốt sổ OCI: commit code Day 2 làm archive, tắt Mutagen, tạo nhánh `gcp-lab` từ `dev`
-- [ ] 0.2 Cài tool: gcloud, terraform, kubectl, helm, k9s, ansible, k6, gh, tflint, Docker
-- [x] 0.3 `gcloud init`, tạo project, gắn billing, đặt region mặc định
-- [ ] 0.4 Budget $150 + cảnh báo
-- [ ] 0.5 Đọc quota thật (vCPU chạy cùng lúc, CPU theo region, IP, disk) và ghi vào journal; chốt phương án A/B cho kubeadm
-- [ ] 0.6 Bật API, tạo bucket state, bucket backup, DNS zone, Artifact Registry
+- [x] 0.2 Cài tool: gcloud, terraform, kubectl, helm, k9s, ansible, Docker đã có; `tflint` cài ở M1, `k6` ở M5, `gh` ở M6
+- [x] 0.3 `gcloud init`, tạo project, gắn billing, đặt region mặc định (môi trường lab tách riêng bằng `.env.gcp`)
+- [x] 0.4 Budget $150 + cảnh báo
+- [x] 0.5 Đọc quota thật: `CPUS_ALL_REGIONS=12`, `CPUS`=32, `INSTANCES`=8, `IN_USE_ADDRESSES`=4 → chốt **phương án A**
+- [x] 0.6 Bật API, tạo bucket state, bucket backup, DNS zone, Artifact Registry
 - [ ] 0.7 Thêm NS cho `gcp` trên Cloudflare
 - Xong khi: `dig NS gcp.zett.io.vn +short` trả về name server của Google
 
