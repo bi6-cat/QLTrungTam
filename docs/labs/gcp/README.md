@@ -3,9 +3,11 @@
 Tài liệu tổng quan của lab. Hướng dẫn chi tiết từng bước được đưa trong chat; file này giữ
 các quyết định, thông số chung và checklist để mọi buổi làm thống nhất với nhau.
 
-Mục tiêu: có kinh nghiệm thật với Terraform, Kubernetes, CI/CD và vận hành cloud để đi phỏng vấn
-(Cloud/DevOps Engineer). Kịch bản xuyên suốt: đưa app QLTrungTam từ **VM chạy docker-compose**
-(giống prod hiện tại) sang **GKE + Cloud SQL**, rồi dựng GitOps, giám sát, canary và luyện xử lý sự cố.
+Mục tiêu: có kinh nghiệm thật để đi phỏng vấn vị trí **Kubernetes / Cloud Platform Engineer**
+(xem bảng đối chiếu JD ở mục 7). Trọng tâm là **tự dựng và vận hành Kubernetes bằng kubeadm**
+(control plane, etcd, networking, storage, ingress, HA, DR). GKE dùng để so sánh với managed service.
+Kịch bản xuyên suốt: đưa app QLTrungTam từ **VM chạy docker-compose** (giống prod hiện tại)
+lên **cluster kubeadm HA**, rồi lên **GKE + Cloud SQL**, sau đó dựng GitOps, giám sát và luyện xử lý sự cố.
 
 ## 1. Đã chốt
 
@@ -16,23 +18,28 @@ Mục tiêu: có kinh nghiệm thật với Terraform, Kubernetes, CI/CD và v�
 | Project | 1 project: `PROJECT_ID = project-070733c0-e22c-4fbf-a55` (tên "QLTT K8S"). Biến shell nằm trong `.env.gcp` ở gốc repo (đã gitignore) |
 | Region / zone | `asia-southeast1` (Singapore) / `asia-southeast1-a` |
 | Domain | Chỉ dùng `gcp.zett.io.vn`, được trỏ NS từ Cloudflare sang Cloud DNS |
-| Máy chạy lệnh | Mac (Apple Silicon, arm64), nên image phải build cho `linux/amd64` |
-| IaC | Terraform |
-| CI đăng nhập GCP | JSON key của service account, lưu trong GitHub secret |
+| Máy chạy lệnh | Ghi kiến trúc thật ở M0 (`uname -m`). Nếu là arm64 thì image phải build cho `linux/amd64` |
+| IaC | Terraform (hạ tầng) + Ansible (cấu hình OS, cài kubeadm) |
+| CI đăng nhập GCP | **Workload Identity Federation** cho GitHub Actions, không dùng JSON key |
 | Git | Nhánh trunk `gcp-lab` (tách từ `dev`). Mỗi mảng làm trên 1 nhánh `gcp/mXX-<tên>`, xong thì mở PR vào `gcp-lab` |
 
 ## 2. Quy tắc
 
-- **Cuối mỗi buổi chạy `terraform destroy`.** Chỉ giữ lại các thứ ở mục 3.
+- **Free Trial giới hạn số vCPU chạy cùng lúc** (đọc con số thật ở M0.5). Không chạy cluster kubeadm,
+  GKE và VM legacy cùng lúc; xong mảng nào thì stop/destroy mảng đó.
+- Cuối buổi:
+  - mảng kubeadm (M3–M4): `gcloud compute instances stop` các node, giữ disk để buổi sau làm tiếp;
+  - các mảng khác: `terraform destroy`. Chỉ giữ lại các thứ ở mục 3.
 - **Trước khi destroy GKE**, xoá các namespace có Ingress / Gateway / Service LoadBalancer / PVC.
   Nếu không xoá, GCP sẽ để lại Load Balancer và disk nằm ngoài Terraform, vẫn tính tiền.
-- Không commit: JSON key, `*.tfstate`, `terraform.tfvars` chứa mật khẩu, kubeconfig, `.env`.
+- Không commit: JSON key, `*.tfstate`, `terraform.tfvars` chứa mật khẩu, kubeconfig, `.env`, etcd snapshot.
 - `zett.io.vn` là domain prod (`aplus.`, `monitor.`). Trên Cloudflare chỉ thêm bản ghi NS cho
   `gcp`, không động vào bản ghi nào khác.
 - Không dùng data hay secret của prod. Data giả lấy từ `prisma/seed.ts`.
 - SSH chỉ mở cho IP của mình.
 - Code app phải sửa cho lab (metrics, fault flag) thì chỉ để trên nhánh `gcp-lab`, không merge vào `dev`.
-- Khi kể chuyện phỏng vấn, việc nào làm trong lab thì nói rõ là **[LAB]**.
+- Khi kể chuyện phỏng vấn, việc nào làm trong lab thì nói rõ là **[LAB]**. Câu chuyện production thật
+  là app QLTrungTam đang chạy trên EC2 kèm monitoring.
 
 ## 3. Những thứ giữ lâu dài (tạo tay, không nằm trong Terraform)
 
@@ -41,34 +48,46 @@ Mục tiêu: có kinh nghiệm thật với Terraform, Kubernetes, CI/CD và v�
 | Bucket state | `PROJECT_ID-tfstate` (bật versioning) | State không thể do chính nó quản lý |
 | Cloud DNS zone | `gcp-zett` → `gcp.zett.io.vn.` | Xoá rồi tạo lại thì NS bị đổi, lại phải sửa Cloudflare |
 | Artifact Registry | `qltt` (docker, `asia-southeast1`) | Giữ image qua các lần destroy |
-| Service account CI | `github-ci` + JSON key (tạo ở M4) | Key không bị đổi mỗi lần dựng lại |
+| Bucket backup | `PROJECT_ID-backup` | etcd snapshot, Velero backup phải sống sót sau khi destroy cluster |
 | Budget | Billing → Budgets & alerts | Nằm ở cấp billing account, không thuộc project |
+
+Workload Identity Pool cho GitHub và service account `github-ci` tạo bằng Terraform ở M6
+(không có key nên dựng lại không ảnh hưởng gì).
 
 ## 4. Thông số chung
 
 | Mục | Giá trị |
 | --- | --- |
 | VPC | `qltt-vpc` (custom mode) |
-| Subnet | `public` 10.10.0.0/24 · `private` 10.10.1.0/24 · `gke` 10.10.16.0/20 |
+| Subnet | `public` 10.10.0.0/24 · `private` 10.10.1.0/24 · `k8s` 10.10.2.0/24 · `gke` 10.10.16.0/20 |
 | Dải phụ của GKE | `pods` 10.100.0.0/16 · `services` 10.101.0.0/20 |
 | Dải cho Cloud SQL (private service access) | 10.50.0.0/20 |
-| VM (M2) | `legacy-app`, `legacy-db`: e2-small, Debian 12 |
-| MIG (M3) | e2-small, 2–4 máy |
-| GKE (M5+) | Standard, zonal `asia-southeast1-a`, release channel `REGULAR`, pool spot e2-standard-2: 2 node ở M5, tăng lên 3–4 node từ M8 |
-| Cloud SQL (M6) | PostgreSQL 16, `edition = ENTERPRISE`, `db-g1-small`, private IP, bật backup + PITR |
-| Hostname | `app.` (app: chạy trên MIG, M6 cutover sang GKE) · `demo.` (nginx ở M5) · `argocd.` · `grafana.` (tất cả dưới `gcp.zett.io.vn`) |
-| Namespace | `qltt`, `argocd`, `monitoring`, `external-secrets`, `external-dns`, `argo-rollouts` |
-| Label | `project=qltt`, `env=lab`, `component=<network|vm|gke|db|...>` |
+| VM legacy (M2) | `legacy-app`, `legacy-db`: e2-small, Debian 12 |
+| kubeadm (M3) | Ubuntu 24.04. Phương án A: `cp1-3` e2-medium (on-demand) + `w1-2` e2-standard-2 (spot). Phương án B nếu quota chỉ 8 vCPU: `cp1-3` + `w1`, bỏ taint control plane để app có replica thứ hai |
+| kubeadm network | Pod CIDR `192.168.0.0/16` (Calico **VXLAN**), Service CIDR `10.96.0.0/12`, node bật `can_ip_forward` |
+| API endpoint (M3) | Internal passthrough Network LB TCP 6443 → `cp1-3`, DNS nội bộ `k8s-api.lab.internal` |
+| Ingress kubeadm (M3) | Traefik DaemonSet NodePort ← External passthrough Network LB, hostname `k8s.gcp.zett.io.vn` |
+| GKE (M5) | Standard, zonal `asia-southeast1-a`, release channel `REGULAR`, pool spot e2-standard-2: 2 node, tăng lên 3 node từ M6 |
+| Cloud SQL (M5) | PostgreSQL 16, `edition = ENTERPRISE`, `db-g1-small`, private IP, bật backup + PITR |
+| Hostname | `app.` (app trên GKE) · `k8s.` (app trên kubeadm) · `argocd.` · `grafana.` (tất cả dưới `gcp.zett.io.vn`) |
+| Namespace | `qltt`, `argocd`, `monitoring`, `external-secrets`, `external-dns`, `velero` |
+| Label | `project=qltt`, `env=lab`, `component=<network|vm|k8s|gke|db|...>` |
+
+**Khác biệt cloud so với lab on-prem (`k8s-lab`):** VPC của GCP không cho ARP/VRRP tự do, nên
+Keepalived VIP và MetalLB L2 không dùng được. Thay bằng Internal LB cho API server và NodePort + LB
+cho ingress. Calico IP-in-IP (protocol 4) cũng bị VPC chặn, nên dùng VXLAN.
 
 Phiên bản tool và chart: ghi vào đây khi dùng tới.
 
 | Thành phần | Phiên bản |
 | --- | --- |
-| Terraform / provider `hashicorp/google` | 1.16.4 / |
+| Terraform | 1.16.4 |
+| Provider `hashicorp/google` | |
+| Kubernetes (kubeadm) · Calico · Traefik | |
 | GKE | |
 | argo-cd · argo-rollouts | |
 | kube-prometheus-stack · loki · alloy | |
-| external-secrets · external-dns | |
+| external-secrets · external-dns · velero | |
 
 ## 5. Bộ tool
 
@@ -76,31 +95,31 @@ Phiên bản tool và chart: ghi vào đây khi dùng tới.
 | --- | --- |
 | Hạ tầng | Terraform (module, import, plan trong CI), `tflint` |
 | Cấu hình VM | Ansible |
-| Container | Docker (multi-stage), Artifact Registry |
-| Kubernetes | GKE, `kubectl`, Helm, k9s |
-| CI/CD | GitHub Actions, Trivy, Argo CD |
-| Add-on k8s | Workload Identity, External Secrets + Secret Manager, external-dns |
+| Container | Docker (multi-stage), containerd, `crictl`, Artifact Registry |
+| Kubernetes | kubeadm, `etcdctl`, GKE, `kubectl`, Helm, k9s |
+| CI/CD | GitHub Actions, Trivy, Argo CD; Jenkins (tùy chọn) |
+| Add-on k8s | Workload Identity, External Secrets + Secret Manager, external-dns, Velero |
 | Giám sát | Cloud Monitoring, kube-prometheus-stack (Prometheus, Grafana, Alertmanager → Discord), Loki + Alloy |
 | Triển khai nâng cao | Argo Rollouts (canary + analysis) |
 | Test tải | k6 |
+| Scripting | Python (`kubernetes` client) |
 
-**Cert của `app.gcp.zett.io.vn`:** tạo 1 lần bằng Certificate Manager, xác thực qua DNS. M3 gắn
-cert này vào Load Balancer của MIG. M6 gắn đúng cert đó vào Gateway của GKE, nên lúc cutover
-cert đã sẵn ở cả hai bên và không bị lỗi HTTPS.
-M5 học Ingress có sẵn của GKE. Từ M6 chuyển sang **Gateway API** (cũng có sẵn trong GKE),
-vì Gateway API là hướng thay thế Ingress. Không dùng ingress-nginx vì dự án này đã ngừng phát triển từ 2026.
+**Cert:** GKE dùng Certificate Manager, xác thực qua DNS, gắn vào Gateway ở M5. Cluster kubeadm
+chạy HTTP ở M3; nếu còn thời gian thì thêm cert-manager + Let's Encrypt (DNS-01 qua Cloud DNS).
+Không dùng ingress-nginx vì dự án này đã ngừng phát triển từ 2026.
 
 ## 6. Lộ trình
 
 Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấn hay gặp mà mảng đó giúp trả lời.
+"CKA" đánh dấu phần trùng với đề thi CKA, nên luyện bấm giờ song song.
 
 ### M0 · Chuẩn bị (1–2h)
 - [x] 0.1 Chốt sổ OCI: commit code Day 2 làm archive, tắt Mutagen, tạo nhánh `gcp-lab` từ `dev`
-- [ ] 0.2 Cài tool trên Mac: gcloud, terraform, kubectl, helm, k9s, ansible, k6, gh, tflint, OrbStack (Docker)
+- [ ] 0.2 Cài tool: gcloud, terraform, kubectl, helm, k9s, ansible, k6, gh, tflint, Docker
 - [x] 0.3 `gcloud init`, tạo project, gắn billing, đặt region mặc định
 - [ ] 0.4 Budget $150 + cảnh báo
-- [ ] 0.5 Đọc quota thật (CPU, IP, disk) và ghi vào journal
-- [ ] 0.6 Bật API, tạo bucket state, DNS zone, Artifact Registry
+- [ ] 0.5 Đọc quota thật (vCPU chạy cùng lúc, CPU theo region, IP, disk) và ghi vào journal; chốt phương án A/B cho kubeadm
+- [ ] 0.6 Bật API, tạo bucket state, bucket backup, DNS zone, Artifact Registry
 - [ ] 0.7 Thêm NS cho `gcp` trên Cloudflare
 - Xong khi: `dig NS gcp.zett.io.vn +short` trả về name server của Google
 
@@ -109,132 +128,144 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 - [ ] 1.2 Biến, output, `terraform.tfvars`
 - [ ] 1.3 Chuyển state lên GCS (backend `gcs`, có khoá state)
 - [ ] 1.4 Tạo tay 1 firewall trên Console rồi `terraform import`
+- [ ] 1.5 Tách `modules/network` ngay từ đầu, thêm `terraform fmt -check` + `tflint`
 - Xong khi: `plan` báo "No changes"; state nằm trong bucket
 - PV: State để ở đâu, khoá thế nào? Có người sửa tay trên Console (drift) thì xử lý ra sao?
 
-### M2 · Mạng + VM "hệ thống cũ" + Ansible (5–6h)
-- [ ] 2.1 VPC, subnet public/private, firewall (80/443 mở cho mọi nơi, 22 chỉ cho IP của mình)
-- [ ] 2.2 Cloud Router + Cloud NAT cho subnet private
+### M2 · Mạng + VM "hệ thống cũ" + Ansible (4h)
+- [ ] 2.1 VPC, 4 subnet, firewall (80/443 mở cho mọi nơi, 22 chỉ cho IP của mình)
+- [ ] 2.2 Cloud Router + Cloud NAT cho subnet private và `k8s`
 - [ ] 2.3 `legacy-app` (subnet public) + `legacy-db` (subnet private, không có IP public)
-- [ ] 2.4 Build image app (`linux/amd64`) rồi push lên Artifact Registry
+- [ ] 2.4 Build image app rồi push lên Artifact Registry
 - [ ] 2.5 Ansible: cài Docker, deploy Postgres lên `legacy-db` và app lên `legacy-app`, chạy seed
-- [ ] 2.6 Snapshot disk DB, rồi khôi phục ra disk mới
-- Xong khi: mở được app qua IP của `legacy-app`; `legacy-db` không có IP public nhưng vẫn `apt update` được
+- Xong khi: mở được app qua IP của `legacy-app`; `legacy-db` không có IP public nhưng vẫn `apt update` được.
+  Sau đó destroy 2 VM legacy (giữ lại playbook)
 - PV: Subnet private ra internet bằng cách nào? Terraform khác Ansible chỗ nào?
 
-### M3 · Load balancer + autoscaling + Cloud Monitoring (4h)
-- [ ] 3.1 Instance template + MIG (health check, autohealing, autoscale theo CPU)
-- [ ] 3.2 HTTPS Load Balancer + cert từ Certificate Manager (xác thực qua DNS) + bản ghi `app.gcp.zett.io.vn`
-- [ ] 3.3 Bắn tải bằng k6, xem MIG scale out
-- [ ] 3.4 Uptime check + alert gửi email
-- Xong khi: xoá 1 VM thì nó tự dựng lại; bắn tải thì số VM tăng; tắt app thì nhận được email
-- PV: Health check dùng để làm gì? Autoscale dựa trên cái gì?
+### M3 · kubeadm HA tự dựng (8–10h) — trọng tâm
+- [ ] 3.1 Terraform `modules/k8s-nodes`: node theo phương án A/B, firewall nội bộ (6443, 2379-2380, 10250,
+      10257, 10259, UDP 4789 VXLAN, 30000-32767), firewall health check từ `35.191.0.0/16` và `130.211.0.0/22`
+- [ ] 3.2 Internal LB TCP 6443 cho API server + bản ghi DNS nội bộ `k8s-api.lab.internal`
+- [ ] 3.3 Ansible role `k8s-common`: tắt swap, kernel module, sysctl, containerd (`SystemdCgroup=true`), kubeadm/kubelet/kubectl
+- [ ] 3.4 `kubeadm init` trên cp1 với `--control-plane-endpoint k8s-api.lab.internal:6443 --upload-certs`
+- [ ] 3.5 Calico (VXLAN), rồi join cp2, cp3 và worker. Ghi lại cách xử lý khi node backend của Internal LB
+      gọi chính VIP đó (lúc join, `/etc/hosts` tạm trỏ `k8s-api` về cp1)
+- [ ] 3.6 local-path-provisioner, metrics-server, Traefik NodePort + External LB, bản ghi `k8s.gcp.zett.io.vn`
+- [ ] 3.7 Deploy app: PostgreSQL bằng CloudNativePG (StatefulSet + PVC), Job migrate, Deployment 2 replica,
+      Ingress — tái dùng manifest từ `deploy/k8s-lab/manifests` trên nhánh `k8s-lab`
+- Xong khi: `kubectl get nodes` đủ node `Ready`; `curl http://k8s.gcp.zett.io.vn/api/health` trả về `ok`;
+  có thể vẽ lại sơ đồ control plane (apiserver, etcd, scheduler, controller-manager, kubelet) từ trí nhớ
+- PV: Một request `kubectl apply` đi qua những thành phần nào? Vì sao cần 3 control plane? Pod CIDR, Service CIDR khác gì nhau? (CKA)
 
-### M4 · Terraform module + CI plan (3h)
-- [ ] 4.1 Tách code thành `modules/network`, `modules/vm`, `modules/mig`
-- [ ] 4.2 Thêm `tflint` và `terraform fmt -check`
-- [ ] 4.3 Tạo SA `github-ci` + JSON key, lưu vào GitHub secret
-- [ ] 4.4 Workflow: mỗi PR tự chạy `plan` và comment vào PR
-- Xong khi: PR có comment plan
-- PV: Khi có nhiều môi trường thì tổ chức code Terraform thế nào? Làm sao để CI chạy Terraform an toàn?
+### M4 · Vận hành cluster tự dựng (6h)
+- [ ] 4.1 etcd: `etcdctl member list`, `endpoint health`, snapshot đẩy lên bucket backup, restore thử
+- [ ] 4.2 Drill: stop 1 control plane (cluster vẫn chạy), stop 2 control plane (mất quorum), khôi phục
+- [ ] 4.3 Drill: stop worker chứa PostgreSQL primary, xem CNPG promote replica; app tự hồi phục
+- [ ] 4.4 `kubectl drain` / `cordon` / `uncordon` một node để bảo trì
+- [ ] 4.5 `kubeadm upgrade` lên minor tiếp theo (control plane trước, worker sau), app không downtime nhờ PDB
+- [ ] 4.6 `kubeadm certs check-expiration` và `kubeadm certs renew`
+- [ ] 4.7 Bài lỗi node: kubelet chết, containerd chết, đầy disk (`df`, `du`, `journalctl -u kubelet`, `crictl`)
+- [ ] 4.8 Sổ tay so sánh "tự dựng vs managed": phần nào GKE làm giúp, phần nào vẫn là việc của mình
+- Xong khi: mỗi drill có ghi chú "triệu chứng → lệnh kiểm tra → cách sửa" trong `docs/labs/gcp/incidents/`.
+  Stop toàn bộ node trước khi sang M5
+- PV: Backup etcd thế nào, restore khi nào? Upgrade cluster không downtime ra sao? Node `NotReady` thì kiểm tra gì? (CKA)
 
-### M5 · Kubernetes cơ bản (6h)
-- [ ] 5.1 Tạo GKE bằng Terraform (`modules/gke`), lấy credential bằng `gcloud container clusters get-credentials`
-- [ ] 5.2 Chạy nginx: Pod → Deployment → Service → Ingress (`demo.gcp.zett.io.vn`)
-- [ ] 5.3 Namespace, ConfigMap, Secret
-- [ ] 5.4 Liveness/readiness probe, requests/limits
-- [ ] 5.5 Rolling update + `kubectl rollout undo`; xem cluster bằng k9s
-- Xong khi: `https://demo.gcp.zett.io.vn` trả về trang nginx; xoá pod thì pod tự lên lại
-- PV: Liveness khác readiness chỗ nào? Pod bị Pending hoặc CrashLoop thì kiểm tra ở đâu?
+### M5 · GKE + Cloud SQL + chuyển DB (6h)
+- [ ] 5.1 GKE bằng Terraform (`modules/gke`), lấy credential bằng `gcloud container clusters get-credentials`
+- [ ] 5.2 Cloud SQL private IP (`modules/cloudsql`), bật backup + PITR
+- [ ] 5.3 Tự viết Helm chart `charts/qltrungtam`: Deployment, Service, Gateway/HTTPRoute, Secret, Job migration;
+      liveness/readiness probe, requests/limits, PDB
+- [ ] 5.4 Cert từ Certificate Manager gắn vào Gateway, bản ghi `app.gcp.zett.io.vn`
+- [ ] 5.5 Chuyển data: `pg_dump` từ PostgreSQL trên cluster kubeadm → restore vào Cloud SQL → `npm run audit:data`
+- [ ] 5.6 Cutover có **đo downtime**, kế hoạch rollback viết sẵn; HPA + bắn tải bằng k6
+- Xong khi: app chạy trên GKE + Cloud SQL; có số đo downtime và kế hoạch rollback
+- PV: Kể một lần migration: làm những bước nào, downtime bao lâu, nếu hỏng thì rollback ra sao? Khi nào chọn managed, khi nào tự dựng?
 
-### M6 · App lên GKE + Cloud SQL + chuyển DB (6–7h)
-- [ ] 6.1 Đọc Dockerfile multi-stage (vì sao image nhỏ, vì sao chạy non-root)
-- [ ] 6.2 Cloud SQL private IP (`modules/cloudsql`), bật backup + PITR
-- [ ] 6.3 Tự viết Helm chart `charts/qltrungtam`: Deployment, Service, Gateway/HTTPRoute (gắn cert từ M3), Secret, Job migration (`prisma migrate deploy`)
-- [ ] 6.4 Chuyển data: `pg_dump` từ `legacy-db` → restore vào Cloud SQL → kiểm tra bằng `npm run audit:data`
-- [ ] 6.5 Cutover: dừng ghi → dump/restore lần cuối → trỏ `app.` sang Gateway của GKE, **đo downtime**. Rollback là trỏ ngược về LB của MIG
-- [ ] 6.6 HPA + bắn tải bằng k6; tắt các VM cũ
-- Xong khi: app chạy trên GKE + Cloud SQL; có số đo downtime và kế hoạch rollback đã viết ra
-- PV: Kể một lần migration: làm những bước nào, downtime bao lâu, nếu hỏng thì rollback ra sao?
+### M6 · CI/CD + GitOps (6–7h)
+- [ ] 6.1 Workload Identity Federation cho GitHub + SA `github-ci` (Terraform)
+- [ ] 6.2 Workflow Terraform: mỗi PR tự chạy `plan` và comment vào PR
+- [ ] 6.3 Workflow app: test → build → Trivy scan → push Artifact Registry
+- [ ] 6.4 Argo CD (Helm), UI ở `argocd.gcp.zett.io.vn`; Application trỏ vào `gitops/`, bật auto-sync
+- [ ] 6.5 CI cập nhật image tag trong git, Argo tự deploy; rollback bằng `git revert`
+- [ ] 6.6 External Secrets kéo mật khẩu DB từ Secret Manager; external-dns tự tạo bản ghi; add-on cài bằng app-of-apps
+- Xong khi: merge PR thì app lên version mới mà không chạy `kubectl` bằng tay; trong git không còn secret
+- PV: Deploy kiểu push khác kiểu pull (GitOps) chỗ nào? Secret để ở đâu? CI đăng nhập cloud mà không cần key bằng cách nào?
 
-### M7 · CI/CD + GitOps (6h)
-- [ ] 7.1 Workflow app: test → build → Trivy scan → push Artifact Registry
-- [ ] 7.2 Cài Argo CD (Helm), mở UI ở `argocd.gcp.zett.io.vn`
-- [ ] 7.3 Tạo Argo Application trỏ vào chart trong `gitops/`, bật auto-sync
-- [ ] 7.4 CI cập nhật image tag trong git, Argo tự deploy; rollback bằng `git revert`
-- Xong khi: merge PR thì app lên version mới mà không phải chạy `kubectl` bằng tay
-- PV: Deploy kiểu push khác kiểu pull (GitOps) chỗ nào? Rollback thế nào?
+### M7 · Observability + sự cố + DR (8h)
+- [ ] 7.1 kube-prometheus-stack qua Argo CD, `grafana.gcp.zett.io.vn`
+- [ ] 7.2 App expose `/metrics` (prom-client) + ServiceMonitor; dashboard request / lỗi / độ trễ theo route
+- [ ] 7.3 Alertmanager → Discord, có `for` và grouping để không spam
+- [ ] 7.4 Loki + Alloy thu log, tìm log lỗi trong Grafana
+- [ ] 7.5 Bài lỗi K8s: CrashLoopBackOff, OOMKilled, ImagePullBackOff, Pending, Service không có endpoint, DNS trong cluster lỗi
+- [ ] 7.6 Bài lỗi DB: sai mật khẩu, hết connection; restore Cloud SQL bằng PITR
+- [ ] 7.7 Velero backup namespace `qltt` lên bucket backup, xoá namespace rồi restore; ghi RTO/RPO đo được
+- [ ] 7.8 Viết 1–2 **postmortem** đầy đủ: timeline, tác động, root cause (5 whys), hành động phòng ngừa
+- Xong khi: tắt DB thì Discord nhận alert; có postmortem và số đo RTO/RPO
+- PV: Bạn theo dõi những chỉ số nào? Kể một sự cố và cách tìm root cause. Kế hoạch DR của bạn ra sao?
 
-### M8 · Add-on cho cluster (4–5h)
-- [ ] 8.1 Workload Identity: cho pod gọi GCP API mà không cần key
-- [ ] 8.2 External Secrets: kéo mật khẩu DB từ Secret Manager xuống thành Secret trong k8s
-- [ ] 8.3 external-dns: tự tạo bản ghi trong zone `gcp.zett.io.vn`
-- [ ] 8.4 Chuyển toàn bộ add-on sang cài bằng Argo CD (app-of-apps)
-- Xong khi: trong git không còn secret nào; thêm route mới là DNS tự có bản ghi
-- PV: Làm GitOps thì secret để ở đâu? Pod lấy quyền gọi cloud bằng cách nào?
+### M8 · Bảo mật cơ bản (3h)
+- [ ] 8.1 RBAC: tạo user chỉ được xem namespace `qltt`
+- [ ] 8.2 NetworkPolicy: chỉ app mới gọi được DB
+- [ ] 8.3 Pod Security Admission mức `restricted`; container non-root, filesystem chỉ đọc
+- [ ] 8.4 Trivy chặn build nếu có CVE mức Critical
+- PV: Phân quyền trong k8s thế nào? Làm sao chặn pod gọi lung tung sang nhau? (CKS)
 
-### M9 · Prometheus + Grafana + Loki (6h)
-- [ ] 9.1 Cài kube-prometheus-stack qua Argo CD, mở `grafana.gcp.zett.io.vn`
-- [ ] 9.2 App expose `/metrics` (prom-client) + ServiceMonitor
-- [ ] 9.3 Dashboard request / lỗi / độ trễ theo route
-- [ ] 9.4 Alertmanager bắn cảnh báo về Discord
-- [ ] 9.5 Loki + Alloy thu log, xem log ngay trong Grafana
-- Xong khi: tắt DB thì Discord nhận được alert; tìm được log lỗi trong Grafana
-- PV: Bạn theo dõi những chỉ số nào? Làm sao để alert không bị spam?
+### M9 · Tùy chọn (làm nếu còn thời gian và credit)
+- [ ] 9.1 Argo Rollouts canary 10% → 50% → 100%, AnalysisTemplate query Prometheus, fault flag để thấy tự abort
+- [ ] 9.2 Jenkins (cài bằng Ansible trên 1 VM) chạy cùng pipeline build của app
+- [ ] 9.3 Script Python dùng `kubernetes` client: báo cáo pod lỗi, node gần đầy, cert sắp hết hạn
+- [ ] 9.4 EKS 1 buổi bằng Terraform (tài khoản AWS riêng), deploy chart, destroy ngay
+- [ ] 9.5 k3s 1 node làm cluster thứ hai, Argo CD quản lý cả hai (multi-cluster)
 
-### M10 · Canary tự rollback (4–5h)
-- [ ] 10.1 Cài Argo Rollouts, đổi Deployment của app thành Rollout (canary 10% → 50% → 100%)
-- [ ] 10.2 AnalysisTemplate query Prometheus để đo tỉ lệ lỗi
-- [ ] 10.3 Thêm fault flag (biến môi trường làm app trả về lỗi 5xx), deploy bản lỗi để thấy nó tự abort
-- Xong khi: bản lỗi tự quay về bản cũ, không cần người can thiệp
-- PV: Rolling, blue/green và canary khác nhau thế nào? Canary quyết định rollback dựa vào đâu?
-
-### M11 · Vận hành & xử lý sự cố (6h)
-- [ ] 11.1 Linux: đầy disk, service chết (`df`, `du`, `systemctl`, `journalctl`)
-- [ ] 11.2 K8s: CrashLoopBackOff, OOMKilled, ImagePullBackOff, Pending, Service không có endpoint
-- [ ] 11.3 DB: sai mật khẩu, hết connection
-- [ ] 11.4 Upgrade GKE (control plane + node pool) có PodDisruptionBudget, app không bị downtime
-- [ ] 11.5 Restore Cloud SQL bằng PITR về một thời điểm cụ thể
-- Xong khi: mỗi lỗi có 1 ghi chú "triệu chứng → lệnh kiểm tra → cách sửa" trong `docs/labs/gcp/incidents/`
-- PV: Kể một sự cố bạn đã xử lý. Nâng cấp cluster thế nào để không bị downtime?
-
-### M12 · Bảo mật cơ bản (2–3h)
-- [ ] 12.1 RBAC: tạo user chỉ được xem namespace `qltt`
-- [ ] 12.2 NetworkPolicy: chỉ app mới gọi được DB và các dịch vụ nội bộ
-- [ ] 12.3 Container chạy non-root, filesystem chỉ đọc; Trivy chặn build nếu có CVE mức Critical
-- PV: Phân quyền trong k8s thế nào? Làm sao chặn pod gọi lung tung sang nhau?
-
-### M13 · Chi phí + dựng lại + hồ sơ phỏng vấn (3–4h)
-- [ ] 13.1 Billing report: tiền tốn vào đâu, so sánh chạy trên VM với chạy trên GKE
-- [ ] 13.2 Destroy hết rồi dựng lại từ đầu, bấm giờ
-- [ ] 13.3 4–5 câu chuyện kể theo STAR, bảng đối chiếu GCP ↔ AWS, dòng mô tả cho CV
+### M10 · Chi phí + dựng lại + hồ sơ phỏng vấn (3–4h)
+- [ ] 10.1 Billing report: tiền tốn vào đâu, so sánh VM / kubeadm / GKE
+- [ ] 10.2 Destroy hết rồi dựng lại từ đầu, bấm giờ
+- [ ] 10.3 4–5 câu chuyện STAR, bảng đối chiếu GCP ↔ AWS ↔ Azure, dòng mô tả cho CV
 - Xong khi: có con số chi phí thật và thời gian dựng lại thật
 
-## 7. Cấu trúc repo dự kiến
+## 7. Đối chiếu với JD
+
+| Yêu cầu trong JD | Làm ở |
+| --- | --- |
+| kubeadm / RKE2 / K3s, control plane, worker, etcd | M3, M4 (k3s ở 9.5) |
+| Networking, Ingress, Load Balancer, Storage | M3 (Calico, Traefik, LB, CNPG + PVC), M5 (Gateway) |
+| Docker, containerd, Helm, manifest YAML | M2, M3, M5 |
+| Monitoring, logging, alerting | M7 |
+| CI/CD, ArgoCD, GitOps, Jenkins | M6, 9.2 |
+| Phân tích nguyên nhân gốc, xử lý sự cố | M4, M7 (postmortem) |
+| HA, multi-cluster, Disaster Recovery | M3, M4, M7.7, 9.5 |
+| Cloud, managed Kubernetes, Terraform | M1, M5, 9.4 |
+| CKA / CKAD / CKS | M3–M4 (CKA), M5 (CKAD), M8 (CKS) |
+| Python / Golang | 9.3 |
+| Tài liệu kỹ thuật, tiêu chuẩn vận hành | `journal.md`, `incidents/`, postmortem |
+
+## 8. Cấu trúc repo dự kiến
 
 ```text
-infra/gcp/              # Terraform: M1–M3 để phẳng, từ M4 tách ra modules/
-  modules/{network,vm,mig,gke,cloudsql}/
-ansible/                # M2: playbook cài Docker + deploy lên VM
+infra/gcp/              # Terraform
+  modules/{network,vm,k8s-nodes,gke,cloudsql,ci}/
+ansible/                # M2: Docker + app trên VM · M3: role k8s-common, kubeadm
 deploy/gcp-lab/         # M2: docker-compose cho VM (bản rút gọn của deploy/app)
-charts/qltrungtam/      # M6: Helm chart của app
-gitops/                 # M7+: Argo CD Application + values của các add-on
+k8s/kubeadm/            # M3: manifest app + add-on cho cluster tự dựng
+charts/qltrungtam/      # M5: Helm chart của app
+gitops/                 # M6+: Argo CD Application + values của các add-on
 tests/load/             # k6
-docs/labs/gcp/          # README này, journal.md, incidents/
-.github/workflows/      # M4: terraform-plan.yml · M7: app-ci.yml
+scripts/lab/            # 9.3: script Python
+docs/labs/gcp/          # README này, journal.md, incidents/, postmortems/
+.github/workflows/      # M6: terraform-plan.yml · app-ci.yml
 ```
 
-## 8. Nhịp mỗi buổi
+## 9. Nhịp mỗi buổi
 
 Đầu buổi:
 1. `source .env.gcp`, rồi `gcloud config list` để chắc chắn đang đúng project.
 2. Vào Billing → Reports xem chi phí hôm qua.
-3. `terraform apply`.
+3. `terraform apply` (mảng kubeadm: `gcloud compute instances start` các node).
 
 Cuối buổi:
 1. Ghi kết quả vào `journal.md`, commit.
-2. Xoá các namespace có LB/PVC (xem mục 2), rồi `terraform destroy`.
-3. Kiểm tra không còn sót gì:
+2. Mảng kubeadm: stop các node. Mảng GKE: xoá các namespace có LB/PVC (xem mục 2), rồi `terraform destroy`.
+3. Kiểm tra không còn sót gì đang tính tiền:
 
 ```bash
 gcloud compute instances list; gcloud compute disks list
@@ -242,13 +273,15 @@ gcloud compute forwarding-rules list; gcloud compute addresses list
 gcloud container clusters list; gcloud sql instances list
 ```
 
-## 9. Chi phí ước tính
+## 10. Chi phí ước tính
 
 | Giai đoạn | Chạy gì | Khoảng |
 | --- | --- | --- |
 | Luôn bật | Bucket, DNS zone, Artifact Registry | ~$1–3/tháng |
-| M2–M4 | 2–4 VM e2-small + LB + NAT | ~$10–15 |
-| M5–M6 | GKE 2 node spot + Cloud SQL nhỏ + LB | ~$15–25 |
-| M7–M13 | GKE 3–4 node spot + Cloud SQL + add-on | ~$50–80 |
+| M2 | 2 VM e2-small + NAT | ~$3–5 |
+| M3–M4 | 4–5 VM (control plane on-demand, worker spot) + 2 LB + disk khi stop | ~$20–35 |
+| M5 | GKE 2 node spot + Cloud SQL nhỏ + LB | ~$15–25 |
+| M6–M8 | GKE 3 node spot + Cloud SQL + add-on | ~$35–55 |
+| M9 | Tùy chọn | ~$5–15 |
 
-Tổng khoảng $80–120 nếu destroy sau mỗi buổi. Budget $150 là mốc tự quản, phần credit còn lại để dự phòng.
+Tổng khoảng $80–135 nếu stop/destroy đúng nhịp. Budget $150 là mốc tự quản, phần credit còn lại để dự phòng.
