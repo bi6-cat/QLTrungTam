@@ -27,4 +27,6 @@ module "network" {
     private = { cidr = "10.10.1.0/24" }
     k8s     = { cidr = "10.10.2.0/24" }
   }
+  nat_subnets = ["private", "k8s"]
+
 }

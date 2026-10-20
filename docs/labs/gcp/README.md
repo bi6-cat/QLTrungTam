@@ -62,7 +62,7 @@ Workload Identity Pool cho GitHub và service account `github-ci` tạo bằng T
 | Subnet | `public` 10.10.0.0/24 · `private` 10.10.1.0/24 · `k8s` 10.10.2.0/24 · `gke` 10.10.16.0/20 |
 | Dải phụ của GKE | `pods` 10.100.0.0/16 · `services` 10.101.0.0/20 |
 | Dải cho Cloud SQL (private service access) | 10.50.0.0/20 |
-| VM legacy (M2) | `legacy-app`, `legacy-db`: e2-small, Debian 12 |
+| VM legacy (M9, tùy chọn) | `legacy-app`, `legacy-db`: e2-small, Debian 12 |
 | kubeadm (M3) | Ubuntu 24.04. Phương án A: `cp1-3` e2-medium (on-demand) + `w1-2` e2-standard-2 (spot). Phương án B nếu quota chỉ 8 vCPU: `cp1-3` + `w1`, bỏ taint control plane để app có replica thứ hai |
 | kubeadm network | Pod CIDR `192.168.0.0/16` (Calico **VXLAN**), Service CIDR `10.96.0.0/12`, node bật `can_ip_forward` |
 | API endpoint (M3) | Internal passthrough Network LB TCP 6443 → `cp1-3`, DNS nội bộ `k8s-api.lab.internal` |
@@ -132,15 +132,14 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 - Xong khi: `plan` báo "No changes"; state nằm trong bucket
 - PV: State để ở đâu, khoá thế nào? Có người sửa tay trên Console (drift) thì xử lý ra sao?
 
-### M2 · Mạng + VM "hệ thống cũ" + Ansible (4h)
-- [ ] 2.1 VPC, 4 subnet, firewall (80/443 mở cho mọi nơi, 22 chỉ cho IP của mình)
-- [ ] 2.2 Cloud Router + Cloud NAT cho subnet private và `k8s`
-- [ ] 2.3 `legacy-app` (subnet public) + `legacy-db` (subnet private, không có IP public)
-- [ ] 2.4 Build image app rồi push lên Artifact Registry
-- [ ] 2.5 Ansible: cài Docker, deploy Postgres lên `legacy-db` và app lên `legacy-app`, chạy seed
-- Xong khi: mở được app qua IP của `legacy-app`; `legacy-db` không có IP public nhưng vẫn `apt update` được.
-  Sau đó destroy 2 VM legacy (giữ lại playbook)
-- PV: Subnet private ra internet bằng cách nào? Terraform khác Ansible chỗ nào?
+### M2 · Mạng đầy đủ + Artifact Registry (2h)
+Bỏ phần VM "hệ thống cũ": câu chuyện migration ở M5 đi từ PostgreSQL trên cluster kubeadm sang Cloud SQL.
+Ansible học luôn ở M3 (role `k8s-common`). VM legacy chuyển sang M9 (mục 9.6).
+- [x] 2.1 Firewall: web (80/443, tag `web`), nội bộ `10.10.0.0/16`; SSH qua IAP
+- [x] 2.2 Cloud Router + Cloud NAT cho subnet `private` và `k8s`
+- [x] 2.3 Build image app (`app/Dockerfile`) rồi push lên Artifact Registry `qltt`
+- Xong khi: `terraform plan` sạch; `gcloud artifacts docker images list` thấy image của app
+- PV: Subnet private ra internet bằng cách nào? Firewall theo network tag khác theo CIDR chỗ nào?
 
 ### M3 · kubeadm HA tự dựng (8–10h) — trọng tâm
 - [ ] 3.1 Terraform `modules/k8s-nodes`: node theo phương án A/B, firewall nội bộ (6443, 2379-2380, 10250,
@@ -193,7 +192,7 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 
 ### M7 · Observability + sự cố + DR (8h)
 - [ ] 7.1 kube-prometheus-stack qua Argo CD, `grafana.gcp.zett.io.vn`
-- [ ] 7.2 App expose `/metrics` (prom-client) + ServiceMonitor; dashboard request / lỗi / độ trễ theo route
+- [ ] 7.2 App expose `/metrics` (prom-client) + log JSON có cấu trúc (Claude viết code mẫu trong `app/`); ServiceMonitor; dashboard request / lỗi / độ trễ theo route
 - [ ] 7.3 Alertmanager → Discord, có `for` và grouping để không spam
 - [ ] 7.4 Loki + Alloy thu log, tìm log lỗi trong Grafana
 - [ ] 7.5 Bài lỗi K8s: CrashLoopBackOff, OOMKilled, ImagePullBackOff, Pending, Service không có endpoint, DNS trong cluster lỗi
@@ -216,6 +215,8 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 - [ ] 9.3 Script Python dùng `kubernetes` client: báo cáo pod lỗi, node gần đầy, cert sắp hết hạn
 - [ ] 9.4 EKS 1 buổi bằng Terraform (tài khoản AWS riêng), deploy chart, destroy ngay
 - [ ] 9.5 k3s 1 node làm cluster thứ hai, Argo CD quản lý cả hai (multi-cluster)
+- [ ] 9.7 Thêm dịch vụ có sẵn (`podinfo`, hoặc Online Boutique + Redis từ Helm cộng đồng) để thử nhiều dịch vụ gọi nhau, NetworkPolicy, tracing
+- [ ] 9.6 Dựng lại hệ thống "cũ" trên 2 VM (`legacy-app`, `legacy-db`, Ansible), rồi migrate sang kubeadm/GKE
 
 ### M10 · Chi phí + dựng lại + hồ sơ phỏng vấn (3–4h)
 - [ ] 10.1 Billing report: tiền tốn vào đâu, so sánh VM / kubeadm / GKE

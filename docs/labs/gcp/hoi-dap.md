@@ -73,3 +73,58 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - Output của module không tự hiện ra: `terraform output` chỉ đọc output của root, nên root phải khai báo lại `output "x" { value = module.<tên>.<output> }`.
 - `for_each` thay vì `count` cho danh sách có tên: `for_each` gắn state theo key (`this["k8s"]`), xoá một phần tử không làm các phần tử khác bị đánh số lại như `count`. Dùng `count` khi cần N bản y hệt hoặc bật/tắt (`count = var.enabled ? 1 : 0`).
 - Phỏng vấn: "Bạn tổ chức code Terraform thế nào cho nhiều môi trường?" → module tái dùng + mỗi môi trường một root với state riêng (hoặc workspace/Terragrunt), version module, review qua PR.
+
+## M2
+
+### "Hệ thống cũ" (legacy) trong lab là gì?
+- Là mô phỏng app đang chạy trên VM thường: `legacy-app` (Docker, subnet public) và `legacy-db` (PostgreSQL, subnet private, không IP public), cài bằng Ansible.
+- Là điểm xuất phát của câu chuyện migration: VM → kubeadm (M3) → GKE + Cloud SQL (M5), có cutover đo downtime và rollback.
+- Destroy sau M2 (giữ playbook), dựng lại nhanh ở M5 để có dữ liệu mà migrate.
+- Phỏng vấn: "Kể một lần migration" → hiện trạng, kế hoạch từng bước, downtime đo được, rollback đã viết sẵn, kết quả.
+
+### `resource "google_compute_firewall" "allow_web"` — phần nào do ai đặt?
+- `google_compute_firewall` là **loại resource** do provider quy định (`<provider>_<sản phẩm>_<đối tượng>`). Gõ sai thì `validate` báo `Invalid resource type`.
+- `allow_web` là **tên local** do mình đặt, chỉ để tham chiếu trong code (`google_compute_firewall.allow_web.name`). Tên thật trên GCP là thuộc tính `name`.
+- Các thuộc tính bên trong cũng do provider quy định; tra ở trang provider trên registry.terraform.io (mục Docs → Resources), không cần nhớ thuộc lòng.
+- Firewall GCP: `INGRESS` là chiều vào, mặc định VPC chặn mọi ingress; `source_ranges` là ai được gửi tới, `target_tags` là áp cho VM nào (đặc quyền tối thiểu), `allow` là giao thức/cổng được mở.
+
+### Tra tài liệu Terraform và phụ thuộc giữa các resource
+- Tra: tên resource theo `google_<sản phẩm>_<đối tượng>` trên registry.terraform.io; đọc Example Usage, Argument Reference (Required/Optional), Attributes Reference, Import. Viết bản tối thiểu rồi `validate`, `plan`.
+- UI gộp nhiều bước vào một form (vd tạo NAT cũng tạo luôn Router); Terraform tách thành resource riêng. Tham số `Required` là tên/ID của thứ khác thì thứ đó phải có trước.
+- **Phụ thuộc ngầm**: tham chiếu thuộc tính resource khác (`router = google_compute_router.this.name`), Terraform tự sắp thứ tự tạo/xoá. Xem bằng `terraform graph`.
+- **Phụ thuộc rõ**: `depends_on = [...]` khi quan hệ không thể hiện qua tham chiếu (bật API, cấp quyền).
+- Việc UI làm ngầm (bật API, tạo tài nguyên phụ): phát hiện qua lỗi `plan/apply` và phần Prerequisites của tài liệu GCP; mẹo: nút "Equivalent REST/command line" trên UI cho thấy UI gọi API gì.
+
+### Sửa danh sách `nat_subnets`: update tại chỗ hay tạo lại?
+- Mỗi thuộc tính của resource do provider đánh dấu: đổi thì **tạo lại** (ForceNew, vd `name`, `router`, `region`) hoặc **sửa tại chỗ**. Danh sách `subnetwork` của NAT thuộc loại sửa tại chỗ: plan hiện `~ update in-place` và `- subnetwork {...}`.
+- Hệ quả thực tế: subnet bị bỏ khỏi NAT mất đường ra Internet. VM ở subnet `public` ra Internet bằng IP public riêng, không qua NAT.
+- Phỏng vấn: "Plan báo `forces replacement` thì làm gì?" → đọc xem thuộc tính nào gây ra, cân nhắc downtime, dùng `create_before_destroy` hoặc đổi cách làm nếu tài nguyên đang phục vụ.
+
+### `gcloud auth configure-docker <registry-host>` là gì?
+- Cài sẵn cách đăng nhập cho Docker: thêm `"credHelpers": {"<host>": "gcloud"}` vào `~/.docker/config.json`. Chưa đăng nhập ngay.
+- Khi `docker push/pull` tới host đó, Docker gọi `docker-credential-gcloud` để lấy token ngắn hạn từ tài khoản gcloud đang đăng nhập. Không lưu mật khẩu hay key dài hạn.
+- Cần `source .env.gcp` trước để gcloud dùng đúng cấu hình lab. File `~/.docker/config.json` là file chung của máy.
+- Phỏng vấn: "CI đẩy image lên Artifact Registry xác thực thế nào?" → Workload Identity Federation lấy token ngắn hạn rồi `docker login` bằng token đó, không dùng key JSON dài hạn (M6).
+
+### `asia-southeast1-docker.pkg.dev` lấy ở đâu ra?
+- Là host của Artifact Registry, theo công thức `<region>-docker.pkg.dev`. Region là nơi tạo repo (M0: `asia-southeast1`); `-docker` là loại kho (còn `-apt`, `-python`).
+- Tên image đầy đủ: `<host>/<project-id>/<repo>/<image>:<tag>`. Docker dựa vào phần trước dấu `/` đầu tiên để biết đẩy image tới đâu.
+- Tra: `gcloud artifacts repositories list` (cột LOCATION, NAME) hoặc nút copy đường dẫn trên Console.
+- Phỏng vấn: "Vì sao image kéo chậm/tốn tiền egress?" → để registry cùng region với cluster.
+
+### `docker push` báo "Unauthenticated request" dù đã `configure-docker`
+- Nguyên nhân gặp thật: Docker cài bằng **snap** đọc config ở `~/snap/docker/current/.docker/config.json`, không phải `~/.docker/config.json`. `configure-docker` ghi sai chỗ nên Docker không gọi credential helper và gửi request không có token.
+- Chẩn đoán theo thứ tự: (1) `credHelpers` có trong config chưa; (2) gcloud đang đăng nhập đúng cấu hình lab; (3) chạy thử `echo <host> | docker-credential-gcloud get` (che `Secret`); (4) **công cụ thực sự đọc file nào** (`which docker` ra `/snap/bin/...` là dấu hiệu).
+- Sửa: `DOCKER_CONFIG=$HOME/snap/docker/current/.docker gcloud auth configure-docker <host>`. Hoặc cài Docker từ apt/get.docker.com thay cho snap.
+- Phỏng vấn: "Sửa config mà không có tác dụng thì làm gì?" → xác định tiến trình đọc file nào (đường dẫn, biến môi trường, sandbox), đừng đoán.
+
+### Push 1 image mà Artifact Registry hiện 3 digest?
+- Docker/BuildKit mới đính kèm provenance mặc định, nên một lần push tạo 3 digest: **image index** (có tag `v1`, SIZE None), **manifest image thật** (~100 MB, `linux/amd64`) và **attestation** (~1.4 KB, metadata cách build).
+- Pull theo tag: runtime đọc index rồi chọn manifest đúng kiến trúc. Kiểm tra: `docker buildx imagetools inspect <image>:<tag>`.
+- Tag là nhãn có thể bị ghi đè; digest là hash nội dung, bất biến. Deploy production nên ghim digest của index/manifest, không phải digest của attestation.
+- Phỏng vấn: "Vì sao ghim digest?" → tái lập được, chống tag bị đổi, supply-chain (M8: ký image, kiểm tra provenance).
+
+### Digest khác gì image và tag?
+- **Image**: nội dung chạy được (các layer + config). **Digest** (`sha256:...`): hash SHA-256 của manifest của image, đổi 1 byte là đổi hoàn toàn; image giống hệt nhau thì cùng digest. **Tag**: nhãn tự đặt, trỏ tới một digest, có thể bị đổi sang digest khác khi push đè.
+- Ví dụ: tag như tên người, digest như số CCCD. Tham chiếu chính xác: `repo/image@sha256:...`.
+- Phỏng vấn: "Vì sao ghim digest trong manifest deploy?" → cluster luôn chạy đúng bản đã test, tag bị ghi đè cũng không ảnh hưởng, dễ audit/rollback.

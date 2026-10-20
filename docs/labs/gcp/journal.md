@@ -18,3 +18,8 @@ Mỗi buổi 3–5 dòng: làm gì, đang dừng ở đâu, chi phí. Đầu bu�
 - Đã `apply` VPC `qltt` + 3 subnet (public/private/k8s) + firewall IAP SSH; giữ lại cho M2 (không tốn tiền). Sandbox đã destroy.
 - Dọn repo: xoá phần chỉ phục vụ prod EC2, gom code app vào `app/`; hạ tầng ở `infra/` (`modules/`, `lab/`).
 - Dừng ở: hết M1, bước tiếp theo là M2 (mạng đầy đủ + VM legacy + Ansible). Chi phí: ~$0.
+
+## 2026-10-20 · M2
+- Xong M2: firewall web/internal, Cloud Router + NAT (`private`, `k8s`) bằng Terraform, `plan` sạch; build và push `qltt-app:v1` lên Artifact Registry.
+- Gặp lỗi đăng nhập Docker bản snap (config khác chỗ, `PATH` sandbox); tạm dùng `docker login` bằng token gcloud (hết hạn ~1 giờ).
+- Dừng ở: hết M2, bước tiếp theo là M3 (cần outline và kế hoạch chi tiết trước). Chi phí: ~$0; NAT đang chạy, xem mục dọn dẹp.
