@@ -39,3 +39,16 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - VM đã stop không chiếm quota vCPU nhưng vẫn chiếm quota `INSTANCES`, disk và địa chỉ IP tĩnh.
 - Lab này: 12 vCPU toàn project, nên cluster kubeadm (≈10 vCPU) và GKE (4 vCPU) không chạy cùng lúc.
 - Phỏng vấn: "Hết quota thì làm gì?" → xem quota hiện tại, xin tăng qua Console (IAM & Admin → Quotas), hoặc giảm size/bớt node.
+
+## M1
+
+### Terraform xác thực với GCP bằng gì (ADC)?
+- `gcloud auth login` chỉ dành cho lệnh `gcloud`. Terraform dùng **ADC** (Application Default Credentials), tạo bằng `gcloud auth application-default login`.
+- Thư viện Google (Go, Python...) tìm ADC theo thứ tự: biến `GOOGLE_APPLICATION_CREDENTIALS`, rồi `~/.config/gcloud/application_default_credentials.json`.
+- `CLOUDSDK_CONFIG` chỉ có tác dụng với `gcloud`, không có tác dụng với provider Terraform. Khi tách môi trường lab nên đặt thêm `GOOGLE_APPLICATION_CREDENTIALS` trỏ đúng file.
+- Lỗi gặp: đặt sai tên file trong biến này → `open ...: no such file or directory`.
+- Phỏng vấn: "CI chạy Terraform xác thực thế nào?" → không dùng key JSON dài hạn mà dùng Workload Identity Federation (M6); trên máy cá nhân dùng ADC.
+
+### `terraform plan` lần 2 ngay sau `apply` in gì?
+- `No changes`. Terraform so code, state và hạ tầng thật; giống nhau thì không làm gì (tính idempotent).
+- Nếu có thay đổi tức là có drift (ai đó sửa tay) hoặc code đã đổi.

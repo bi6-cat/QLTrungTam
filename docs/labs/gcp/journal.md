@@ -10,4 +10,5 @@ Mỗi buổi 3–5 dòng: làm gì, đang dừng ở đâu, chi phí. Đầu bu�
   (nhiều khả năng spot dùng quota `CPUS`, kiểm lại ở M3). Chốt phương án A: 3 cp e2-medium + 2 worker e2-standard-2 ≈ 10 vCPU.
 - Chưa nâng lên Paid (chưa bị chặn quota).
 - Xong 0.6: bật 42 API, bucket `tfstate` + `backup` (versioning), Cloud DNS zone `gcp-zett`, Artifact Registry `qltt`.
-- Dừng ở: M0.7 (thêm 4 bản ghi NS cho `gcp` trên Cloudflare, rồi `dig NS gcp.zett.io.vn`). Chi phí: ~$0.
+- Xong 0.7: NS cho `gcp` trên Cloudflare đã trỏ về 4 name server `ns-cloud-e1..e4.googledomains.com`, `dig` xác nhận.
+- Dừng ở: hết M0, bước tiếp theo là M1 (Terraform cơ bản). Chi phí: ~$0.
