@@ -19,6 +19,14 @@ Cách hướng dẫn:
 5. Người dùng làm sai thì gợi ý trước, chưa đưa đáp án ngay.
 6. Đầu milestone đưa outline (chỉ tiêu đề). Cuối buổi tóm tắt những gì đã học.
 
+Câu hỏi và thử thách trong lúc làm:
+- Cuối mỗi bước có 1 câu hỏi nhỏ để người dùng tự nghĩ (ví dụ "plan lần 2 in gì?", "vì sao `for_each` mà không `count`?").
+  Người dùng chưa trả lời hoặc nói chưa hiểu thì giải thích lại bằng ví dụ cụ thể, rồi ghi vào `hoi-dap.md`.
+- Thỉnh thoảng giao một việc nhỏ để tự làm (tự `terraform import`, tự viết `outputs.tf`) thay vì đưa sẵn đáp án.
+  Có thể gây drift hoặc lỗi có chủ đích (sửa tay trên Console rồi `plan`) để học cách đọc kết quả.
+- Gợi ý theo từng mức: nói nguyên nhân hoặc chỗ cần xem trước, chưa nói đáp án. Người dùng nói "gợi ý tiếp" hoặc hỏi thẳng thì đưa đáp án.
+- Lệnh đáng gõ tay, hay gặp khi phỏng vấn, thì đánh dấu để người dùng tự gõ.
+
 Code:
 - Claude viết sẵn code mẫu cho từng module (Terraform, Ansible, manifest, Helm) thẳng vào repo,
   kèm giải thích ngắn các chỗ quan trọng và hay bị hỏi khi phỏng vấn.

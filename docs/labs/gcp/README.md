@@ -120,15 +120,15 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 - [x] 0.4 Budget $150 + cảnh báo
 - [x] 0.5 Đọc quota thật: `CPUS_ALL_REGIONS=12`, `CPUS`=32, `INSTANCES`=8, `IN_USE_ADDRESSES`=4 → chốt **phương án A**
 - [x] 0.6 Bật API, tạo bucket state, bucket backup, DNS zone, Artifact Registry
-- [ ] 0.7 Thêm NS cho `gcp` trên Cloudflare
+- [x] 0.7 Thêm NS cho `gcp` trên Cloudflare
 - Xong khi: `dig NS gcp.zett.io.vn +short` trả về name server của Google
 
 ### M1 · Terraform cơ bản (3–4h)
-- [ ] 1.1 `init` / `plan` / `apply` / `destroy` với 1 bucket
-- [ ] 1.2 Biến, output, `terraform.tfvars`
-- [ ] 1.3 Chuyển state lên GCS (backend `gcs`, có khoá state)
-- [ ] 1.4 Tạo tay 1 firewall trên Console rồi `terraform import`
-- [ ] 1.5 Tách `modules/network` ngay từ đầu, thêm `terraform fmt -check` + `tflint`
+- [x] 1.1 `init` / `plan` / `apply` / `destroy` với 1 bucket
+- [x] 1.2 Biến, output, `terraform.tfvars`
+- [x] 1.3 Chuyển state lên GCS (backend `gcs`, có khoá state)
+- [x] 1.4 Tạo tay 1 firewall trên Console rồi `terraform import`
+- [x] 1.5 Tách `modules/network` ngay từ đầu, thêm `terraform fmt -check` + `tflint`
 - Xong khi: `plan` báo "No changes"; state nằm trong bucket
 - PV: State để ở đâu, khoá thế nào? Có người sửa tay trên Console (drift) thì xử lý ra sao?
 
@@ -242,8 +242,9 @@ Mỗi mục con là 1 commit hoặc 1 checkbox. "PV" là câu hỏi phỏng vấ
 ## 8. Cấu trúc repo dự kiến
 
 ```text
-infra/gcp/              # Terraform
-  modules/{network,vm,k8s-nodes,gke,cloudsql,ci}/
+infra/                  # Terraform
+  modules/{network,vm,k8s-nodes,gke,cloudsql,ci}/  
+  lab/                  # root: gọi các module, backend GCS
 ansible/                # M2: Docker + app trên VM · M3: role k8s-common, kubeadm
 deploy/gcp-lab/         # M2: docker-compose cho VM (bản rút gọn của deploy/app)
 k8s/kubeadm/            # M3: manifest app + add-on cho cluster tự dựng

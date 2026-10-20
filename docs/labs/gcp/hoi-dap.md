@@ -52,3 +52,24 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 ### `terraform plan` lần 2 ngay sau `apply` in gì?
 - `No changes`. Terraform so code, state và hạ tầng thật; giống nhau thì không làm gì (tính idempotent).
 - Nếu có thay đổi tức là có drift (ai đó sửa tay) hoặc code đã đổi.
+
+### State là gì, vì sao để trong bucket (remote backend)?
+- State là file JSON Terraform dùng để nhớ tài nguyên nào nó đã tạo và ID thật của chúng. `plan` so sánh code, state và hạ tầng thật.
+- Mất state thì Terraform "quên" tài nguyên và tạo trùng. State có thể chứa dữ liệu nhạy cảm nên không commit git.
+- Backend `gcs`: state nằm trên bucket (có versioning để quay lại bản cũ), dùng chung được cho nhiều người/CI, và có khoá để hai lệnh `apply` không chạy đè nhau.
+- Xem: Console → Cloud Storage → bucket tfstate, hoặc `terraform state list` / `terraform state show <địa chỉ>`.
+- Phỏng vấn: "State để ở đâu, khoá thế nào? Có người sửa tay trên Console (drift) thì xử lý ra sao?" → remote backend + khoá; drift thì `plan` sẽ hiện chênh lệch, rồi chọn `apply` để kéo về đúng code hoặc `import`/sửa code cho khớp.
+
+### `terraform import` và drift
+- `import` đưa tài nguyên đã tồn tại (tạo tay) vào state để Terraform quản lý, không tạo lại và không sửa code. Phải tự viết khối `resource` khớp thực tế rồi `plan` cho đến khi "No changes".
+- Cú pháp cổ điển: `terraform import <địa chỉ> <ID>`. Từ Terraform 1.5 có block `import { to = ..., id = ... }` đi qua `plan`/`apply`, dễ review trong PR.
+- **Drift** là hạ tầng thật lệch so với code/state (thường do sửa tay). `plan` refresh state rồi hiện chênh lệch: dòng `-` là giá trị thật, dòng `+` là giá trị trong code.
+- Xử lý: (1) `apply` kéo về đúng code, hoặc (2) sửa code cho khớp nếu thay đổi tay là hợp lý. Phòng ngừa: siết IAM, mọi thay đổi qua PR/CI, chạy `plan` định kỳ để phát hiện drift.
+
+### Vì sao chia `modules/` và `lab/` (root module)?
+- `modules/<tên>`: khối tái sử dụng, chỉ mô tả cách dựng (VPC, node...). Không có provider/backend/giá trị cụ thể, tự nó không tạo gì.
+- `lab/` là **root module**: nơi chạy `init/plan/apply`. Nó gọi module, truyền giá trị (tên, CIDR), khai báo provider và backend (state).
+- Lợi ích: dùng lại cho nhiều môi trường (staging/prod gọi cùng module, giá trị khác); mỗi root một state nên `destroy` môi trường này không ảnh hưởng môi trường kia; dễ review (sửa module = sửa cách làm, sửa root = sửa giá trị).
+- Output của module không tự hiện ra: `terraform output` chỉ đọc output của root, nên root phải khai báo lại `output "x" { value = module.<tên>.<output> }`.
+- `for_each` thay vì `count` cho danh sách có tên: `for_each` gắn state theo key (`this["k8s"]`), xoá một phần tử không làm các phần tử khác bị đánh số lại như `count`. Dùng `count` khi cần N bản y hệt hoặc bật/tắt (`count = var.enabled ? 1 : 0`).
+- Phỏng vấn: "Bạn tổ chức code Terraform thế nào cho nhiều môi trường?" → module tái dùng + mỗi môi trường một root với state riêng (hoặc workspace/Terragrunt), version module, review qua PR.
