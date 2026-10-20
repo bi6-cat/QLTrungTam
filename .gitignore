@@ -12,7 +12,6 @@ backups
 secrets/
 # GCP
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan
