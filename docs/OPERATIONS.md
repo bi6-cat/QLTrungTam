@@ -3,6 +3,9 @@
 Cập nhật: 2026-08-24. Repo production đặt tại `/opt/QLTrungTam`, branch deploy
 hiện tại là `dev`.
 
+> Đang chuyển production từ EC2 sang GCP (tạm đến khi hết credit, sau đó về AWS mới):
+> xem [runbook chuyển nhà](runbooks/MIGRATE-AWS-TO-GCP.md).
+
 ## Kiến trúc
 
 ```text

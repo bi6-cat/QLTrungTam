@@ -1,0 +1,5 @@
+# Caddy App chạy trên host (không trong Compose), cài vào /etc/caddy/Caddyfile.
+# Chỉ cài sau khi DNS đã trỏ về host này; cài sớm thì ACME thất bại và Caddy lùi lịch thử lại.
+aplus.zett.io.vn {
+	reverse_proxy 127.0.0.1:3001
+}

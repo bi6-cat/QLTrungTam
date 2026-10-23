@@ -10,3 +10,10 @@ backups
 .deploy
 *.tsbuildinfo
 secrets/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.env.gcp
+*.tfplan

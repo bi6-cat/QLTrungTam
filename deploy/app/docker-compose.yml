@@ -40,7 +40,8 @@ services:
       - archive_timeout=60
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./postgres/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      # EC2 dùng file S3 trong repo; host khác trỏ PGBACKREST_CONF tới file render ngoài repo.
+      - ${PGBACKREST_CONF:-./postgres/pgbackrest.conf}:/etc/pgbackrest/pgbackrest.conf:ro
       - ../../monitoring/postgresql/init-pg-exporter.sh:/docker-entrypoint-initdb.d/init-pg-exporter.sh:ro
     secrets:
       - postgres_exporter_password
@@ -64,7 +65,8 @@ services:
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
       - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
     ports:
-      - "10.77.0.1:9100:9100"
+      # Mặc định là IP WireGuard của EC2; host không có wg0 đặt EXPORTER_BIND_IP=127.0.0.1.
+      - "${EXPORTER_BIND_IP:-10.77.0.1}:9100:9100"
     volumes:
       - /:/host:ro
       - /var/lib/qltrungtam-pgbackrest:/var/lib/node_exporter/textfile_collector:ro
@@ -89,7 +91,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "10.77.0.1:9187:9187"
+      - "${EXPORTER_BIND_IP:-10.77.0.1}:9187:9187"
     read_only: true
     security_opt:
       - no-new-privileges:true

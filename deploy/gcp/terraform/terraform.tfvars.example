@@ -1,0 +1,8 @@
+# cp terraform.tfvars.example terraform.tfvars (file thật đã gitignore)
+project_id  = "qltt-prod-xxxxxx"
+admin_cidrs = ["203.0.113.10/32"] # curl -s ifconfig.me
+alert_email = "you@example.com"
+
+# Mặc định: e2-small, có mở cổng RustDesk. Ghi đè nếu cần:
+# machine_type    = "t2d-standard-1" # 1 vCPU nguyên core, 4 GB, ~gấp đôi giá, chỉ tốn 1 vCPU quota
+# enable_rustdesk = false
