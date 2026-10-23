@@ -128,3 +128,14 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - **Image**: nội dung chạy được (các layer + config). **Digest** (`sha256:...`): hash SHA-256 của manifest của image, đổi 1 byte là đổi hoàn toàn; image giống hệt nhau thì cùng digest. **Tag**: nhãn tự đặt, trỏ tới một digest, có thể bị đổi sang digest khác khi push đè.
 - Ví dụ: tag như tên người, digest như số CCCD. Tham chiếu chính xác: `repo/image@sha256:...`.
 - Phỏng vấn: "Vì sao ghim digest trong manifest deploy?" → cluster luôn chạy đúng bản đã test, tag bị ghi đè cũng không ảnh hưởng, dễ audit/rollback.
+
+### `var.xxx`, `each.key`, `each.value` lấy ở đâu ra?
+- `var.xxx`: biến đầu vào do module **tự khai báo** trong `variables.tf` (`variable "zone" {}` thì mới dùng được `var.zone`). Giá trị do nơi gọi module truyền vào (`lab/main.tf`).
+- `each.key` / `each.value`: Terraform tự cấp bên trong resource có `for_each`, không cần khai báo. Với `for_each = var.nodes` (map): key là `cp1`, `w1`...; value là object `{ role, machine_type, spot }`, nên viết được `each.value.machine_type`.
+- Muốn dùng được thì tên và kiểu phải khớp: thiếu `variable "zone"` thì `var.zone` báo lỗi; nơi gọi truyền thiếu field của `nodes` thì `plan` báo lỗi.
+- Phỏng vấn: "`for_each` khác `count` thế nào?" → `for_each` định danh phần tử bằng key nên xoá một phần tử không làm các phần tử khác bị đánh số lại và tạo lại; `count` định danh bằng chỉ số.
+
+### `cp1`, `w1` là viết tắt của gì?
+- `cp` = **control plane** (node chạy kube-apiserver, etcd, scheduler, controller-manager), `w` = **worker** (node chạy pod của app). Số đi kèm chỉ để phân biệt: `cp1`-`cp3`, `w1`-`w2`.
+- Đây chỉ là quy ước đặt tên của lab, không phải từ khoá của Terraform hay Kubernetes. Trên cluster, vai trò thật nằm ở label `node-role.kubernetes.io/control-plane` và taint trên node.
+- Phỏng vấn: "Vì sao 3 control plane?" → etcd cần đa số (quorum): 3 node chịu được mất 1, 2 node thì mất 1 là hết quorum.
