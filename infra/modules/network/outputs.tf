@@ -5,3 +5,7 @@ output "network_name" {
 output "subnet_ids" {
   value = { for k, s in google_compute_subnetwork.this : k => s.id }
 }
+
+output "network_id" {
+  value = google_compute_network.vpc.id
+}
