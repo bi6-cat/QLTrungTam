@@ -20,7 +20,7 @@ lên **cluster kubeadm HA**, rồi lên **GKE + Cloud SQL**, sau đó dựng Git
 | Domain | Chỉ dùng `gcp.zett.io.vn`, được trỏ NS từ Cloudflare sang Cloud DNS |
 | Máy chạy lệnh | Ghi kiến trúc thật ở M0 (`uname -m`). Nếu là arm64 thì image phải build cho `linux/amd64` |
 | IaC | Terraform (hạ tầng) + Ansible (cấu hình OS, cài kubeadm) |
-| App dùng trong lab | Trục chính: `qltt-app` (monolith, chỉ lấy code, prod EC2 không đụng). Phần nhiều service gọi nhau (tracing, NetworkPolicy giữa service, lỗi lan truyền): deploy thêm **Online Boutique** có sẵn ở M7.9 và M8.5, không viết lại app thành microservice |
+| App dùng trong lab | Trục chính: `qltt-app` (monolith, chỉ lấy code, prod EC2 không đụng). Phần nhiều service gọi nhau (tracing, NetworkPolicy giữa service, lỗi lan truyền): deploy thêm **Online Boutique** có sẵn ở M7.9 và M8.5, không viết lại app thành microservice. Đang cân nhắc (chốt trước M7): thay Boutique bằng service tự viết quanh app, có thể dùng thật: `notifier` (báo tiền vào, nhắc nợ), `report-worker` (export Excel chạy nền), `payment-ingest` (webhook SePay vào queue) |
 | CI đăng nhập GCP | **Workload Identity Federation** cho GitHub Actions, không dùng JSON key |
 | Git | Nhánh trunk `gcp-lab` (tách từ `dev`). Mỗi mảng làm trên 1 nhánh `gcp/mXX-<tên>`, xong thì mở PR vào `gcp-lab` |
 
