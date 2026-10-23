@@ -17,7 +17,8 @@ resource "google_compute_instance" "node" {
   }
 
   allow_stopping_for_update = true
-
+  can_ip_forward = true
+  
   lifecycle {
     ignore_changes = [metadata]
   }

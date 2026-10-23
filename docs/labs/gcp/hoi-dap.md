@@ -158,3 +158,10 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - Dùng để tập những thứ monolith không có: NetworkPolicy giữa service, tracing (OpenTelemetry), canary theo service, HPA theo service, gây lỗi ở một service rồi xem lỗi lan ra sao.
 - Tốn tài nguyên so với quota 12 vCPU: kiểm tra `requests`, bỏ bớt service không cần, destroy sau mỗi buổi.
 - Phỏng vấn: "Một service phụ (currency) chậm thì cả trang chậm, xử lý thế nào?" → timeout + retry có giới hạn, circuit breaker, đo p99 theo service bằng tracing, đặt SLO theo từng service.
+
+### Đổi một field thì Terraform sửa tại chỗ hay xoá rồi tạo lại? (ví dụ `can_ip_forward`)
+- Mỗi field có một trong 3 kiểu thay đổi, do API của cloud quyết định và provider ghi lại: **sửa tại chỗ** (`labels`, `tags`), **sửa nhưng phải stop VM** (`machine_type`, `can_ip_forward` ở provider google 6.x; cần `allow_stopping_for_update = true`), **không sửa được, phải tạo lại** (`name`, `zone`, image boot disk; provider đánh dấu ForceNew).
+- Ví dụ: VM như căn nhà. Sơn tường thì sửa luôn; thay tủ lạnh thì cắt điện chút; đổi móng nhà thì phải phá đi xây lại.
+- Gặp thật trong lab (M3): đoán `can_ip_forward` sẽ bắt tạo lại VM (đúng với provider cũ), nhưng `plan` với provider 6.x in `~ update in-place`. Kiểu thay đổi có thể khác giữa các phiên bản provider, nên **tin `plan`, không tin trí nhớ**.
+- Đọc plan: `~` = sửa tại chỗ; `-/+` = xoá rồi tạo lại, kèm dòng `# forces replacement` chỉ đúng field gây ra. Trước khi `apply`, tìm chữ này, gặp ở VM/DB/disk thì dừng lại nghĩ kỹ.
+- Phỏng vấn: "Field bắt buộc tạo lại resource, làm sao tránh downtime?" → `lifecycle { create_before_destroy = true }` (tên phải khác nhau, ví dụ dùng `name_prefix`), hoặc làm kiểu blue/green: tạo node mới, `kubectl drain` node cũ rồi mới xoá; chặn xoá nhầm bằng `prevent_destroy = true`.
