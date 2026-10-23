@@ -43,10 +43,11 @@ preflight() {
   [[ -n "$GCP_PROJECT" ]] || die "Đặt GCP_PROJECT"
   command -v gcloud >/dev/null || die "Thiếu gcloud"
   [[ -r "$EC2_KEY" ]] || die "Không đọc được EC2_KEY=$EC2_KEY"
+  # </dev/null: ssh không được nuốt stdin, để final còn đọc được câu trả lời YES.
   log "Kiểm tra EC2"
-  ec2 "curl -fsS --max-time 5 http://127.0.0.1:3001/api/health >/dev/null || $ec2_compose ps app" >/dev/null
+  ec2 "curl -fsS --max-time 5 http://127.0.0.1:3001/api/health >/dev/null || $ec2_compose ps app" >/dev/null </dev/null
   log "Kiểm tra VM GCP"
-  vm "sudo -u ubuntu test -x $APP_DIR/.deploy/restore-db-ec2.sh" \
+  vm "sudo -u ubuntu test -x $APP_DIR/.deploy/restore-db-ec2.sh" </dev/null \
     || die "VM chưa deploy lần đầu (thiếu .deploy/restore-db-ec2.sh)"
 }
 
