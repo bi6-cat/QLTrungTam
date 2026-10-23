@@ -139,3 +139,22 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - `cp` = **control plane** (node chạy kube-apiserver, etcd, scheduler, controller-manager), `w` = **worker** (node chạy pod của app). Số đi kèm chỉ để phân biệt: `cp1`-`cp3`, `w1`-`w2`.
 - Đây chỉ là quy ước đặt tên của lab, không phải từ khoá của Terraform hay Kubernetes. Trên cluster, vai trò thật nằm ở label `node-role.kubernetes.io/control-plane` và taint trên node.
 - Phỏng vấn: "Vì sao 3 control plane?" → etcd cần đa số (quorum): 3 node chịu được mất 1, 2 node thì mất 1 là hết quorum.
+
+### `35.235.240.0/20` là IP gì?
+- Là dải IP của **IAP (Identity-Aware Proxy) TCP forwarding**, do Google sở hữu. `35.235.240.0` là địa chỉ đầu, `/20` nghĩa là cả dải 4096 IP (`35.235.240.0` → `35.235.255.255`).
+- Khi chạy `gcloud compute ssh --tunnel-through-iap`, kết nối SSH đi từ máy bạn tới IAP (kiểm tra bạn có quyền IAM), rồi IAP mới kết nối vào VM từ dải IP này. VM không có IP public vẫn SSH được.
+- Vì vậy firewall `allow-iap-ssh` chỉ cần cho `source_ranges = ["35.235.240.0/20"]` vào cổng 22, không phải mở 22 cho `0.0.0.0/0`. Ai muốn vào vẫn phải qua IAM trước.
+- Cùng kiểu có dải của health check LB (`35.191.0.0/16`, `130.211.0.0/22`) trong module `k8s-nodes`: đều là IP của dịch vụ Google, nên phải mở firewall thì dịch vụ đó mới chạm được VM.
+- Phỏng vấn: "Vì sao SSH vào VM private qua IAP mà firewall vẫn cần rule?" → firewall GCP mặc định chặn ingress; IAP chỉ là proxy, nên phải cho phép dải IP của IAP tới cổng 22, còn quyền người dùng do IAM (`roles/iap.tunnelResourceAccessor`) quyết định.
+
+### Có bắt buộc học microservice trên K8s không, hay K8s vẫn hay chạy monolith?
+- Không bắt buộc. K8s là nền tảng chạy container, không ép kiến trúc. Monolith trên K8s rất phổ biến: 1 Deployment nhiều replica + Service + Ingress vẫn hưởng rolling update, self-healing, scale ngang, ConfigMap/Secret, môi trường nhất quán.
+- Microservice thêm chi phí vận hành: service discovery, tracing, version API giữa các service, NetworkPolicy, đôi khi service mesh. Chỉ đáng khi nhiều team hoặc các phần cần scale khác nhau.
+- Lab dùng `qltt-app` (monolith) là đủ cho Deployment, Service, Ingress, probes, HPA, rollout, PVC/StatefulSet, RBAC. Muốn thực hành gọi nhau giữa service thì tách sẵn app / DB / worker.
+- Phỏng vấn: "Có nên chuyển monolith sang microservice khi lên K8s?" → không nhất thiết; containerize và chạy monolith trước, chỉ tách service khi có lý do rõ (scale, team, tốc độ release), vì microservice đổi độ phức tạp trong code sang độ phức tạp vận hành.
+
+### Online Boutique (app microservice mẫu) là gì?
+- Web bán hàng mẫu của Google (`GoogleCloudPlatform/microservices-demo`): 11 service nhỏ (frontend, cart + Redis, productcatalog, currency, recommendation, ad, checkout, payment, shipping, email) viết bằng nhiều ngôn ngữ, gọi nhau qua gRPC, kèm `loadgenerator` tự sinh traffic.
+- Dùng để tập những thứ monolith không có: NetworkPolicy giữa service, tracing (OpenTelemetry), canary theo service, HPA theo service, gây lỗi ở một service rồi xem lỗi lan ra sao.
+- Tốn tài nguyên so với quota 12 vCPU: kiểm tra `requests`, bỏ bớt service không cần, destroy sau mỗi buổi.
+- Phỏng vấn: "Một service phụ (currency) chậm thì cả trang chậm, xử lý thế nào?" → timeout + retry có giới hạn, circuit breaker, đo p99 theo service bằng tracing, đặt SLO theo từng service.

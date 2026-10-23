@@ -20,6 +20,7 @@ lên **cluster kubeadm HA**, rồi lên **GKE + Cloud SQL**, sau đó dựng Git
 | Domain | Chỉ dùng `gcp.zett.io.vn`, được trỏ NS từ Cloudflare sang Cloud DNS |
 | Máy chạy lệnh | Ghi kiến trúc thật ở M0 (`uname -m`). Nếu là arm64 thì image phải build cho `linux/amd64` |
 | IaC | Terraform (hạ tầng) + Ansible (cấu hình OS, cài kubeadm) |
+| App dùng trong lab | Trục chính: `qltt-app` (monolith, chỉ lấy code, prod EC2 không đụng). Phần nhiều service gọi nhau (tracing, NetworkPolicy giữa service, lỗi lan truyền): deploy thêm **Online Boutique** có sẵn ở M7.9 và M8.5, không viết lại app thành microservice |
 | CI đăng nhập GCP | **Workload Identity Federation** cho GitHub Actions, không dùng JSON key |
 | Git | Nhánh trunk `gcp-lab` (tách từ `dev`). Mỗi mảng làm trên 1 nhánh `gcp/mXX-<tên>`, xong thì mở PR vào `gcp-lab` |
 
@@ -70,7 +71,7 @@ Workload Identity Pool cho GitHub và service account `github-ci` tạo bằng T
 | GKE (M5) | Standard, zonal `asia-southeast1-a`, release channel `REGULAR`, pool spot e2-standard-2: 2 node, tăng lên 3 node từ M6 |
 | Cloud SQL (M5) | PostgreSQL 16, `edition = ENTERPRISE`, `db-g1-small`, private IP, bật backup + PITR |
 | Hostname | `app.` (app trên GKE) · `k8s.` (app trên kubeadm) · `argocd.` · `grafana.` (tất cả dưới `gcp.zett.io.vn`) |
-| Namespace | `qltt`, `argocd`, `monitoring`, `external-secrets`, `external-dns`, `velero` |
+| Namespace | `qltt`, `boutique` (M7.9–M8.5), `argocd`, `monitoring`, `external-secrets`, `external-dns`, `velero` |
 | Label | `project=qltt`, `env=lab`, `component=<network|vm|k8s|gke|db|...>` |
 
 **Khác biệt cloud so với lab on-prem (`k8s-lab`):** VPC của GCP không cho ARP/VRRP tự do, nên
@@ -199,14 +200,16 @@ Ansible học luôn ở M3 (role `k8s-common`). VM legacy chuyển sang M9 (mụ
 - [ ] 7.6 Bài lỗi DB: sai mật khẩu, hết connection; restore Cloud SQL bằng PITR
 - [ ] 7.7 Velero backup namespace `qltt` lên bucket backup, xoá namespace rồi restore; ghi RTO/RPO đo được
 - [ ] 7.8 Viết 1–2 **postmortem** đầy đủ: timeline, tác động, root cause (5 whys), hành động phòng ngừa
+- [ ] 7.9 Online Boutique trong namespace `boutique` (bản rút gọn: bỏ `ad`, `email`, 1 replica): bật OpenTelemetry → tracing trong Grafana; làm chậm/tắt `currency` hoặc `productcatalog` rồi lần theo trace xem lỗi lan sang `frontend` thế nào; đặt SLO độ trễ p99 cho `frontend`. Xong bài thì xoá namespace
 - Xong khi: tắt DB thì Discord nhận alert; có postmortem và số đo RTO/RPO
-- PV: Bạn theo dõi những chỉ số nào? Kể một sự cố và cách tìm root cause. Kế hoạch DR của bạn ra sao?
+- PV: Bạn theo dõi những chỉ số nào? Kể một sự cố và cách tìm root cause. Kế hoạch DR của bạn ra sao? Một service phụ chậm làm cả trang chậm thì tìm và xử lý thế nào?
 
 ### M8 · Bảo mật cơ bản (3h)
 - [ ] 8.1 RBAC: tạo user chỉ được xem namespace `qltt`
 - [ ] 8.2 NetworkPolicy: chỉ app mới gọi được DB
 - [ ] 8.3 Pod Security Admission mức `restricted`; container non-root, filesystem chỉ đọc
 - [ ] 8.4 Trivy chặn build nếu có CVE mức Critical
+- [ ] 8.5 NetworkPolicy cho `boutique`: default-deny, chỉ mở đúng các cạnh service gọi nhau (frontend → cart, checkout → payment...); kiểm chứng bằng cách gọi sai đường bị chặn
 - PV: Phân quyền trong k8s thế nào? Làm sao chặn pod gọi lung tung sang nhau? (CKS)
 
 ### M9 · Tùy chọn (làm nếu còn thời gian và credit)
@@ -215,7 +218,6 @@ Ansible học luôn ở M3 (role `k8s-common`). VM legacy chuyển sang M9 (mụ
 - [ ] 9.3 Script Python dùng `kubernetes` client: báo cáo pod lỗi, node gần đầy, cert sắp hết hạn
 - [ ] 9.4 EKS 1 buổi bằng Terraform (tài khoản AWS riêng), deploy chart, destroy ngay
 - [ ] 9.5 k3s 1 node làm cluster thứ hai, Argo CD quản lý cả hai (multi-cluster)
-- [ ] 9.7 Thêm dịch vụ có sẵn (`podinfo`, hoặc Online Boutique + Redis từ Helm cộng đồng) để thử nhiều dịch vụ gọi nhau, NetworkPolicy, tracing
 - [ ] 9.6 Dựng lại hệ thống "cũ" trên 2 VM (`legacy-app`, `legacy-db`, Ansible), rồi migrate sang kubeadm/GKE
 
 ### M10 · Chi phí + dựng lại + hồ sơ phỏng vấn (3–4h)
@@ -232,6 +234,7 @@ Ansible học luôn ở M3 (role `k8s-common`). VM legacy chuyển sang M9 (mụ
 | Networking, Ingress, Load Balancer, Storage | M3 (Calico, Traefik, LB, CNPG + PVC), M5 (Gateway) |
 | Docker, containerd, Helm, manifest YAML | M2, M3, M5 |
 | Monitoring, logging, alerting | M7 |
+| Microservice, distributed tracing, SLO | M7.9, M8.5 (Online Boutique), canary ở 9.1 |
 | CI/CD, ArgoCD, GitOps, Jenkins | M6, 9.2 |
 | Phân tích nguyên nhân gốc, xử lý sự cố | M4, M7 (postmortem) |
 | HA, multi-cluster, Disaster Recovery | M3, M4, M7.7, 9.5 |
@@ -283,7 +286,7 @@ gcloud container clusters list; gcloud sql instances list
 | M2 | 2 VM e2-small + NAT | ~$3–5 |
 | M3–M4 | 4–5 VM (control plane on-demand, worker spot) + 2 LB + disk khi stop | ~$20–35 |
 | M5 | GKE 2 node spot + Cloud SQL nhỏ + LB | ~$15–25 |
-| M6–M8 | GKE 3 node spot + Cloud SQL + add-on | ~$35–55 |
+| M6–M8 | GKE 3 node spot + Cloud SQL + add-on (Online Boutique chỉ bật trong buổi 7.9/8.5) | ~$35–55 |
 | M9 | Tùy chọn | ~$5–15 |
 
 Tổng khoảng $80–135 nếu stop/destroy đúng nhịp. Budget $150 là mốc tự quản, phần credit còn lại để dự phòng.
