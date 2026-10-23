@@ -64,7 +64,7 @@ Workload Identity Pool cho GitHub và service account `github-ci` tạo bằng T
 | Dải phụ của GKE | `pods` 10.100.0.0/16 · `services` 10.101.0.0/20 |
 | Dải cho Cloud SQL (private service access) | 10.50.0.0/20 |
 | VM legacy (M9, tùy chọn) | `legacy-app`, `legacy-db`: e2-small, Debian 12 |
-| kubeadm (M3) | Ubuntu 24.04. Phương án A: `cp1-3` e2-medium (on-demand) + `w1-2` e2-standard-2 (spot). Phương án B nếu quota chỉ 8 vCPU: `cp1-3` + `w1`, bỏ taint control plane để app có replica thứ hai |
+| kubeadm (M3) | Ubuntu 24.04. Phương án A: `cp1-3` e2-medium (on-demand) + `w1-2` t2d-standard-2 (on-demand; đã bỏ spot cho đơn giản, bù lại bằng stop node khi không dùng). Phương án B nếu quota chỉ 8 vCPU: `cp1-3` + `w1`, bỏ taint control plane để app có replica thứ hai |
 | kubeadm network | Pod CIDR `192.168.0.0/16` (Calico **VXLAN**), Service CIDR `10.96.0.0/12`, node bật `can_ip_forward` |
 | API endpoint (M3) | Internal passthrough Network LB TCP 6443 → `cp1-3`, DNS nội bộ `k8s-api.lab.internal` |
 | Ingress kubeadm (M3) | Traefik DaemonSet NodePort ← External passthrough Network LB, hostname `k8s.gcp.zett.io.vn` |
@@ -284,7 +284,7 @@ gcloud container clusters list; gcloud sql instances list
 | --- | --- | --- |
 | Luôn bật | Bucket, DNS zone, Artifact Registry | ~$1–3/tháng |
 | M2 | 2 VM e2-small + NAT | ~$3–5 |
-| M3–M4 | 4–5 VM (control plane on-demand, worker spot) + 2 LB + disk khi stop | ~$20–35 |
+| M3–M4 | 4–5 VM on-demand + 2 LB + disk khi stop | ~$25–40 |
 | M5 | GKE 2 node spot + Cloud SQL nhỏ + LB | ~$15–25 |
 | M6–M8 | GKE 3 node spot + Cloud SQL + add-on (Online Boutique chỉ bật trong buổi 7.9/8.5) | ~$35–55 |
 | M9 | Tùy chọn | ~$5–15 |
