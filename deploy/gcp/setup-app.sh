@@ -50,7 +50,11 @@ log "Render $PGBACKREST_CONF (bucket $BUCKET)"
 install -d -m 0755 "$(dirname "$PGBACKREST_CONF")"
 tmp="$(mktemp)"
 sed "s/__GCS_BUCKET__/$BUCKET/" "$APP_DIR/deploy/app/postgres/pgbackrest.gcs.conf" >"$tmp"
-install -m 0644 "$tmp" "$PGBACKREST_CONF"
+# Ghi đè tại chỗ (giữ inode): container bind mount file đơn theo inode, thay file mới
+# bằng install/mv thì db đang chạy vẫn thấy bản cũ.
+touch "$PGBACKREST_CONF"
+cat "$tmp" >"$PGBACKREST_CONF"
+chmod 0644 "$PGBACKREST_CONF"
 rm -f "$tmp"
 
 log "Build và khởi động db + exporters"
