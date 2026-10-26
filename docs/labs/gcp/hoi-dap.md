@@ -165,3 +165,12 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - Gặp thật trong lab (M3): đoán `can_ip_forward` sẽ bắt tạo lại VM (đúng với provider cũ), nhưng `plan` với provider 6.x in `~ update in-place`. Kiểu thay đổi có thể khác giữa các phiên bản provider, nên **tin `plan`, không tin trí nhớ**.
 - Đọc plan: `~` = sửa tại chỗ; `-/+` = xoá rồi tạo lại, kèm dòng `# forces replacement` chỉ đúng field gây ra. Trước khi `apply`, tìm chữ này, gặp ở VM/DB/disk thì dừng lại nghĩ kỹ.
 - Phỏng vấn: "Field bắt buộc tạo lại resource, làm sao tránh downtime?" → `lifecycle { create_before_destroy = true }` (tên phải khác nhau, ví dụ dùng `name_prefix`), hoặc làm kiểu blue/green: tạo node mới, `kubectl drain` node cũ rồi mới xoá; chặn xoá nhầm bằng `prevent_destroy = true`.
+
+### Vì sao Kubernetes yêu cầu tắt swap?
+- Kubelet quản lý Pod bằng **số liệu bộ nhớ chính xác**: `requests` là mức lập lịch (scheduler xếp Pod vào node còn đủ RAM), `limits` là trần (vượt thì bị OOMKill). Cả hai đều giả định "RAM = RAM thật".
+- Có swap thì Linux âm thầm đẩy trang nhớ ra đĩa. Pod đặt `limits: 512Mi` vẫn "sống" khi dùng quá mức, chỉ là chậm hẳn. Scheduler tưởng node còn chỗ, nhưng node thực ra đang thrash; kubelet không thấy OOM nên không kịp phản ứng, hiệu năng Pod sụt khó đoán.
+- Ví dụ: khách sạn có 10 phòng, scheduler xếp mỗi khách 1 phòng. Swap giống việc cho khách ngủ ké ngoài hành lang: vẫn "nhận" được thêm khách nhưng ai cũng khó chịu, và sổ sách (requests) không còn đúng.
+- Mặc định kubelet **từ chối khởi động** nếu thấy swap bật (`failSwapOn: true`), và `kubeadm init` cảnh báo ở bước preflight. Từ K8s 1.28 có hỗ trợ swap (NodeSwap) nhưng còn hạn chế, trên cluster production vẫn tắt.
+- Cách tắt, gồm hai việc: `swapoff -a` (tắt ngay) và sửa `/etc/fstab` (không bật lại sau khi reboot). Làm cả hai, vì chỉ làm vế đầu thì reboot xong lỗi quay lại.
+- Phỏng vấn: "Vì sao tắt swap?" → kubelet cần bộ nhớ dự đoán được để lập lịch và OOM đúng theo `requests/limits`; swap làm sai lệch cả hai và gây thrashing. Hỏi sâu thì nhắc NodeSwap từ 1.28.
+- AWS: giống hệt, đây là yêu cầu của Kubernetes chứ không của cloud. EKS node (AMI Amazon Linux, Bottlerocket) đã tắt swap sẵn.
