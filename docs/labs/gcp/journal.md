@@ -34,3 +34,9 @@ Mỗi buổi 3–5 dòng: làm gì, đang dừng ở đâu, chi phí. Đầu bu�
 - `terraform plan`: 5 to add (VM), 1 to change (`instance_group.cp`: `instances` `[]` -> known after apply, vì GCP tự bỏ VM đã xoá khỏi group).
 - Quyết định: giữ LB, không `-target destroy`; chạy `apply` dựng lại cụm khi bắt đầu học M3.
 - Dừng ở: đầu M3, chưa apply lại. Chi phí: rất nhỏ (LB + NAT chạy theo giờ).
+
+## 2026-10-26 · M3 (3.3–3.5)
+- Apply lại 5 VM. Ansible (cài trên máy bạn, vào VM qua IAP bằng ProxyCommand `gcloud compute start-iap-tunnel`; `ansible_user` phân biệt hoa thường: `QUANGNV3`). Role `k8s-common`: tắt swap, kernel module + sysctl, containerd (`SystemdCgroup=true`), kubeadm/kubelet/kubectl v1.33.13 (hold).
+- `kubeadm init` trên cp1 (Pod CIDR 192.168.0.0/16, Service CIDR 10.96.0.0/12), Calico VXLAN (đổi từ `VXLANCrossSubnet` vì VPC GCP không route IP Pod). Join cp2, cp3, w1, w2: 5 node `Ready`.
+- Lỗi gặp: `/etc/containerd` chưa tồn tại, gõ sai tên miền khi `getent`, thiếu `sudo` khi join worker, `join` cp2 treo (đã tự xử lý).
+- Dừng ở: hết 3.5, còn 3.6 (local-path, metrics-server, Traefik + External LB) và 3.7 (deploy app). Còn việc dọn: dòng `/etc/hosts` tạm trên cp1, cp2, cp3. Chi phí: 5 VM chạy vài giờ + LB + NAT; nhớ stop VM.

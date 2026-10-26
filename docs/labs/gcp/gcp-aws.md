@@ -18,5 +18,10 @@ Cộng dồn trong lúc làm lab. Dùng cho mục 10.3 của README (bảng GCP 
 | Cloud DNS private zone (M3) | Route 53 private hosted zone | Gắn zone vào VPC thì máy trong VPC mới phân giải được |
 | Artifact Registry (M0) | ECR | |
 | Budget (M0) | AWS Budgets | |
+| `gcloud compute ssh --tunnel-through-iap` (M3) | `aws ssm start-session` | gcloud tự tạo và đẩy SSH key lên metadata; SSM không dùng key |
+| `ignore_changes = [metadata]` trên VM (M3) | không có chuyện tương tự | GCP lưu SSH key trong metadata nên bị sửa sau khi tạo |
+| Calico VXLAN trên VPC (M3) | Amazon VPC CNI | VPC GCP không route IP Pod nên phải bọc VXLAN; VPC CNI cấp IP VPC thật cho Pod |
+| Internal passthrough LB: backend gọi VIP bị trả về chính nó (M3) | NLB internal có hành vi hairpin tương tự khi client là target | Tạm trỏ `/etc/hosts` về cp1 lúc join |
+| Ansible inventory tĩnh (M3) | plugin `aws_ec2` ↔ `gcp_compute` (dynamic inventory) | Lab dùng tĩnh vì chỉ 5 máy |
 
 Sắp gặp: GKE ↔ EKS, Cloud SQL ↔ RDS, Workload Identity Federation ↔ GitHub OIDC + IAM Role, Secret Manager ↔ Secrets Manager.
