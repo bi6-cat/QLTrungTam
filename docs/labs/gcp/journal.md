@@ -23,3 +23,14 @@ Mỗi buổi 3–5 dòng: làm gì, đang dừng ở đâu, chi phí. Đầu bu�
 - Xong M2: firewall web/internal, Cloud Router + NAT (`private`, `k8s`) bằng Terraform, `plan` sạch; build và push `qltt-app:v1` lên Artifact Registry.
 - Gặp lỗi đăng nhập Docker bản snap (config khác chỗ, `PATH` sandbox); tạm dùng `docker login` bằng token gcloud (hết hạn ~1 giờ).
 - Dừng ở: hết M2, bước tiếp theo là M3 (cần outline và kế hoạch chi tiết trước). Chi phí: ~$0; NAT đang chạy, xem mục dọn dẹp.
+
+## 2026-10-23 · M3 (bắt đầu)
+- Viết module `k8s-nodes` (5 VM private: cp1-3, w1-2, firewall health-check LB) và `k8s-api-lb` (internal LB + DNS riêng cho API endpoint), nối vào root `infra/lab`. Đã `apply`.
+- Đổi worker từ spot sang on-demand `t2d-standard-2`. Chưa ghi journal buổi này nên bổ sung sau.
+- Cuối tuần đã xoá tay 5 VM trên Console để đỡ tốn tiền.
+
+## 2026-10-26 · M3 (kiểm tra lại)
+- Kiểm GCP: 0 VM, 0 disk; còn forwarding rule `k8s-api` (10.10.2.7), NAT và mạng. State Terraform vẫn nhớ 5 VM nên bị drift.
+- `terraform plan`: 5 to add (VM), 1 to change (`instance_group.cp`: `instances` `[]` -> known after apply, vì GCP tự bỏ VM đã xoá khỏi group).
+- Quyết định: giữ LB, không `-target destroy`; chạy `apply` dựng lại cụm khi bắt đầu học M3.
+- Dừng ở: đầu M3, chưa apply lại. Chi phí: rất nhỏ (LB + NAT chạy theo giờ).
