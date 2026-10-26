@@ -1,0 +1,17 @@
+all:
+  vars:
+    ansible_user: QUANGNV3
+    ansible_ssh_private_key_file: ~/.ssh/google_compute_engine
+    ansible_ssh_common_args: >-
+      -o ProxyCommand="gcloud compute start-iap-tunnel %h 22
+      --listen-on-stdin --zone=asia-southeast1-b"
+  children:
+    control_plane:
+      hosts:
+        k8s-cp1:
+        k8s-cp2:
+        k8s-cp3:
+    workers:
+      hosts:
+        k8s-w1:
+        k8s-w2:
