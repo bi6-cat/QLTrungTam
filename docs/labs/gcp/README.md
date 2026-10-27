@@ -143,14 +143,14 @@ Ansible học luôn ở M3 (role `k8s-common`). VM legacy chuyển sang M9 (mụ
 - PV: Subnet private ra internet bằng cách nào? Firewall theo network tag khác theo CIDR chỗ nào?
 
 ### M3 · kubeadm HA tự dựng (8–10h) — trọng tâm
-- [ ] 3.1 Terraform `modules/k8s-nodes`: node theo phương án A/B, firewall nội bộ (6443, 2379-2380, 10250,
+- [x] 3.1 Terraform `modules/k8s-nodes`: node theo phương án A/B, firewall nội bộ (6443, 2379-2380, 10250,
       10257, 10259, UDP 4789 VXLAN, 30000-32767), firewall health check từ `35.191.0.0/16` và `130.211.0.0/22`
-- [ ] 3.2 Internal LB TCP 6443 cho API server + bản ghi DNS nội bộ `k8s-api.lab.internal`
-- [ ] 3.3 Ansible role `k8s-common`: tắt swap, kernel module, sysctl, containerd (`SystemdCgroup=true`), kubeadm/kubelet/kubectl
-- [ ] 3.4 `kubeadm init` trên cp1 với `--control-plane-endpoint k8s-api.lab.internal:6443 --upload-certs`
-- [ ] 3.5 Calico (VXLAN), rồi join cp2, cp3 và worker. Ghi lại cách xử lý khi node backend của Internal LB
+- [x] 3.2 Internal LB TCP 6443 cho API server + bản ghi DNS nội bộ `k8s-api.lab.internal`
+- [x] 3.3 Ansible role `k8s-common`: tắt swap, kernel module, sysctl, containerd (`SystemdCgroup=true`), kubeadm/kubelet/kubectl
+- [x] 3.4 `kubeadm init` trên cp1 với `--control-plane-endpoint k8s-api.lab.internal:6443 --upload-certs`
+- [x] 3.5 Calico (VXLAN), rồi join cp2, cp3 và worker. Ghi lại cách xử lý khi node backend của Internal LB
       gọi chính VIP đó (lúc join, `/etc/hosts` tạm trỏ `k8s-api` về cp1)
-- [ ] 3.6 local-path-provisioner, metrics-server, Traefik NodePort + External LB, bản ghi `k8s.gcp.zett.io.vn`
+- [x] 3.6 local-path-provisioner, metrics-server, Traefik (hostPort) + External LB `136.85.0.184` (bản ghi DNS `k8s.gcp.zett.io.vn` làm cùng 3.7)
 - [ ] 3.7 Deploy app: PostgreSQL bằng CloudNativePG (StatefulSet + PVC), Job migrate, Deployment 2 replica,
       Ingress — tái dùng manifest từ `deploy/k8s-lab/manifests` trên nhánh `k8s-lab`
 - Xong khi: `kubectl get nodes` đủ node `Ready`; `curl http://k8s.gcp.zett.io.vn/api/health` trả về `ok`;

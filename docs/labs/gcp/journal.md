@@ -44,4 +44,5 @@ Mỗi buổi 3–5 dòng: làm gì, đang dừng ở đâu, chi phí. Đầu bu�
 ## 2026-10-27 · M3 (3.6, đầu 3.7)
 - Kiểm cụm 3 cp + stacked etcd, diễn tập tắt cp1 vẫn chạy; bỏ `/etc/hosts` tạm, API đi qua `k8s-api.lab.internal`. Cài local-path, metrics-server (`--kubelet-insecure-tls`), Traefik 3 bản (hostPort) và External LB (`136.85.0.184`, 3 worker HEALTHY). Thêm worker w3 (6 node Ready).
 - CloudNativePG 2 bản chạy ổn; đổi toàn bộ mật khẩu Secret. Thêm module `k8s-ingress-lb`, manifest thuần ở `deploy/gcp-lab/`.
-- Dừng ở: 3.7 bước kéo ảnh `qltt-app:v1` từ Artifact Registry (chưa chọn token hay service account), rồi migrate Job, app, Ingress Traefik, DNS `k8s.gcp.zett.io.vn`. Push GitHub còn vướng credentials. Chi phí: 6 VM + LB ngoài + NAT; nhớ stop VM.
+- 3.7 mới xong bước chuẩn bị: cách kéo ảnh (project chặn tạo khoá service account nên dùng token ngắn hạn, Secret `gar-pull` ở ns `qltrungtam`), đã build và push `qltt-migrate:v1`.
+- Dừng ở: sửa manifest (ảnh, `imagePullSecrets`, Ingress Traefik, host `k8s.gcp.zett.io.vn`), tạo DNS trỏ `136.85.0.184`, apply theo thứ tự Postgres → migrate → app → Ingress, thử `/api/health`; sau đó chốt sổ M3 (`M03-kubeadm-ha.md`). Token `gar-pull` hết hạn ~1 giờ nên tạo lại khi làm tiếp. Push GitHub còn vướng credentials. Chi phí: 6 VM + LB ngoài + NAT; nhớ stop VM.
