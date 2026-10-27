@@ -46,6 +46,7 @@ module "k8s_nodes" {
     cp3 = { role = "control-plane", machine_type = "e2-medium" }
     w1  = { role = "worker", machine_type = "t2d-standard-2" }
     w2  = { role = "worker", machine_type = "t2d-standard-2" }
+    w3  = { role = "worker", machine_type = "t2d-standard-2" }
   }
 }
 
@@ -62,3 +63,12 @@ module "k8s_api_lb" {
   network_id   = module.network.network_id
 }
 
+module "k8s_ingress_lb" {
+  source = "../modules/k8s-ingress-lb"
+
+  name         = "k8s"
+  region       = var.region
+  zone         = "${var.region}-b"
+  instances    = module.k8s_nodes.worker_self_links
+  network_name = module.network.network_name
+}

@@ -174,3 +174,134 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 - Cách tắt, gồm hai việc: `swapoff -a` (tắt ngay) và sửa `/etc/fstab` (không bật lại sau khi reboot). Làm cả hai, vì chỉ làm vế đầu thì reboot xong lỗi quay lại.
 - Phỏng vấn: "Vì sao tắt swap?" → kubelet cần bộ nhớ dự đoán được để lập lịch và OOM đúng theo `requests/limits`; swap làm sai lệch cả hai và gây thrashing. Hỏi sâu thì nhắc NodeSwap từ 1.28.
 - AWS: giống hệt, đây là yêu cầu của Kubernetes chứ không của cloud. EKS node (AMI Amazon Linux, Bottlerocket) đã tắt swap sẵn.
+
+### `k8s-api.lab.internal` là gì, sao dùng cổng 6443?
+- `k8s-api.lab.internal` là **tên DNS nội bộ** trỏ tới IP của Internal Load Balancer đứng trước 3 control plane (`cp1`-`cp3`). Tên này do ta tự đặt: Terraform tạo private zone `lab.internal.` (chỉ VPC của lab phân giải được) và bản ghi A trỏ về IP của LB (module `k8s-api-lb`).
+- Dùng tên thay vì IP của `cp1` vì `kubeadm init --control-plane-endpoint k8s-api.lab.internal:6443` ghi endpoint này vào mọi kubeconfig và chứng chỉ API server. Mất `cp1` thì LB chuyển sang `cp2`/`cp3`, kubelet và kubectl không phải sửa gì. Muốn đổi IP LB chỉ sửa bản ghi DNS.
+- **6443 là cổng mặc định của kube-apiserver** (HTTPS). Không dùng 443 vì apiserver chạy như tiến trình thường trên node, có thể trùng với dịch vụ khác; 6443 là quy ước chung nên công cụ (kubeadm, kubectl, firewall mẫu) đều mặc định theo. Cổng khác trong control plane: etcd 2379/2380, kubelet 10250, scheduler 10259, controller-manager 10257.
+- LB là kiểu **TCP passthrough** (layer 4): không giải mã TLS, chỉ chuyển gói tới một trong các apiserver, nên chứng chỉ phải có `k8s-api.lab.internal` trong SAN (kubeadm tự thêm từ `--control-plane-endpoint`).
+- Ví dụ: số tổng đài công ty (tên + cổng cố định) thay vì số di động của từng nhân viên; nhân viên nghỉ thì cuộc gọi chuyển cho người khác.
+- Phỏng vấn: "HA cho API server làm thế nào?" → chạy 3 control plane, đặt LB TCP 6443 phía trước kèm DNS/VIP ổn định, dùng làm `controlPlaneEndpoint` ngay lúc `kubeadm init`; health check của LB loại node apiserver hỏng. Đổi endpoint sau khi đã init rất đau (chứng chỉ, kubeconfig), nên phải chọn từ đầu.
+- AWS: tương đương NLB nội bộ (TCP 6443) + bản ghi Route 53 private hosted zone. EKS giấu phần này, endpoint do AWS quản lý.
+
+### `getent` là gì, phạm vi hoạt động?
+- `getent` = **get entries**: lấy bản ghi từ các database quản trị của hệ thống **qua NSS** (Name Service Switch), cùng đường mà `ping`, `ssh`, `kubectl` dùng để tra tên. Thứ tự nguồn nằm trong `/etc/nsswitch.conf` (ví dụ `hosts: files dns` = đọc `/etc/hosts` trước rồi mới tới DNS).
+- Database tra được: `hosts` (tên ↔ IP), `passwd`, `group`, `services` (tên ↔ cổng, vd `getent services https` ra `443/tcp`), `protocols`, `networks`, `shadow`... Nguồn có thể là file cục bộ, DNS, LDAP/SSSD.
+- Khác `dig`/`nslookup`: hai lệnh này chỉ hỏi DNS, bỏ qua `/etc/hosts`. Muốn biết chương trình thật sự thấy IP nào thì dùng `getent hosts`.
+- Mã thoát: `0` tìm thấy, `2` không tìm thấy, `1` sai cú pháp, `3` database không cho liệt kê.
+- Phỏng vấn: "`dig` ra IP đúng nhưng `ping` báo không tìm thấy?" → hai lệnh dùng hai đường khác nhau; kiểm tra `getent hosts`, `/etc/nsswitch.conf`, `/etc/hosts`. "User có trong LDAP mà `cat /etc/passwd` không thấy?" → dùng `getent passwd <tên>`.
+
+### Cài `local-path-provisioner` và đặt StorageClass mặc định để làm gì?
+- Cluster kubeadm mới dựng **không có StorageClass**, nên PVC đứng `Pending` vì không ai tạo PV. EKS/GKE có sẵn (EBS, Persistent Disk) nên không gặp.
+- `local-path-provisioner` là một Pod theo dõi PVC; có PVC mới thì tạo thư mục trên đĩa của node chứa Pod (mặc định `/opt/local-path-provisioner/...`) và tạo PV trỏ vào đó (dynamic provisioning). Manifest cũng tạo StorageClass `local-path`.
+- Annotation `storageclass.kubernetes.io/is-default-class: "true"` làm PVC không ghi `storageClassName` tự dùng class này; thiếu thì Helm chart không chỉ định class sẽ bị `Pending`. Chỉ nên có một class mặc định.
+- `WaitForFirstConsumer`: chờ Pod được xếp lịch rồi mới tạo ổ ở node đó. `RECLAIMPOLICY Delete`: xoá PVC thì xoá cả dữ liệu.
+- Hạn chế: dữ liệu nằm trên một node, node chết hoặc Pod sang node khác là mất dữ liệu, không replication. Chỉ hợp cho lab; production dùng CSI với đĩa mạng (EBS CSI, `pd-csi`, Ceph/Rook, Longhorn).
+- Phỏng vấn: "PVC bị `Pending`, kiểm tra gì?" → có StorageClass mặc định chưa, provisioner có chạy không, `kubectl describe pvc` xem event; với `WaitForFirstConsumer` thì `Pending` khi chưa có Pod dùng nó là bình thường.
+
+### PVC là gì? (và PV, StorageClass)
+- **PVC (PersistentVolumeClaim)** = phiếu yêu cầu ổ đĩa của app: dung lượng, `accessModes`, `storageClassName`. **PV** = ổ đĩa thật (thư mục trên node, đĩa cloud). **StorageClass** = "công thức" tạo PV tự động (dùng provisioner nào, kiểu đĩa nào).
+- Luồng: tạo PVC → StorageClass chỉ provisioner → provisioner tạo PV → Kubernetes bind PV vào PVC → Pod mount PVC. Ví dụ: PV là phòng kho thật, PVC là đơn xin thuê "cần 5 mét vuông", StorageClass là công ty cho thuê biết cách chia phòng.
+- Tách PVC khỏi Pod vì dữ liệu sống lâu hơn Pod: Pod chết/tạo lại vẫn mount đúng PVC cũ. Manifest cũng không phụ thuộc loại đĩa, chỉ đổi `storageClassName`.
+- StatefulSet dùng `volumeClaimTemplates` để mỗi replica có PVC riêng (`pgdata-0`, `pgdata-1`...). CloudNativePG cũng tạo PVC cho từng instance PostgreSQL.
+- `accessModes`: `ReadWriteOnce` (một node ghi, phổ biến nhất), `ReadWriteMany` (nhiều node ghi, cần NFS/CephFS), `ReadOnlyMany`.
+- AWS: PVC giống nhau mọi nơi; trên EKS với `gp3` thì EBS CSI driver đổi PVC thành một EBS volume; GKE là Persistent Disk.
+- Phỏng vấn: "PV, PVC, StorageClass khác nhau thế nào?" → PV là ổ thật, PVC là yêu cầu của app, StorageClass là cách tạo PV tự động; app chỉ viết PVC, cluster lo phần còn lại.
+
+### Volume trong Kubernetes: tổng quan
+- Hệ thống file của container là tạm: restart là mất, hai container trong Pod không thấy file của nhau. Volume là thư mục gắn từ ngoài vào để giữ dữ liệu và chia sẻ dữ liệu.
+- Volume khai báo trong Pod (vòng đời theo Pod): `emptyDir` (thư mục tạm dùng chung trong Pod, mất khi Pod bị xoá), `configMap`/`secret` (đưa cấu hình vào dạng file), `hostPath` (mount thư mục của node, tránh dùng cho app vì Pod sang node khác là mất).
+- Volume bền vững (vòng đời độc lập với Pod): PV (ổ thật) + PVC (phiếu yêu cầu) + StorageClass (công thức tạo PV, trỏ tới CSI driver). Trong Pod: `volumes` khai báo nguồn (`persistentVolumeClaim.claimName`), `volumeMounts` nói gắn vào `mountPath` nào.
+- Thuộc tính hay gặp: `accessModes` (RWO/RWX/ROX), `reclaimPolicy` (`Delete`/`Retain`), `volumeBindingMode` (`Immediate`/`WaitForFirstConsumer`). StatefulSet + `volumeClaimTemplates` cho mỗi replica một PVC riêng (`pgdata-0`, `pgdata-1`).
+- Ví dụ: container như phòng khách sạn (khách đi là dọn sạch), `emptyDir` là cái bàn trong phòng, PVC là két gửi ở quầy lễ tân, đổi phòng vẫn lấy lại được.
+- `local-path` + RWO: dữ liệu dính vào một node; Pod thứ hai ở node khác mount cùng PVC sẽ kẹt `ContainerCreating`. Vì vậy cần replication (CloudNativePG) chứ PVC không thay cho backup.
+- Phỏng vấn: "Dữ liệu database không mất khi Pod chết bằng cách nào?" → StatefulSet + `volumeClaimTemplates`, storage không gắn vòng đời Pod; thêm `reclaimPolicy` phù hợp, `WaitForFirstConsumer` cho đúng zone, và backup/replication vì PVC không phải backup.
+
+### Traefik là gì?
+- Reverse proxy / **ingress controller** viết bằng Go: cổng vào cho traffic HTTP/HTTPS từ ngoài, nhìn `Host`/path rồi chuyển tới đúng Service trong cluster. Đối tượng `Ingress` chỉ là khai báo; cần controller như Traefik chạy thật thì luật mới có tác dụng (giống StorageClass cần provisioner).
+- Vì sao cần: Service `ClusterIP` chỉ dùng trong cluster; mỗi app một LB riêng thì tốn tiền. Ingress cho một cổng chung chia traffic theo luật (`app.example.com/api` → `qltt-app`, `grafana.example.com` → `grafana`).
+- Cách chạy: Pod trong cluster, theo dõi API server, tự cập nhật luật khi `Ingress`/`IngressRoute`/`HTTPRoute` đổi, không cần restart. Làm được TLS (kể cả Let's Encrypt), redirect, middleware (auth, rate limit, rewrite).
+- Luồng trong lab (3.6): Internet → External LB (IP public) → NodePort 30000-32767 trên node → Traefik Pod → luật Ingress → Service `qltt-app` → Pod.
+- So sánh: ingress-nginx (phổ biến, nhưng dự án Kubernetes đã thông báo dừng bảo trì từ khoảng đầu 2026, cần kiểm tra lại); Gateway API là chuẩn kế nhiệm Ingress (Traefik hỗ trợ cả hai; M5 dùng Gateway trên GKE); GKE Ingress/AWS ALB dùng LB của cloud làm lớp xử lý.
+- AWS: gần nhất là ALB (AWS Load Balancer Controller), hoặc chạy Traefik/NGINX sau một NLB.
+- Phỏng vấn: "Ingress và Service `LoadBalancer` khác nhau thế nào?" → Service `LoadBalancer` tạo một LB cho một Service (layer 4); Ingress là cổng chung layer 7 chia traffic theo host/path tới nhiều Service, tiết kiệm LB và làm TLS/redirect/auth tập trung; cần controller như Traefik.
+
+### Security Group (SG) và Network ACL (NACL) khác nhau thế nào? (AWS)
+- **SG**: tường lửa gắn vào instance/ENI, **stateful** (cho phép chiều đi thì chiều về tự được), chỉ có luật **allow**, xét mọi luật, mặc định chặn inbound và cho phép outbound; nguồn có thể là CIDR hoặc **một SG khác**.
+- **NACL**: gắn vào cả **subnet**, **stateless** (chiều đi và chiều về đều cần luật), có cả **allow và deny**, xét theo **số thứ tự tăng dần**, khớp luật đầu tiên thì dừng; NACL mặc định của VPC cho phép hết, NACL tự tạo thì chặn hết; chỉ dùng CIDR.
+- Lỗi kinh điển: NACL quên luật outbound cho **cổng tạm (ephemeral, ~1024-65535)** nên kết nối đến được nhưng response không ra, bị treo.
+- Ví dụ: SG là bảo vệ đứng trước từng phòng, nhớ mặt người đã vào nên cho ra tự nhiên; NACL là cổng kiểm soát cả toà nhà, mỗi lần qua đều xuất trình lại và có danh sách đen.
+- Thực tế: phần lớn dùng SG ("chỉ SG của app gọi được DB"); NACL dùng khi cần chặn rõ một dải IP hoặc thêm lớp cấp subnet.
+- GCP: VPC firewall rule gần SG nhất (stateful, áp qua network tag/service account, như `allow-iap-ssh`) nhưng có cả allow lẫn deny và `priority` (số nhỏ thắng). GCP không có NACL cấp subnet; chặn rộng hơn dùng deny rule hoặc hierarchical firewall policy.
+- Phỏng vấn: "SG và NACL khác nhau thế nào?" → SG cấp instance, stateful, chỉ allow; NACL cấp subnet, stateless, allow + deny, xét theo thứ tự; nhấn mạnh phải mở cổng tạm cho chiều về ở NACL và SG tham chiếu được SG khác.
+
+### Manifest là gì?
+- File (thường YAML) mô tả **trạng thái mong muốn** của một đối tượng Kubernetes; đưa cho API server bằng `kubectl apply -f`, controller trong cluster tự biến thực tế thành đúng như mô tả.
+- Bốn phần chính: `apiVersion`, `kind`, `metadata` (tên, namespace, labels), `spec` (trạng thái mong muốn; Secret/ConfigMap dùng `data`). Một file có thể chứa nhiều đối tượng, ngăn bằng `---`.
+- **Declarative** (khai báo "tôi muốn 2 replica", controller so trạng thái mong muốn với thực tế rồi tự sửa) khác **imperative** (`kubectl run`, `kubectl scale`: ra lệnh từng bước). Manifest lưu được trong git, review được, áp lại cho kết quả giống nhau. Ví dụ: manifest là bản vẽ nhà, controller là thợ làm cho giống bản vẽ.
+- Liên quan: Helm sinh manifest từ template + values; Argo CD (GitOps) coi manifest trong git là nguồn sự thật.
+- Lệnh hay dùng: `kubectl apply -f`, `kubectl diff -f` (xem sẽ đổi gì), `kubectl get <loại> <tên> -o yaml` (manifest đang chạy, có thêm `status`), `kubectl explain deployment.spec` (tra field, hay gặp trong CKA).
+- Phỏng vấn: "Declarative khác imperative thế nào?" → declarative mô tả trạng thái mong muốn và để controller hội tụ, lặp lại được và hợp GitOps; imperative tiện cho thao tác nhanh hoặc debug.
+
+### Manifest thuần và Helm khác gì? Ôn phỏng vấn nên học cách nào?
+- **Manifest thuần**: YAML cố định, viết từng đối tượng, `kubectl apply/delete`. Đơn giản, đọc là hiểu, nhưng không tham số hoá (đổi image/replicas phải sửa file hoặc dùng Kustomize).
+- **Helm**: chart = template YAML + `values.yaml`; Helm điền giá trị rồi sinh manifest. Có **release** để `helm list/upgrade/rollback/history/uninstall` cả bộ; chia sẻ qua repo (vd `traefik/traefik`). Đổi lại phải thêm lớp template (`{{ }}`), debug bằng `helm template`.
+- Ví dụ: manifest thuần là bản vẽ cố định; Helm là bản vẽ có chỗ trống kèm bộ quản lý xây, nâng cấp và phá cả công trình bằng một lệnh.
+- **Kustomize**: giữ YAML thuần và vá theo môi trường bằng overlay, không template; có sẵn trong `kubectl`; Argo CD hỗ trợ cả Helm lẫn Kustomize.
+- Ôn phỏng vấn: **học manifest thuần trước** (Helm chỉ sinh ra manifest; không đọc được Deployment/Service/PVC/Ingress thì không debug được chart; CKA/CKAD bắt viết YAML thuần), **rồi Helm** ở mức cài phần mềm có sẵn (`upgrade --install`, `-f values.yaml`, `helm template`, `history`/`rollback`) và tự viết một chart nhỏ (M5.3).
+- Cách nói: "App của tôi viết manifest thuần cho rõ và dễ review; phần mềm bên thứ ba (Traefik, kube-prometheus-stack, Argo CD) cài bằng Helm; nhiều môi trường thì đóng gói chart hoặc dùng Kustomize overlay, Argo CD áp dụng từ git."
+- Phỏng vấn: "Helm và Kustomize khác nhau thế nào?" → Helm dùng template + values, có release để upgrade/rollback; Kustomize không template, vá lên manifest gốc bằng overlay. Helm hợp khi cần đóng gói và chia sẻ; Kustomize hợp khi muốn giữ YAML thuần và chỉ khác nhau chút ít giữa môi trường.
+
+### Helm và chart là gì?
+- **Helm** = CLI quản lý gói cho Kubernetes (như `apt`, `npm`). **Chart** = một gói: template manifest + `values.yaml` mặc định + `Chart.yaml` (tên, `version` của chart, `appVersion`). **Values** = giá trị bạn ghi đè (`--set`, `-f values.yaml`). **Release** = một lần cài chart vào cluster, có tên và số revision.
+- Cấu trúc chart: `Chart.yaml`, `values.yaml`, `templates/` (manifest có chỗ trống như `replicas: {{ .Values.replicas }}`).
+- Luồng: chart (từ repo) + values → Helm render → manifest thuần → API server → Helm lưu release (mặc định là Secret trong namespace của release) nên mới `history`/`rollback`/`uninstall` cả bộ được. Một chart cài được thành nhiều release.
+- Lệnh hay dùng: `helm repo add/update`, `helm search repo`, `helm show values <chart>`, `helm upgrade --install`, `helm list -A`, `helm history`, `helm rollback`, `helm uninstall`, `helm template` (sinh manifest mà không cài).
+- Chart khác image: image là thứ chạy (Dockerfile đóng gói app), chart là cách triển khai image đó lên Kubernetes; chart chỉ tham chiếu tới image. Chart `version` và image tag là hai thứ riêng, ghi đè image bằng `--set image.tag=...`.
+- Phỏng vấn: "Helm là gì, chart và release khác nhau thế nào?" → Helm là package manager cho Kubernetes; chart là gói chứa template manifest và giá trị mặc định; release là một lần cài chart, có tên và lịch sử revision để upgrade/rollback.
+
+### CloudNativePG (CNPG) là gì?
+- **Operator** chạy PostgreSQL trên Kubernetes (dự án mã nguồn mở khởi đầu từ EDB, thuộc CNCF; cần kiểm tra lại mức Sandbox/Incubating trên trang dự án). Khai báo `kind: Cluster` (`postgresql.cnpg.io/v1`) với `instances: 3`, operator tự dựng, nối replication, failover, backup.
+- **Operator = CRD + controller**: CRD thêm loại đối tượng mới, controller kéo thực tế về đúng mô tả, nhưng biết nghiệp vụ PostgreSQL (ai là primary, khi nào promote, khi nào base backup).
+- Làm được: streaming replication (1 primary + replica), failover tự động, Service sẵn (`<tên>-rw` luôn trỏ primary, `-ro` chỉ replica, `-r` mọi instance), backup + WAL lên object storage và PITR, rolling update có switchover.
+- Lưu trữ: mỗi instance một PVC. CNPG **không dùng StatefulSet**, tự quản lý Pod và PVC để kiểm soát promote/thay thế từng instance. Dữ liệu an toàn nhờ replica ở node khác, không nhờ PVC.
+- Trong lab: 3.7 tạo Cluster cho app, Job migrate chạy qua Service `-rw`; 4.3 stop worker chứa primary xem promote; M5.5 `pg_dump` sang Cloud SQL.
+- So sánh: RDS/Aurora, Cloud SQL làm hộ (ít kiểm soát, phí cao hơn); operator khác: Zalando (Patroni), Crunchy PGO, Percona; StatefulSet thuần thì failover, backup, PITR phải tự viết.
+- Phỏng vấn: "Chạy database trên Kubernetes có ổn không?" → ổn nếu dùng operator trưởng thành có replication, failover, backup/PITR và đã diễn tập khôi phục; chọn managed hay tự chạy tuỳ đội vận hành, chi phí, nhu cầu kiểm soát.
+
+### Xâu chuỗi các khái niệm (bản đồ tổng)
+- Ý xuyên suốt: **khai báo + controller**. Bạn khai báo điều mình muốn, một controller biến nó thành thật: Deployment → controller-manager; PVC → provisioner (qua StorageClass); Ingress → Traefik; `Cluster` (CNPG) → operator CNPG; chart + values → Helm (sinh manifest, nhớ thành release). Cluster kubeadm "chỉ có khung" vì nhiều loại khai báo chưa có người thực hiện cho tới khi cài add-on.
+- Các tầng, dưới lên: 0 hạ tầng GCP (Terraform: VPC, VM, firewall, NAT, LB, DNS) → 1 máy (Ansible: containerd, kubeadm, tắt swap) → 2 cluster (kubeadm: apiserver, etcd, scheduler, controller-manager, kubelet, CNI, CoreDNS, Internal LB 6443) → 3 đóng gói (Helm hoặc manifest thuần) → 4 add-on (local-path, Traefik, metrics-server) → 5 operator (CNPG = CRD + controller) → 6 app (Dockerfile → image → Deployment → Service → Ingress).
+- Luồng người dùng: External LB → Traefik → Service → Pod app → Service `-rw` → PostgreSQL primary. Người quản trị đi qua IAP; kubelet/kubectl đi qua Internal LB:6443.
+- Cặp dễ nhầm: image (thứ chạy) / chart (cách triển khai); chart (gói) / release (một lần cài); manifest (YAML thuần) / Helm (sinh manifest); Ingress (khai báo) / Traefik (phần mềm thực hiện); operator (phần mềm trong cluster) / chart (cách cài); PVC (phiếu) / PV (ổ thật) / StorageClass (công thức); IAP (cho người) / LB (cho cluster).
+- Phỏng vấn: "Giải thích Kubernetes trong một phút" → khai báo trạng thái mong muốn bằng manifest, API server lưu vào etcd, controller liên tục so thực tế với mong muốn và sửa cho khớp; storage, ingress, database đều theo mẫu đối tượng khai báo + controller; Helm lo đóng gói và vòng đời release, operator đóng gói kiến thức vận hành.
+
+### Namespace dùng để làm gì?
+- Chia cluster thành các khu riêng về mặt **logic** (không phải cluster hay máy riêng). Tên chỉ cần duy nhất trong namespace; gom đối tượng theo nhóm (lab: `cnpg-system`, `traefik`, `local-path-storage`, sau này `qltt`, `boutique`); là phạm vi áp RBAC, ResourceQuota, NetworkPolicy; xoá namespace là xoá hết thứ bên trong (bài Velero M7.7, dọn `boutique`).
+- **Không phải ranh giới bảo mật đủ mạnh**: mặc định Pod ở namespace này vẫn gọi được Pod ở namespace khác; muốn chặn cần NetworkPolicy (M8.2), Pod Security, RBAC.
+- Đối tượng **namespaced**: Pod, Service, Deployment, PVC, Ingress. Đối tượng **cluster-scoped**: Node, PV, StorageClass, CRD, Namespace.
+- DNS: `<service>.<namespace>.svc.cluster.local`; cùng namespace gọi tắt tên Service, khác namespace phải kèm `.<namespace>`.
+- `-n <ns>` chọn namespace cho lệnh; bỏ `-n` thì dùng `default`; `-A` xem mọi namespace; `kubectl config set-context --current --namespace=<ns>` đặt mặc định.
+- AWS: không có tương đương trực tiếp (namespace là phân vùng bên trong một cluster; AWS dùng account/VPC/resource group ở tầng lớn hơn).
+- Phỏng vấn: "Namespace có cô lập hoàn toàn không?" → không; chỉ tách logic (tên, RBAC, quota, NetworkPolicy theo namespace), mạng và bảo mật phải cấu hình thêm; tách mạnh thì dùng cluster riêng.
+
+### Phần mềm chạy trên Kubernetes gọi là gì? (workload, add-on, control plane)
+- **Workload** (khối lượng công việc) là tên chung cho ứng dụng chạy trên cluster. Hình dạng: Deployment (app không giữ trạng thái), StatefulSet (cần tên/ổ cố định), DaemonSet (mỗi node một Pod), Job/CronJob (chạy một lần hoặc theo lịch). Bên dưới tất cả là **Pod**, đơn vị nhỏ nhất chứa container.
+- Ba lớp trong cluster, theo ai quản lý: **control plane** (apiserver, etcd, scheduler, controller-manager, do kubeadm dựng, chạy dạng static pod trên cp) → **add-on / system component** (CNI Calico, CoreDNS, kube-proxy, Traefik, metrics-server, operator CNPG, Headlamp; do người quản trị cài để cluster đủ dùng) → **workload của ứng dụng** (app `qltt`, `boutique`, database; do đội phát triển triển khai).
+- Ranh giới giữa add-on và workload mờ: Traefik cũng là Deployment, nhưng vai trò là hạ tầng chung. Cách nói thông dụng: "platform component" (của đội platform) so với "application workload" (của đội app).
+- Lab: control plane và add-on nằm sẵn trên Map của Headlamp; workload của bạn sẽ là app `qltt` ở 3.7 và `boutique` ở M4.
+- Phỏng vấn: "Workload là gì?" → mọi thứ chạy trên cluster do người dùng khai báo, hình dạng Pod được quản lý bởi controller (Deployment, StatefulSet, DaemonSet, Job); control plane và add-on là phần để cluster vận hành được.
+
+### Cột "Type" trong danh sách firewall GCP là gì? Có "Firewall policies" khác gì rule thường?
+- "Type" là **chiều** của rule: Ingress (vào VM) hoặc Egress (ra khỏi VM), không phải loại chính sách. Mặc định VPC chặn mọi ingress và cho mọi egress.
+- **VPC firewall rule** gắn vào một VPC. **Firewall policy** là bộ rule gom lại, gắn được ở cấp tổ chức, thư mục hoặc VPC, dùng chung cho nhiều dự án. **Cloud NGFW** là bản nâng cao (lọc theo ứng dụng, chặn xâm nhập), có nhiều bậc giá.
+- AWS: Security Group (theo máy, stateful) + NACL (theo subnet); **Firewall Manager** quản lý rule tập trung nhiều account; **Network Firewall** lọc sâu như NGFW; **WAF** lọc tầng HTTP.
+- Phỏng vấn: "Firewall GCP khác Security Group AWS?" → GCP rule ở cấp VPC, chọn máy bằng tag/service account, có cả allow và deny kèm priority, không có NACL; AWS SG gắn vào ENI, chỉ allow.
+
+### metrics-server báo lỗi x509 khi lấy số liệu kubelet, xử lý sao?
+- kubelet dùng chứng chỉ tự ký không có IP của node, nên metrics-server từ chối kết nối. Lab: thêm cờ `--kubelet-insecure-tls`. Production: bật `serverTLSBootstrap` để kubelet xin chứng chỉ do CA của cluster ký.
+- metrics-server chỉ cho `kubectl top` và HPA (số liệu tức thời, không lưu lịch sử). Muốn biểu đồ, cảnh báo thì dùng Prometheus.
+
+### Vì sao Traefik dùng hostPort 80/443 trên worker?
+- LB ngoài kiểu passthrough không đổi cổng: gói tin tới worker vẫn là cổng 80/443, nên Pod Traefik phải mở đúng cổng đó trên node (hostPort). Vì vậy mỗi worker chỉ chạy một Pod Traefik, và health check TCP:80 của LB chỉ đạt trên worker có Pod đó.
+- Scheduler chỉ đặt Pod mới, không tự cân bằng lại Pod cũ; muốn dàn đều phải dùng anti-affinity hoặc topology spread.

@@ -40,3 +40,8 @@ Mỗi buổi 3–5 dòng: làm gì, đang dừng ở đâu, chi phí. Đầu bu�
 - `kubeadm init` trên cp1 (Pod CIDR 192.168.0.0/16, Service CIDR 10.96.0.0/12), Calico VXLAN (đổi từ `VXLANCrossSubnet` vì VPC GCP không route IP Pod). Join cp2, cp3, w1, w2: 5 node `Ready`.
 - Lỗi gặp: `/etc/containerd` chưa tồn tại, gõ sai tên miền khi `getent`, thiếu `sudo` khi join worker, `join` cp2 treo (đã tự xử lý).
 - Dừng ở: hết 3.5, còn 3.6 (local-path, metrics-server, Traefik + External LB) và 3.7 (deploy app). Còn việc dọn: dòng `/etc/hosts` tạm trên cp1, cp2, cp3. Chi phí: 5 VM chạy vài giờ + LB + NAT; nhớ stop VM.
+
+## 2026-10-27 · M3 (3.6, đầu 3.7)
+- Kiểm cụm 3 cp + stacked etcd, diễn tập tắt cp1 vẫn chạy; bỏ `/etc/hosts` tạm, API đi qua `k8s-api.lab.internal`. Cài local-path, metrics-server (`--kubelet-insecure-tls`), Traefik 3 bản (hostPort) và External LB (`136.85.0.184`, 3 worker HEALTHY). Thêm worker w3 (6 node Ready).
+- CloudNativePG 2 bản chạy ổn; đổi toàn bộ mật khẩu Secret. Thêm module `k8s-ingress-lb`, manifest thuần ở `deploy/gcp-lab/`.
+- Dừng ở: 3.7 bước kéo ảnh `qltt-app:v1` từ Artifact Registry (chưa chọn token hay service account), rồi migrate Job, app, Ingress Traefik, DNS `k8s.gcp.zett.io.vn`. Push GitHub còn vướng credentials. Chi phí: 6 VM + LB ngoài + NAT; nhớ stop VM.

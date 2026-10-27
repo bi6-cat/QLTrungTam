@@ -23,5 +23,7 @@ Cộng dồn trong lúc làm lab. Dùng cho mục 10.3 của README (bảng GCP 
 | Calico VXLAN trên VPC (M3) | Amazon VPC CNI | VPC GCP không route IP Pod nên phải bọc VXLAN; VPC CNI cấp IP VPC thật cho Pod |
 | Internal passthrough LB: backend gọi VIP bị trả về chính nó (M3) | NLB internal có hành vi hairpin tương tự khi client là target | Tạm trỏ `/etc/hosts` về cp1 lúc join |
 | Ansible inventory tĩnh (M3) | plugin `aws_ec2` ↔ `gcp_compute` (dynamic inventory) | Lab dùng tĩnh vì chỉ 5 máy |
+| Firewall policy / Cloud NGFW (M3) | Firewall Manager / Network Firewall / WAF | Policy dùng chung nhiều dự án; NGFW lọc sâu; WAF lọc HTTP |
+| External passthrough NLB + instance group (M3) | NLB (target type instance) | Không đổi cổng, nên Traefik dùng hostPort |
 
 Sắp gặp: GKE ↔ EKS, Cloud SQL ↔ RDS, Workload Identity Federation ↔ GitHub OIDC + IAM Role, Secret Manager ↔ Secrets Manager.
