@@ -3,14 +3,11 @@ kind: Ingress
 metadata:
   name: qltrungtam
   namespace: qltrungtam
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: 2m
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
-    - host: qltrungtam.lab
+    - host: k8s.gcp.zett.io.vn
       http:
         paths:
           - path: /

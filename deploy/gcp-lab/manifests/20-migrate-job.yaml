@@ -25,7 +25,7 @@ spec:
             - until pg_isready -h qltrungtam-postgres-rw -p 5432 -U qltrungtam -d qltrungtam; do sleep 2; done
       containers:
         - name: migrate
-          image: qltrungtam-migrate:lab
+          image: asia-southeast1-docker.pkg.dev/project-070733c0-e22c-4fbf-a55/qltt/qltt-migrate:v1
           imagePullPolicy: IfNotPresent
           command: ["npx", "prisma", "migrate", "deploy"]
           envFrom:
@@ -38,3 +38,6 @@ spec:
             limits:
               cpu: "1"
               memory: 512Mi
+      imagePullSecrets:
+        - name: gar-pull
+

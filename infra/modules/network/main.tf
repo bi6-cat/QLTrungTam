@@ -13,7 +13,7 @@ resource "google_compute_subnetwork" "this" {
   private_ip_google_access = true
 }
 
-# IAP tunnel dùng dải này để SSH vào VM không có IP public
+# IAP tunnel dùng dải này để SSH (22) và kubectl (6443) vào VM không có IP public
 resource "google_compute_firewall" "allow_iap_ssh" {
   name          = "${var.name}-allow-iap-ssh"
   network       = google_compute_network.vpc.name
@@ -22,7 +22,7 @@ resource "google_compute_firewall" "allow_iap_ssh" {
 
   allow {
     protocol = "tcp"
-    ports    = ["22"]
+    ports    = ["22", "6443"]
   }
 }
 

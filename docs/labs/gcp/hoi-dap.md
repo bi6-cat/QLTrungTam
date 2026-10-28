@@ -305,3 +305,10 @@ rồi cách nói khi bị hỏi phỏng vấn. Thêm mục mới ở cuối, ghi
 ### Vì sao Traefik dùng hostPort 80/443 trên worker?
 - LB ngoài kiểu passthrough không đổi cổng: gói tin tới worker vẫn là cổng 80/443, nên Pod Traefik phải mở đúng cổng đó trên node (hostPort). Vì vậy mỗi worker chỉ chạy một Pod Traefik, và health check TCP:80 của LB chỉ đạt trên worker có Pod đó.
 - Scheduler chỉ đặt Pod mới, không tự cân bằng lại Pod cũ; muốn dàn đều phải dùng anti-affinity hoặc topology spread.
+
+### Secret `gar-pull` ở namespace này dùng được cho Pod namespace khác không?
+- **Không.** Secret là đối tượng namespaced, và `imagePullSecrets` chỉ tìm Secret trong **chính namespace của Pod**. Ví dụ: Secret `gar-pull` ở `qltrungtam`, Pod chạy ở `boutique` khai báo `imagePullSecrets: gar-pull` thì kubelet không thấy → `ImagePullBackOff`. Muốn dùng phải tạo lại Secret trong từng namespace (hoặc gắn vào ServiceAccount mặc định của namespace đó để khỏi khai báo từng Pod).
+- Lý do thiết kế: namespace là ranh giới RBAC; nếu Pod đọc được Secret ở namespace khác thì ai tạo Pod cũng lấy được mật khẩu của namespace khác.
+- Ghi chú lab: token gcloud chỉ sống ~1 giờ nên Secret này phải tạo lại mỗi buổi. Production dùng Workload Identity hoặc service account key (ở đây project chặn tạo key).
+- AWS: ECR token cũng hết hạn sau 12 giờ, nên thường chạy CronJob làm mới Secret `imagePullSecrets`, hoặc dùng IAM role của node (EKS) để khỏi cần Secret.
+- Phỏng vấn: "Pod kéo ảnh từ private registry thế nào?" → `imagePullSecrets` (Secret kiểu `docker-registry`, cùng namespace với Pod) hoặc quyền gắn vào node/Workload Identity.

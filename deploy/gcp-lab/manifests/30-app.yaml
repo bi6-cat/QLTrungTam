@@ -43,7 +43,7 @@ spec:
                     app.kubernetes.io/component: web
       containers:
         - name: app
-          image: qltrungtam-app:lab
+          image: asia-southeast1-docker.pkg.dev/project-070733c0-e22c-4fbf-a55/qltt/qltt-migrate:v1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -91,6 +91,9 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 128Mi
+      imagePullSecrets:
+        - name: gar-pull
+
 ---
 apiVersion: v1
 kind: Service
