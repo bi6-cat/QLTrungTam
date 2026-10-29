@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { hashPassword, prisma } from "@/modules/core";
+import { hashPassword, prisma, verifyPassword } from "@/modules/core";
 import { generatePin, generateStudentCode } from "./credentials";
 
 // Thao tác quản trị tài khoản (admin gọi). Kiểm quyền và ghi audit log do lớp gọi (server action) lo.
@@ -68,6 +68,23 @@ export function setTeacherDisabled(teacherId: string, disabled: boolean) {
     teacherId,
     disabled ? { disabledAt: new Date(), sessionVersion: { increment: 1 } } : { disabledAt: null, failedLogins: 0, lockedUntil: null }
   );
+}
+
+/**
+ * Giáo viên tự đổi mật khẩu. Tăng sessionVersion để đăng xuất các thiết bị khác; trả về số mới để
+ * phiên hiện tại cấp lại cookie và ở lại đăng nhập.
+ */
+export async function changeTeacherPassword(teacherId: string, currentPassword: string, newPassword: string) {
+  const teacher = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { passwordHash: true } });
+  if (!teacher || !verifyPassword(currentPassword, teacher.passwordHash)) {
+    throw new IdentityError("Mật khẩu hiện tại không đúng.");
+  }
+  const updated = await prisma.teacher.update({
+    where: { id: teacherId },
+    data: { passwordHash: hashPassword(newPassword), sessionVersion: { increment: 1 } },
+    select: { sessionVersion: true }
+  });
+  return updated.sessionVersion;
 }
 
 export function unlockTeacher(teacherId: string) {

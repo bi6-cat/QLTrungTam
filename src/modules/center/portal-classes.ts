@@ -7,19 +7,31 @@ export type PortalClass = { id: string; name: string; shortCode: string; teacher
 /** Ghi danh còn tính là "của lớp": chưa rời lớp (leftAt trống hoặc ở tương lai). */
 const currentEnrollment = (now: Date) => ({ OR: [{ leftAt: null }, { leftAt: { gt: now } }] });
 
-export async function listClassesForTeacher(teacherId: string): Promise<PortalClass[]> {
-  return prisma.classRoom.findMany({
+/**
+ * Lớp của giáo viên kèm sĩ số hiện tại và teacherToken (để mở trang theo dõi lớp sẵn có). Chỉ
+ * dùng cho cổng giáo viên: teacherToken không được lộ ra cổng học sinh.
+ */
+export async function listClassesForTeacher(teacherId: string, now = new Date()) {
+  const classes = await prisma.classRoom.findMany({
     where: { teacherId, archivedAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, shortCode: true, teacherName: true }
+    select: {
+      id: true,
+      name: true,
+      shortCode: true,
+      teacherName: true,
+      teacherToken: true,
+      _count: { select: { enrollments: { where: { ...currentEnrollment(now), student: { archivedAt: null } } } } }
+    }
   });
+  return classes.map(({ _count, ...c }) => ({ ...c, studentCount: _count.enrollments }));
 }
 
 /**
  * Lớp học sinh đang theo học: chưa rời lớp và lớp chưa lưu trữ. Bảo lưu (on_leave) vẫn tính là
  * của lớp, để khi quay lại không mất bài và tài liệu.
  */
-export async function listClassesForStudent(studentId: string, now = new Date()) {
+export async function listClassesForStudent(studentId: string, now = new Date()): Promise<(PortalClass & { onLeave: boolean })[]> {
   const enrollments = await prisma.enrollment.findMany({
     where: { studentId, ...currentEnrollment(now), classRoom: { archivedAt: null } },
     orderBy: { classRoom: { name: "asc" } },

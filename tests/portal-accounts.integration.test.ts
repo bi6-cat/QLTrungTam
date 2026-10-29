@@ -4,11 +4,12 @@ import { after, describe, test } from "node:test";
 
 import { hashPassword, verifyPassword } from "../src/lib/password";
 import { prisma } from "../src/lib/prisma";
-import { listCurrentStudentsInClass } from "../src/modules/center/portal-classes";
+import { listClassesForTeacher, listCurrentStudentsInClass } from "../src/modules/center/portal-classes";
 import { assignClassesByTeacherName, setTeacherClasses } from "../src/modules/center/teacher-classes";
 import { authenticateStudent, authenticateTeacher } from "../src/modules/identity/authenticate";
 import { generateStudentCode } from "../src/modules/identity/credentials";
 import {
+  changeTeacherPassword,
   createTeacherAccount,
   IdentityError,
   issueStudentAccounts,
@@ -130,6 +131,33 @@ describe("teacher accounts", () => {
     assert.equal((await authenticateTeacher(t.username, "mat-khau-moi-2")).ok, true);
 
     await assert.rejects(resetTeacherPassword("khong-co", "mat-khau-moi-2"), IdentityError);
+  });
+});
+
+describe("teacher self-service", () => {
+  test("changing the password needs the current one and bumps the session version", async () => {
+    const t = await teacher();
+    await assert.rejects(changeTeacherPassword(t.id, "sai-mat-khau", "mat-khau-moi-3"), IdentityError);
+    assert.equal(await changeTeacherPassword(t.id, "mat-khau-gv-1", "mat-khau-moi-3"), 1);
+    assert.equal((await authenticateTeacher(t.username, "mat-khau-gv-1")).ok, false);
+    assert.deepEqual(await authenticateTeacher(t.username, "mat-khau-moi-3"), { ok: true, sub: t.id, ver: 1 });
+  });
+
+  test("class list carries the current student count", async () => {
+    const t = await teacher();
+    const c = await classRoom("x", { teacherId: t.id });
+    const [a, b, gone] = [await student("Đếm A"), await student("Đếm B"), await student("Đếm C", { archived: true })];
+    await prisma.enrollment.createMany({
+      data: [
+        { studentId: a.id, classId: c.id },
+        { studentId: b.id, classId: c.id, leftAt: new Date(Date.now() - 86_400_000) },
+        { studentId: gone.id, classId: c.id }
+      ]
+    });
+    const [row] = await listClassesForTeacher(t.id);
+    assert.equal(row.id, c.id);
+    assert.equal(row.studentCount, 1);
+    assert.equal(row.teacherToken, c.teacherToken);
   });
 });
 

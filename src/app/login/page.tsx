@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BookOpenCheck, CalendarDays, QrCode, ShieldCheck } from "lucide-react";
 import { clsx } from "clsx";
 import { LoginForm } from "@/components/LoginForm";
 import { StudentLoginForm, TeacherLoginForm } from "@/components/PortalLoginForms";
+import { getCurrentStudent, getCurrentTeacher, PORTAL_HOME } from "@/modules/identity";
 
 const FEATURES = [
   { icon: BookOpenCheck, title: "Lớp học & học sinh", text: "Danh sách lớp, ghi danh, bảo lưu theo từng tháng." },
@@ -107,6 +109,9 @@ function LogoCard({ className = "" }: { className?: string }) {
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ as?: string | string[] }> }) {
   const audience = parseAudience((await searchParams).as);
+  // Đã đăng nhập cổng này rồi thì vào thẳng (vd bấm lại link đăng nhập trên điện thoại).
+  if (audience === "teacher" && (await getCurrentTeacher())) redirect(PORTAL_HOME.teacher);
+  if (audience === "student" && (await getCurrentStudent())) redirect(PORTAL_HOME.student);
   const copy = AUDIENCES[audience];
   const year = new Date().getFullYear();
   return (

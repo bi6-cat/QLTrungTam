@@ -16,6 +16,7 @@ export {
   type PortalKind,
   type PortalSession
 } from "./portal-token";
+export { PORTAL_HOME, PORTAL_LOGIN, portalForPath } from "./portal-paths";
 export {
   authenticateStudent,
   authenticateTeacher,
@@ -34,6 +35,7 @@ export {
   startPortalSession
 } from "./session";
 export {
+  changeTeacherPassword,
   createTeacherAccount,
   getStudentAccounts,
   IdentityError,

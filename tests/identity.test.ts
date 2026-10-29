@@ -12,6 +12,7 @@ import {
 } from "../src/modules/identity/credentials";
 import { isLocked, lockAfterFailure, LOCK_MINUTES, MAX_FAILED_LOGINS, minutesUntil } from "../src/modules/identity/lockout";
 import { decodePortalToken, encodePortalToken } from "../src/modules/identity/portal-token";
+import { portalForPath } from "../src/modules/identity/portal-paths";
 import { teacherNameKey } from "../src/modules/center/teacher-classes";
 
 describe("student code", () => {
@@ -129,5 +130,29 @@ describe("teacher name matching", () => {
   test("keeps different names apart", () => {
     assert.notEqual(teacherNameKey("Cô Hà"), teacherNameKey("Cô Hạnh"));
     assert.notEqual(teacherNameKey("Cô Hạnh"), teacherNameKey("Cô Hanh"));
+  });
+});
+
+describe("portalForPath", () => {
+  test("teacher portal pages need a teacher session", () => {
+    for (const path of ["/teacher", "/teacher/", "/teacher/account", "/teacher/vocab/abc"]) assert.equal(portalForPath(path), "teacher", path);
+  });
+
+  test("old teacher class links stay public", () => {
+    assert.equal(portalForPath("/teacher/classes/L10A-k7m2x9pq4r"), null);
+    assert.equal(portalForPath("/teacher/classes/L10A-k7m2x9pq4r/"), null);
+    // Sâu hơn một cấp dưới /teacher/classes không phải link cũ.
+    assert.equal(portalForPath("/teacher/classes/L10A-k7m2x9pq4r/extra"), "teacher");
+    assert.equal(portalForPath("/teacher/classes"), "teacher");
+  });
+
+  test("student portal pages need a student session", () => {
+    for (const path of ["/learn", "/learn/classes", "/learn/quiz/1"]) assert.equal(portalForPath(path), "student", path);
+  });
+
+  test("other paths are not portal paths", () => {
+    for (const path of ["/", "/login", "/admin", "/teachers", "/learning", "/pay/L10A-x", "/survey/L10A-x"]) {
+      assert.equal(portalForPath(path), null, path);
+    }
   });
 });

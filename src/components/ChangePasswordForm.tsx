@@ -3,12 +3,17 @@
 import { useActionState } from "react";
 import { KeyRound } from "lucide-react";
 import { changePasswordAction } from "@/lib/actions/auth";
-import { EMPTY_RESULT_STATE } from "@/lib/action-states";
+import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
 import { useResultToast } from "@/components/Toaster";
 import { Button, Field, Input } from "@/components/ui";
 
-export function ChangePasswordForm() {
-  const [state, action, pending] = useActionState(changePasswordAction, EMPTY_RESULT_STATE);
+/** Mặc định đổi mật khẩu tài khoản quản trị; cổng giáo viên truyền action của mình. */
+export function ChangePasswordForm({
+  action: submit = changePasswordAction
+}: {
+  action?: (prev: ResultState, formData: FormData) => Promise<ResultState>;
+}) {
+  const [state, action, pending] = useActionState(submit, EMPTY_RESULT_STATE);
   useResultToast(state);
 
   return (
