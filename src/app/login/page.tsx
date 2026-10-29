@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { BookOpenCheck, CalendarDays, QrCode, ShieldCheck } from "lucide-react";
+import { clsx } from "clsx";
 import { LoginForm } from "@/components/LoginForm";
+import { StudentLoginForm, TeacherLoginForm } from "@/components/PortalLoginForms";
 
 const FEATURES = [
   { icon: BookOpenCheck, title: "Lớp học & học sinh", text: "Danh sách lớp, ghi danh, bảo lưu theo từng tháng." },
@@ -46,6 +49,53 @@ function Decoration() {
   );
 }
 
+type Audience = "admin" | "teacher" | "student";
+
+const AUDIENCES: Record<Audience, { tab: string; title: string; hint: string; footer: string }> = {
+  admin: {
+    tab: "Quản lý",
+    title: "Chào mừng trở lại",
+    hint: "Đăng nhập bằng tài khoản quản trị được cấp.",
+    footer: "Kết nối bảo mật · chỉ dành cho quản trị viên"
+  },
+  teacher: {
+    tab: "Giáo viên",
+    title: "Chào thầy cô",
+    hint: "Đăng nhập bằng tài khoản giáo viên trung tâm cấp.",
+    footer: "Kết nối bảo mật · tài khoản giáo viên"
+  },
+  student: {
+    tab: "Học sinh",
+    title: "Chào em",
+    hint: "Nhập mã học sinh và mã PIN trên phiếu trung tâm phát.",
+    footer: "Quên mã PIN? Nhờ thầy cô hoặc trung tâm cấp lại."
+  }
+};
+
+function parseAudience(value: string | string[] | undefined): Audience {
+  return value === "teacher" || value === "student" ? value : "admin";
+}
+
+function AudienceTabs({ active }: { active: Audience }) {
+  return (
+    <nav aria-label="Đăng nhập với vai trò" className="grid grid-cols-3 gap-1 rounded-2xl bg-stone-100 p-1">
+      {(Object.keys(AUDIENCES) as Audience[]).map((audience) => (
+        <Link
+          key={audience}
+          href={audience === "admin" ? "/login" : `/login?as=${audience}`}
+          aria-current={audience === active ? "page" : undefined}
+          className={clsx(
+            "rounded-xl px-2 py-2 text-center text-sm font-semibold transition",
+            audience === active ? "bg-white text-neutralText shadow-sm" : "text-stone-500 hover:text-neutralText"
+          )}
+        >
+          {AUDIENCES[audience].tab}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 function LogoCard({ className = "" }: { className?: string }) {
   // logo.jpg nền trắng, nhiều lề: đặt trong thẻ trắng và phóng to để cắt bớt lề.
   return (
@@ -55,7 +105,9 @@ function LogoCard({ className = "" }: { className?: string }) {
   );
 }
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ as?: string | string[] }> }) {
+  const audience = parseAudience((await searchParams).as);
+  const copy = AUDIENCES[audience];
   const year = new Date().getFullYear();
   return (
     <main className="grid min-h-screen bg-stone-50 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -114,14 +166,17 @@ export default function LoginPage() {
         <div className="flex flex-1 items-start justify-center px-4 lg:items-center lg:px-12">
           <div className="-mt-10 w-full max-w-md animate-scale-in rounded-3xl border border-stone-200/80 bg-white p-7 shadow-lift sm:p-9 lg:mt-0">
             <LogoCard className="mx-auto hidden h-16 w-28 lg:block" />
-            <h1 className="mt-0 text-center text-2xl font-bold tracking-tight text-neutralText lg:mt-6">Chào mừng trở lại</h1>
-            <p className="mt-1.5 text-center text-sm text-stone-500">Đăng nhập bằng tài khoản quản trị được cấp.</p>
+            <div className="lg:mt-6">
+              <AudienceTabs active={audience} />
+            </div>
+            <h1 className="mt-6 text-center text-2xl font-bold tracking-tight text-neutralText">{copy.title}</h1>
+            <p className="mt-1.5 text-center text-sm text-stone-500">{copy.hint}</p>
             <div className="mt-7">
-              <LoginForm />
+              {audience === "teacher" ? <TeacherLoginForm /> : audience === "student" ? <StudentLoginForm /> : <LoginForm />}
             </div>
             <p className="mt-7 flex items-center justify-center gap-1.5 border-t border-stone-100 pt-5 text-xs text-stone-400">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-              Kết nối bảo mật · chỉ dành cho quản trị viên
+              {copy.footer}
             </p>
           </div>
         </div>

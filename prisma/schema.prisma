@@ -44,6 +44,9 @@ model ClassRoom {
   /// Mã 4 ký tự cũ (dùng chung cho phụ huynh và giáo viên); chỉ còn để chuyển hướng tạm.
   legacyToken             String?         @unique
   teacherName             String          @default("")
+  /// Tài khoản giáo viên dạy lớp (cổng /teacher); null = chưa gán. teacherName vẫn là tên dùng cho
+  /// lương, báo cáo và Google Sheet.
+  teacherId               String?
   pricePerSession         Int
   sessionsPerMonthDefault Int
   /// Phần trăm học phí đã thu của lớp được trả cho giáo viên (0–100).
@@ -61,10 +64,12 @@ model ClassRoom {
   salaryCutoffs           ClassSalaryCutoff[]
   surveyLinks             SurveyClassLink[]
   surveyResponses         SurveyResponse[]
+  teacher                 Teacher?        @relation(fields: [teacherId], references: [id], onDelete: SetNull)
 
   @@index([shortCode])
   @@index([publicToken])
   @@index([archivedAt])
+  @@index([teacherId])
 }
 
 /// Lịch học cố định lặp theo tuần của một lớp.
@@ -157,6 +162,7 @@ model Student {
   archivedAt  DateTime?
   createdAt   DateTime     @default(now())
   enrollments Enrollment[]
+  account     StudentAccount?
 
   @@index([phone])
   @@index([archivedAt])
@@ -455,4 +461,33 @@ model SurveyAnswer {
 
   @@id([responseId, questionId])
   @@index([questionId])
+}
+
+/// Tài khoản giáo viên đăng nhập cổng /teacher (module identity).
+model Teacher {
+  id             String      @id @default(cuid())
+  username       String      @unique
+  passwordHash   String
+  fullName       String
+  /// Tăng khi đặt lại mật khẩu hoặc khoá tài khoản: cookie mang số cũ hết hiệu lực ngay.
+  sessionVersion Int         @default(0)
+  failedLogins   Int         @default(0)
+  lockedUntil    DateTime?
+  disabledAt     DateTime?
+  createdAt      DateTime    @default(now())
+  classes        ClassRoom[]
+}
+
+/// Tài khoản học sinh đăng nhập cổng /learn bằng mã học sinh + PIN (module identity).
+model StudentAccount {
+  studentId      String    @id
+  /// Mã đăng nhập ngẫu nhiên, không đoán được từ mã khác (tránh dò rồi khoá hàng loạt).
+  code           String    @unique
+  pinHash        String
+  sessionVersion Int       @default(0)
+  failedLogins   Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }

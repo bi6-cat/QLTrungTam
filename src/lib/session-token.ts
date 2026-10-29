@@ -36,6 +36,33 @@ export function encodeSessionToken(payload: SessionPayload) {
   return `${body}.${sign(body)}`;
 }
 
+/**
+ * Token ký theo phạm vi (vd "teacher", "student") cho các cổng ngoài admin. Chữ ký phủ cả
+ * "<phạm vi>:<body>": body base64url không chứa ":", nên token admin (ký riêng body) không bao
+ * giờ hợp lệ ở phạm vi nào, và token của phạm vi này không dùng được cho phạm vi khác.
+ */
+export function encodeScopedToken(scope: string, payload: object) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${body}.${sign(`${scope}:${body}`)}`;
+}
+
+/** Payload đã kiểm chữ ký (chưa kiểm hạn: phía gọi tự kiểm trường hết hạn của mình). */
+export function decodeScopedToken(scope: string, token?: string): unknown {
+  if (!token) return null;
+  const [body, signature] = token.split(".");
+  if (!body || !signature) return null;
+
+  const a = Buffer.from(signature);
+  const b = Buffer.from(sign(`${scope}:${body}`));
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  try {
+    return JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 export function decodeSessionToken(token?: string): SessionPayload | null {
   if (!token) return null;
   const [body, signature] = token.split(".");
