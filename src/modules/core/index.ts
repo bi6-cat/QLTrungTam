@@ -4,3 +4,4 @@ export { prisma } from "@/lib/prisma";
 export { hashPassword, verifyPassword } from "@/lib/password";
 export { decodeScopedToken, encodeScopedToken } from "@/lib/session-token";
 export { checkRateLimit, recordFailure, resetLimit, type RateLimitOptions } from "@/lib/rate-limit";
+export { compareStudentNames } from "@/lib/student-search";

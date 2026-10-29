@@ -5,7 +5,7 @@ import { assignmentState } from "../src/modules/learning/assignments";
 import { seededRng, shuffle } from "../src/modules/learning/random";
 import { acceptedSpellings, isCorrectAnswer, normalizeTyped } from "../src/modules/learning/vocab/grading";
 import { generateQuestions, quizConfigError, type QuizWord } from "../src/modules/learning/vocab/questions";
-import { MAX_WORDS_PER_SET, parseWordList } from "../src/modules/learning/vocab/word-list";
+import { formatWordList, MAX_WORDS_PER_SET, parseWordList } from "../src/modules/learning/vocab/word-list";
 
 describe("parseWordList", () => {
   test("reads the common ways teachers write a word list", () => {
@@ -221,5 +221,13 @@ describe("shuffle", () => {
     const out = shuffle(input, seededRng(9));
     assert.deepEqual([...out].sort(), input);
     assert.deepEqual(input, [1, 2, 3, 4, 5]);
+  });
+});
+
+describe("formatWordList", () => {
+  test("round-trips through parseWordList", () => {
+    const text = "apple (n) - quả táo | I eat an apple.\nwell-known - nổi tiếng\nratio - tỉ lệ: a/b";
+    const { words } = parseWordList(text);
+    assert.deepEqual(parseWordList(formatWordList(words)).words, words);
   });
 });

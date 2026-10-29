@@ -20,7 +20,7 @@ export {
   TIME_GRACE_SECONDS,
   type StudentAssignment
 } from "./attempts";
-export { MAX_WORDS_PER_SET, parseWordList, type ParsedWord, type WordListError } from "./vocab/word-list";
+export { formatWordList, MAX_WORDS_PER_SET, parseWordList, type ParsedWord, type WordListError } from "./vocab/word-list";
 export {
   MAX_QUESTIONS,
   MIN_WORDS_FOR_CHOICE,

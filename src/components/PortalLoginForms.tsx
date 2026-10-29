@@ -1,9 +1,22 @@
 "use client";
 
-import { useActionState } from "react";
+import { useEffect, useRef } from "react";
 import { Hash, KeyRound, LogIn, UserRound } from "lucide-react";
 import { studentLoginAction, teacherLoginAction } from "@/app/login/actions";
 import { Button, Field, Input } from "@/components/ui";
+import { useKeepValuesAction } from "@/components/useKeepValuesAction";
+
+/** Sai thì giữ tên đăng nhập / mã học sinh, chỉ xoá ô mật khẩu / PIN và đưa con trỏ về đó. */
+// Theo dõi cả object state (mỗi lần nộp là object mới) để sai hai lần cùng thông báo vẫn xoá lại.
+function useClearSecretOnError(state: { error: string }) {
+  const secretRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!state.error || !secretRef.current) return;
+    secretRef.current.value = "";
+    secretRef.current.focus();
+  }, [state]);
+  return secretRef;
+}
 
 function ErrorMessage({ error }: { error: string }) {
   if (!error) return null;
@@ -11,10 +24,11 @@ function ErrorMessage({ error }: { error: string }) {
 }
 
 export function TeacherLoginForm() {
-  const [state, action, pending] = useActionState(teacherLoginAction, { error: "" });
+  const [state, onSubmit, pending] = useKeepValuesAction(teacherLoginAction, { error: "" });
+  const passwordRef = useClearSecretOnError(state);
 
   return (
-    <form action={action} className="grid gap-4">
+    <form onSubmit={onSubmit} className="grid gap-4">
       <Field label="Tên đăng nhập">
         <span className="relative block">
           <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
@@ -24,7 +38,7 @@ export function TeacherLoginForm() {
       <Field label="Mật khẩu">
         <span className="relative block">
           <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-          <Input name="password" type="password" autoComplete="current-password" required className="h-12 pl-10" />
+          <Input ref={passwordRef} name="password" type="password" autoComplete="current-password" required className="h-12 pl-10" />
         </span>
       </Field>
       <ErrorMessage error={state.error} />
@@ -37,10 +51,11 @@ export function TeacherLoginForm() {
 }
 
 export function StudentLoginForm() {
-  const [state, action, pending] = useActionState(studentLoginAction, { error: "" });
+  const [state, onSubmit, pending] = useKeepValuesAction(studentLoginAction, { error: "" });
+  const pinRef = useClearSecretOnError(state);
 
   return (
-    <form action={action} className="grid gap-4">
+    <form onSubmit={onSubmit} className="grid gap-4">
       <Field label="Mã học sinh">
         <span className="relative block">
           <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
@@ -59,6 +74,7 @@ export function StudentLoginForm() {
         <span className="relative block">
           <Hash className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
           <Input
+            ref={pinRef}
             name="pin"
             type="password"
             inputMode="numeric"

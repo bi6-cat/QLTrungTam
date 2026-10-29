@@ -99,3 +99,10 @@ export function parseWordList(text: string) {
   }
   return { words, errors };
 }
+
+/** Viết lại bộ từ thành văn bản parseWordList đọc được (điền sẵn ô sửa bộ từ). */
+export function formatWordList(words: readonly ParsedWord[]) {
+  return words
+    .map((w) => `${w.term}${w.partOfSpeech ? ` (${w.partOfSpeech})` : ""} - ${w.meaning}${w.example ? ` | ${w.example}` : ""}`)
+    .join("\n");
+}

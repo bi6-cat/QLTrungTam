@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { formatCurrency, formatMonth, toInt, toText } from "../src/lib/format";
+import { formatCurrency, formatMonth, formatTimeDay, parseVietnamDateTime, toInt, toText } from "../src/lib/format";
 
 describe("format helpers", () => {
   test("formats VND without fractional digits", () => {
@@ -36,5 +36,19 @@ describe("form value conversion", () => {
   test("toText trims strings and normalizes a missing value", () => {
     assert.equal(toText("  Nguyen Van A  "), "Nguyen Van A");
     assert.equal(toText(null), "");
+  });
+});
+
+describe("Vietnam date-time helpers", () => {
+  test("formats hour and day in Vietnam time", () => {
+    assert.equal(formatTimeDay(new Date("2026-11-05T13:00:00Z")), "20:00 05/11");
+    assert.equal(formatTimeDay(new Date("2026-11-05T17:30:00Z")), "00:30 06/11");
+  });
+
+  test("reads a datetime-local value as Vietnam time", () => {
+    assert.equal(parseVietnamDateTime("2026-11-05T20:00")?.toISOString(), "2026-11-05T13:00:00.000Z");
+    assert.equal(parseVietnamDateTime(""), null);
+    assert.equal(parseVietnamDateTime("2026-13-05T20:00"), null);
+    assert.equal(parseVietnamDateTime("05/11/2026 20:00"), null);
   });
 });

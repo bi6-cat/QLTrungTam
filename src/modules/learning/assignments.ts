@@ -1,4 +1,4 @@
-import { prisma } from "@/modules/core";
+import { compareStudentNames, prisma } from "@/modules/core";
 import { isTeacherOfClass, listClassesForTeacher, listCurrentStudentsInClass } from "@/modules/center";
 import { LearningError } from "./errors";
 import { isQuestionType, quizConfigError, type QuestionType } from "./vocab/questions";
@@ -186,7 +186,7 @@ export async function getAssignmentResults(teacherId: string, assignmentId: stri
     .slice(0, 10);
 
   const students = [...rows.values()].sort(
-    (a, b) => Number(a.leftClass) - Number(b.leftClass) || a.fullName.localeCompare(b.fullName, "vi")
+    (a, b) => Number(a.leftClass) - Number(b.leftClass) || compareStudentNames(a.fullName, b.fullName)
   );
   return {
     assignment: {

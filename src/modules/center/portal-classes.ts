@@ -1,4 +1,4 @@
-import { prisma } from "@/modules/core";
+import { compareStudentNames, prisma } from "@/modules/core";
 
 // Phần đọc lớp/ghi danh cho các cổng mới. Code quản lý lớp cũ vẫn ở src/lib, chuyển dần sang đây.
 
@@ -40,7 +40,7 @@ export async function listClassesForStudent(studentId: string, now = new Date())
   return enrollments.map((e) => ({ ...e.classRoom, onLeave: e.status === "on_leave" }));
 }
 
-/** Học sinh hiện tại của lớp (cùng tiêu chí với listClassesForStudent), theo tên. */
+/** Học sinh hiện tại của lớp (cùng tiêu chí với listClassesForStudent), xếp theo tên như mọi danh sách HS. */
 export async function listCurrentStudentsInClass(classId: string, now = new Date()) {
   const enrollments = await prisma.enrollment.findMany({
     where: { classId, ...currentEnrollment(now), student: { archivedAt: null } },
@@ -48,7 +48,7 @@ export async function listCurrentStudentsInClass(classId: string, now = new Date
   });
   return enrollments
     .map((e) => ({ id: e.student.id, fullName: e.student.fullName, onLeave: e.status === "on_leave" }))
-    .sort((a, b) => a.fullName.localeCompare(b.fullName, "vi"));
+    .sort((a, b) => compareStudentNames(a.fullName, b.fullName));
 }
 
 /** Giáo viên đang được gán lớp này (lớp chưa lưu trữ). */

@@ -36,7 +36,7 @@ export function Button({
 const controlBase =
   "focus-ring h-11 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-sm shadow-sm transition-colors placeholder:text-stone-400 hover:border-stone-400 focus:border-primary";
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input(props: React.ComponentProps<"input">) {
   return <input {...props} className={cn(controlBase, props.className)} />;
 }
 

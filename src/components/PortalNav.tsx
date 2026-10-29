@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ClipboardList, UserRound } from "lucide-react";
+import { BookOpen, ClipboardList, Languages, UserRound } from "lucide-react";
 import { clsx } from "clsx";
 
 // Icon chọn theo tên vì component icon không truyền được từ server component sang đây.
-const ICONS = { classes: BookOpen, tasks: ClipboardList, account: UserRound } as const;
+const ICONS = { classes: BookOpen, tasks: ClipboardList, vocab: Languages, account: UserRound } as const;
 
 export type PortalNavItem = { href: string; label: string; icon: keyof typeof ICONS };
 
