@@ -134,6 +134,21 @@ export const resetManagerPasswordSchema = z.object({ userId: id, password: newPa
 
 export const deleteManagerSchema = z.object({ userId: id });
 
+// Tài khoản giáo viên (cổng /teacher). Họ tên nên ghi đúng như "Giáo viên" của lớp để tự gán lớp.
+export const createTeacherSchema = z.object({
+  fullName: personName("Nhập họ tên giáo viên", 80),
+  username,
+  password: newPassword
+});
+
+export const resetTeacherPasswordSchema = z.object({ teacherId: id, password: newPassword });
+
+export const teacherIdSchema = z.object({ teacherId: id });
+
+export const teacherClassesSchema = z.object({ teacherId: id, classIds: z.array(id).max(200) });
+
+export const issueStudentAccountsSchema = z.object({ classId: id, mode: z.enum(["missing", "all"]) });
+
 export const createClassSchema = z.object({
   name: requiredText("Thiếu tên lớp", 120),
   shortCode,

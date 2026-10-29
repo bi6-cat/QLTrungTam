@@ -33,3 +33,16 @@ export {
   requireTeacher,
   startPortalSession
 } from "./session";
+export {
+  createTeacherAccount,
+  getStudentAccounts,
+  IdentityError,
+  issueStudentAccounts,
+  listTeacherAccounts,
+  resetStudentPin,
+  resetTeacherPassword,
+  setTeacherDisabled,
+  unlockStudent,
+  unlockTeacher,
+  type IssuedCredential
+} from "./manage";

@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ClipboardList,
   FileSpreadsheet,
+  KeyRound,
   LayoutDashboard,
   PiggyBank,
   ReceiptText,
@@ -30,6 +31,7 @@ const ownerNav = [
   { href: "/admin/salary", label: "Lương GV", icon: Banknote },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
   { href: "/admin/surveys", label: "Khảo sát", icon: ClipboardList },
+  { href: "/admin/accounts", label: "Tài khoản học tập", icon: KeyRound },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings }
 ];
 

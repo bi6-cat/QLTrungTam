@@ -12,6 +12,7 @@ import {
 } from "../src/modules/identity/credentials";
 import { isLocked, lockAfterFailure, LOCK_MINUTES, MAX_FAILED_LOGINS, minutesUntil } from "../src/modules/identity/lockout";
 import { decodePortalToken, encodePortalToken } from "../src/modules/identity/portal-token";
+import { teacherNameKey } from "../src/modules/center/teacher-classes";
 
 describe("student code", () => {
   test("is 6 characters without look-alike characters", () => {
@@ -113,5 +114,20 @@ describe("portal token", () => {
   test("rejects payloads missing the session version", () => {
     const token = encodePortalToken("teacher", { sub: "t1", exp: Date.now() + 60_000 } as never);
     assert.equal(decodePortalToken("teacher", token), null);
+  });
+});
+
+describe("teacher name matching", () => {
+  test("ignores case, extra spaces and composed vs decomposed accents", () => {
+    const composed = "Cô Hạnh";
+    const decomposed = composed.normalize("NFD");
+    assert.notEqual(composed, decomposed);
+    assert.equal(teacherNameKey(`  cô   HẠNH `), teacherNameKey(composed));
+    assert.equal(teacherNameKey(decomposed), teacherNameKey(composed));
+  });
+
+  test("keeps different names apart", () => {
+    assert.notEqual(teacherNameKey("Cô Hà"), teacherNameKey("Cô Hạnh"));
+    assert.notEqual(teacherNameKey("Cô Hạnh"), teacherNameKey("Cô Hanh"));
   });
 });
