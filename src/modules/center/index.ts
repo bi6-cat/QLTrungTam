@@ -1,4 +1,6 @@
 export {
+  isStudentInClass,
+  isTeacherOfClass,
   listClassesForStudent,
   listClassesForTeacher,
   listCurrentStudentsInClass,

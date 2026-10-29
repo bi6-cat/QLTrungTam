@@ -50,3 +50,16 @@ export async function listCurrentStudentsInClass(classId: string, now = new Date
     .map((e) => ({ id: e.student.id, fullName: e.student.fullName, onLeave: e.status === "on_leave" }))
     .sort((a, b) => a.fullName.localeCompare(b.fullName, "vi"));
 }
+
+/** Giáo viên đang được gán lớp này (lớp chưa lưu trữ). */
+export async function isTeacherOfClass(teacherId: string, classId: string) {
+  return (await prisma.classRoom.count({ where: { id: classId, teacherId, archivedAt: null } })) > 0;
+}
+
+/** Học sinh đang theo học lớp (cùng tiêu chí với listClassesForStudent). */
+export async function isStudentInClass(studentId: string, classId: string, now = new Date()) {
+  const count = await prisma.enrollment.count({
+    where: { studentId, classId, ...currentEnrollment(now), student: { archivedAt: null }, classRoom: { archivedAt: null } }
+  });
+  return count > 0;
+}

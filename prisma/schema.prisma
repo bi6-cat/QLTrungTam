@@ -65,6 +65,7 @@ model ClassRoom {
   surveyLinks             SurveyClassLink[]
   surveyResponses         SurveyResponse[]
   teacher                 Teacher?        @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  assignments             Assignment[]
 
   @@index([shortCode])
   @@index([publicToken])
@@ -163,6 +164,7 @@ model Student {
   createdAt   DateTime     @default(now())
   enrollments Enrollment[]
   account     StudentAccount?
+  attempts    AssignmentAttempt[]
 
   @@index([phone])
   @@index([archivedAt])
@@ -476,6 +478,8 @@ model Teacher {
   disabledAt     DateTime?
   createdAt      DateTime    @default(now())
   classes        ClassRoom[]
+  vocabSets      VocabSet[]
+  assignments    Assignment[]
 }
 
 /// Tài khoản học sinh đăng nhập cổng /learn bằng mã học sinh + PIN (module identity).
@@ -490,4 +494,123 @@ model StudentAccount {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Học tập (module learning)
+// ---------------------------------------------------------------------------
+
+enum AssignmentKind {
+  vocab_quiz
+}
+
+/// Bài giáo viên giao cho một lớp. Khung chung cho mọi loại bài; cấu hình riêng nằm ở bảng của
+/// từng loại (VocabQuiz…).
+model Assignment {
+  id          String              @id @default(cuid())
+  classId     String
+  /// Giáo viên giao bài; null khi tài khoản giáo viên đã bị xoá (bài và kết quả vẫn giữ).
+  teacherId   String?
+  kind        AssignmentKind
+  title       String
+  opensAt     DateTime            @default(now())
+  /// Hạn nộp; null = không hạn. Quá hạn thì không bắt đầu lượt mới được.
+  dueAt       DateTime?
+  /// Giáo viên đóng bài sớm.
+  closedAt    DateTime?
+  createdAt   DateTime            @default(now())
+  classRoom   ClassRoom           @relation(fields: [classId], references: [id], onDelete: Restrict)
+  teacher     Teacher?            @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  vocabQuiz   VocabQuiz?
+  attempts    AssignmentAttempt[]
+
+  @@index([classId, createdAt])
+  @@index([teacherId, createdAt])
+}
+
+/// Một lượt làm bài của học sinh.
+model AssignmentAttempt {
+  id           String             @id @default(cuid())
+  assignmentId String
+  studentId    String
+  /// Lượt thứ mấy của học sinh này trong bài (1, 2…).
+  attemptNo    Int
+  startedAt    DateTime           @default(now())
+  submittedAt  DateTime?
+  score        Int?
+  maxScore     Int
+  /// Nộp sau giới hạn thời gian (đã cộng thời gian ân hạn): vẫn chấm, giáo viên thấy cờ này.
+  late         Boolean            @default(false)
+  assignment   Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student      Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  vocabItems   VocabAttemptItem[]
+
+  @@unique([assignmentId, studentId, attemptNo])
+  @@index([studentId])
+}
+
+/// Bộ từ vựng của giáo viên, dùng lại được cho nhiều bài và nhiều lớp.
+model VocabSet {
+  id          String      @id @default(cuid())
+  teacherId   String
+  title       String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  archivedAt  DateTime?
+  teacher     Teacher     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  words       VocabWord[]
+  quizzes     VocabQuiz[]
+
+  @@index([teacherId, archivedAt])
+}
+
+model VocabWord {
+  id           String             @id @default(cuid())
+  setId        String
+  position     Int
+  term         String
+  meaning      String
+  partOfSpeech String?
+  example      String?
+  set          VocabSet           @relation(fields: [setId], references: [id], onDelete: Cascade)
+  attemptItems VocabAttemptItem[]
+
+  @@index([setId, position])
+}
+
+/// Cấu hình bài kiểm tra từ vựng của một Assignment.
+model VocabQuiz {
+  assignmentId     String     @id
+  setId            String
+  /// Dạng câu hỏi được dùng (xem learning/vocab: mc_meaning, mc_term, type_term).
+  questionTypes    String[]
+  questionCount    Int
+  /// Giới hạn thời gian mỗi lượt (phút); null = không giới hạn.
+  timeLimitMinutes Int?
+  maxAttempts      Int        @default(1)
+  /// Sau khi nộp có cho học sinh xem đáp án đúng không.
+  showAnswers      Boolean    @default(true)
+  assignment       Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  set              VocabSet   @relation(fields: [setId], references: [id], onDelete: Restrict)
+}
+
+/// Một câu trong lượt làm bài từ vựng: đề được chụp lại lúc bắt đầu, nên sửa bộ từ về sau không
+/// làm đổi bài đã làm. correctAnswer chỉ ở server, không gửi xuống trình duyệt trước khi nộp.
+model VocabAttemptItem {
+  attemptId     String
+  position      Int
+  /// Từ gốc; null khi giáo viên đã xoá từ khỏi bộ (câu và kết quả vẫn giữ).
+  wordId        String?
+  type          String
+  prompt        String
+  /// Các lựa chọn của câu trắc nghiệm; rỗng với câu gõ từ.
+  options       String[]
+  correctAnswer String
+  answer        String?
+  isCorrect     Boolean?
+  attempt       AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  word          VocabWord?        @relation(fields: [wordId], references: [id], onDelete: SetNull)
+
+  @@id([attemptId, position])
+  @@index([wordId])
 }
