@@ -180,6 +180,10 @@ describe("taking an assignment", () => {
 
     const summary = (await getAssignmentForStudent(student.id, id))!;
     assert.deepEqual([summary.attemptsUsed, summary.bestScore, summary.canStart], [1, 5, false]);
+    assert.deepEqual(
+      summary.submittedAttempts.map((t) => [t.id, t.attemptNo, t.score, t.late]),
+      [[attemptId, 1, 5, false]]
+    );
     await assert.rejects(startAttempt(student.id, id), /hết số lượt/);
   });
 
@@ -190,7 +194,7 @@ describe("taking an assignment", () => {
     await submitAttempt(student.id, attemptId, new Map());
     const view = (await getAttemptForStudent(student.id, attemptId))!;
     assert.equal(view.score, 0);
-    assert.ok(view.items.every((i) => i.correctAnswer === null && i.isCorrect === false));
+    assert.ok(view.items.every((i) => i.correctAnswer === null && i.isCorrect === null && i.answer === null));
   });
 
   test("several attempts are numbered and the best score is kept", async () => {

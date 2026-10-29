@@ -8,13 +8,21 @@ import { clsx } from "clsx";
 // Icon chọn theo tên vì component icon không truyền được từ server component sang đây.
 const ICONS = { classes: BookOpen, tasks: ClipboardList, vocab: Languages, account: UserRound } as const;
 
-export type PortalNavItem = { href: string; label: string; icon: keyof typeof ICONS };
+/** `match`: các đường dẫn khác cũng tính là đang ở mục này (vd trang con nằm ngoài `href`). */
+export type PortalNavItem = { href: string; label: string; icon: keyof typeof ICONS; match?: string[] };
+
+const under = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
 export function PortalNav({ items }: { items: PortalNavItem[] }) {
   const pathname = usePathname();
   // Mục dài nhất khớp đường dẫn là mục đang mở (mục gốc chỉ khớp đúng chính nó).
   const active = items
-    .filter((item) => pathname === item.href || (item !== items[0] && pathname.startsWith(`${item.href}/`)))
+    .filter(
+      (item) =>
+        pathname === item.href ||
+        (item !== items[0] && pathname.startsWith(`${item.href}/`)) ||
+        item.match?.some((prefix) => under(pathname, prefix))
+    )
     .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (

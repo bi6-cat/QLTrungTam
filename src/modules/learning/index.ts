@@ -1,4 +1,5 @@
 export { LearningError } from "./errors";
+export { parseAnswerPayload } from "./answer-payload";
 export {
   assignmentState,
   closeAssignment,

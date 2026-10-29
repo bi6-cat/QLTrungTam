@@ -18,7 +18,9 @@ const quizSelect = {
   showAnswers: true
 } as const;
 
-type AttemptSummary = { submittedAt: Date | null; score: number | null; maxScore: number; id: string };
+const attemptSelect = { id: true, attemptNo: true, submittedAt: true, score: true, late: true } as const;
+
+type AttemptSummary = { id: string; attemptNo: number; submittedAt: Date | null; score: number | null; late: boolean };
 
 function summarize(
   a: { id: string; title: string; opensAt: Date; dueAt: Date | null; closedAt: Date | null; classRoom: { name: string } },
@@ -44,7 +46,8 @@ function summarize(
     maxScore: quiz?.questionCount ?? 0,
     inProgressAttemptId: inProgress?.id ?? null,
     lastAttemptId: submitted.at(-1)?.id ?? null,
-    canStart: state === "open" && !inProgress && submitted.length < maxAttempts
+    canStart: state === "open" && !inProgress && submitted.length < maxAttempts,
+    submittedAttempts: submitted.map((t) => ({ id: t.id, attemptNo: t.attemptNo, submittedAt: t.submittedAt!, score: t.score ?? 0, late: t.late }))
   };
 }
 
@@ -60,7 +63,7 @@ export async function listAssignmentsForStudent(studentId: string, now = new Dat
     include: {
       classRoom: { select: { name: true } },
       vocabQuiz: { select: quizSelect },
-      attempts: { where: { studentId }, orderBy: { attemptNo: "asc" }, select: { id: true, submittedAt: true, score: true, maxScore: true } }
+      attempts: { where: { studentId }, orderBy: { attemptNo: "asc" }, select: attemptSelect }
     }
   });
   const rank = (s: StudentAssignment) => (s.state === "open" ? (s.canStart || s.inProgressAttemptId ? 0 : 1) : 2);
@@ -75,7 +78,7 @@ async function loadAssignmentForStudent(studentId: string, assignmentId: string,
     include: {
       classRoom: { select: { name: true } },
       vocabQuiz: { select: { ...quizSelect, setId: true } },
-      attempts: { where: { studentId }, orderBy: { attemptNo: "asc" }, select: { id: true, attemptNo: true, submittedAt: true, score: true, maxScore: true } }
+      attempts: { where: { studentId }, orderBy: { attemptNo: "asc" }, select: attemptSelect }
     }
   });
   if (!assignment || assignment.opensAt > now || !(await isStudentInClass(studentId, assignment.classId, now))) return null;
@@ -143,8 +146,9 @@ function deadline(startedAt: Date, timeLimitMinutes: number | null) {
 }
 
 /**
- * Lượt làm bài của chính học sinh này. Trước khi nộp không có đáp án đúng trong kết quả; sau khi
- * nộp chỉ có nếu bài cho xem đáp án.
+ * Lượt làm bài của chính học sinh này. Trước khi nộp không có đáp án đúng trong kết quả. Sau khi
+ * nộp, câu trả lời, đúng/sai và đáp án chỉ có nếu bài cho xem đáp án (biết câu nào sai cũng đủ
+ * để dò ra đáp án trắc nghiệm qua các lượt).
  */
 export async function getAttemptForStudent(studentId: string, attemptId: string, now = new Date()) {
   const attempt = await prisma.assignmentAttempt.findFirst({
@@ -177,8 +181,8 @@ export async function getAttemptForStudent(studentId: string, attemptId: string,
       type: item.type as QuestionType,
       prompt: item.prompt,
       options: item.options,
-      answer: submitted ? item.answer : null,
-      isCorrect: submitted ? item.isCorrect : null,
+      answer: reveal ? item.answer : null,
+      isCorrect: reveal ? item.isCorrect : null,
       correctAnswer: reveal ? item.correctAnswer : null
     }))
   };
