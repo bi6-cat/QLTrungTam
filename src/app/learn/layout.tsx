@@ -13,11 +13,12 @@ export default async function LearnLayout({ children }: { children: React.ReactN
   const student = await requireStudent();
   return (
     <PortalShell
-      portalName="Học sinh"
-      greeting={`Chào ${student.fullName} · mã ${student.code}`}
+      portalName="Góc học tập"
+      user={{ name: student.fullName, detail: `Mã ${student.code}` }}
       logoutAction={studentLogoutAction}
+      hideBottomNavOn={["/learn/attempts"]}
       nav={[
-        { href: "/learn", label: "Bài cần làm", icon: "tasks", match: ["/learn/assignments", "/learn/attempts"] },
+        { href: "/learn", label: "Trang chủ", icon: "home", match: ["/learn/assignments", "/learn/attempts"] },
         { href: "/learn/materials", label: "Tài liệu", icon: "materials" },
         { href: "/learn/classes", label: "Lớp của em", icon: "classes" }
       ]}

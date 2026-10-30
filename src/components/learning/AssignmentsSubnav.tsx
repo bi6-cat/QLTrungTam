@@ -12,15 +12,15 @@ export function AssignmentsSubnav({ active, vocabEnabled }: { active: "assignmen
     { key: "vocab", href: "/teacher/vocab", label: "Bộ từ vựng" }
   ] as const;
   return (
-    <nav className="flex w-fit gap-1 rounded-xl bg-stone-100 p-1">
+    <nav className="flex w-fit gap-1 rounded-2xl bg-white p-1 ring-1 ring-inset ring-stone-200">
       {items.map((item) => (
         <Link
           key={item.key}
           href={item.href}
           aria-current={active === item.key ? "page" : undefined}
           className={clsx(
-            "focus-ring rounded-lg px-3 py-1.5 text-sm font-semibold transition",
-            active === item.key ? "bg-white text-neutralText shadow-sm" : "text-stone-500 hover:text-neutralText"
+            "focus-ring rounded-xl px-3.5 py-1.5 text-sm font-semibold transition",
+            active === item.key ? "bg-indigo-50 text-primary" : "text-stone-500 hover:text-neutralText"
           )}
         >
           {item.label}

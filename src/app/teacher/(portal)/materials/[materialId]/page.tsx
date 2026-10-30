@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DeleteMaterialButton } from "@/components/learning/DeleteMaterialButton";
 import { MaterialForm } from "@/components/learning/MaterialForm";
-import { PageHeader, Panel } from "@/components/ui";
+import { Card, PageIntro } from "@/components/portal/kit";
 import { listClassesForTeacher } from "@/modules/center";
 import { requireTeacher } from "@/modules/identity";
 import { getMaterialForTeacher, MAX_MATERIAL_NOTE, MAX_MATERIAL_TITLE } from "@/modules/learning";
@@ -20,8 +20,13 @@ export default async function EditMaterialPage({ params }: { params: Promise<{ m
 
   return (
     <>
-      <PageHeader title={material.title} description={material.className} actions={<DeleteMaterialButton materialId={material.id} title={material.title} />} />
-      <Panel>
+      <PageIntro
+        back={{ href: "/teacher/materials", label: "Tài liệu" }}
+        title={material.title}
+        subtitle={material.className}
+        actions={<DeleteMaterialButton materialId={material.id} title={material.title} />}
+      />
+      <Card>
         <MaterialForm
           key={material.updatedAt.toISOString()}
           classes={options}
@@ -30,7 +35,7 @@ export default async function EditMaterialPage({ params }: { params: Promise<{ m
           materialId={material.id}
           defaults={{ classId: material.classId, title: material.title, url: material.url ?? "", note: material.note }}
         />
-      </Panel>
+      </Card>
     </>
   );
 }

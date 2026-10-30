@@ -131,11 +131,26 @@ export function QuizRunner({
     <>
       <ol className="grid gap-4 pb-28">
         {questions.map((q) => (
-          <li key={q.position} id={`cau-${q.position}`} className="scroll-mt-32 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Câu {q.position} · {q.instruction}
-            </p>
-            <p className="mt-1 break-words text-lg font-bold text-neutralText">{q.prompt}</p>
+          <li
+            key={q.position}
+            id={`cau-${q.position}`}
+            className={clsx(
+              "scroll-mt-24 rounded-3xl border bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition sm:p-6",
+              answers[q.position]?.trim() ? "border-indigo-100" : "border-stone-200/70"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className={clsx(
+                  "grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold tabular-nums",
+                  answers[q.position]?.trim() ? "bg-primary text-white" : "bg-stone-100 text-stone-500"
+                )}
+              >
+                {q.position}
+              </span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{q.instruction}</p>
+            </div>
+            <p className="mt-3 break-words text-xl font-bold text-neutralText">{q.prompt}</p>
             {q.typed ? (
               <Input
                 aria-label={`Câu ${q.position}: gõ từ tiếng Anh`}
@@ -148,17 +163,17 @@ export function QuizRunner({
                 autoCorrect="off"
                 spellCheck={false}
                 placeholder="Gõ từ tiếng Anh"
-                className="mt-3 h-12 text-base"
+                className="mt-4 h-12 rounded-2xl text-base"
               />
             ) : (
-              <div role="radiogroup" aria-label={`Câu ${q.position}`} className="mt-3 grid gap-2 sm:grid-cols-2">
-                {q.options.map((option) => {
+              <div role="radiogroup" aria-label={`Câu ${q.position}`} className="mt-4 grid gap-2 sm:grid-cols-2">
+                {q.options.map((option, index) => {
                   const checked = answers[q.position] === option;
                   return (
                     <label
                       key={option}
                       className={clsx(
-                        "flex items-center gap-3 rounded-xl border px-3.5 py-3 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary",
+                        "flex items-center gap-3 rounded-2xl border-2 px-3.5 py-3 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary",
                         checked ? "border-primary bg-indigo-50 font-semibold text-primary" : "border-stone-200",
                         locked ? "cursor-not-allowed opacity-70" : !checked && "cursor-pointer hover:border-stone-300 hover:bg-stone-50"
                       )}
@@ -170,8 +185,17 @@ export function QuizRunner({
                         checked={checked}
                         disabled={locked}
                         onChange={() => setAnswer(q.position, option)}
-                        className="h-4 w-4 shrink-0 accent-primary"
+                        className="sr-only"
                       />
+                      <span
+                        aria-hidden="true"
+                        className={clsx(
+                          "grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-bold",
+                          checked ? "bg-primary text-white" : "bg-stone-100 text-stone-500"
+                        )}
+                      >
+                        {"ABCDEFGH"[index]}
+                      </span>
                       <span className="min-w-0 break-words">{option}</span>
                     </label>
                   );
@@ -182,7 +206,7 @@ export function QuizRunner({
         ))}
       </ol>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:left-[264px]">
         <div className="h-1 bg-stone-100">
           <div className="h-full bg-primary transition-all" style={{ width: `${(answeredCount / questions.length) * 100}%` }} />
         </div>

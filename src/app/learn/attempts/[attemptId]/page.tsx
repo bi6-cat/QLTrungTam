@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, ListChecks, RotateCcw, XCircle } from "lucide-react";
 import { clsx } from "clsx";
 import { QuizRunner } from "@/components/learning/QuizRunner";
-import { Badge, PageHeader, Panel } from "@/components/ui";
+import { Card, CardHeader, Chip, linkButton, PageIntro, ProgressRing, scoreTone } from "@/components/portal/kit";
 import { formatTimeDay } from "@/lib/format";
 import { requireStudent } from "@/modules/identity";
 import { getAssignmentForStudent, getAttemptForStudent, QUESTION_TYPE_LABEL } from "@/modules/learning";
@@ -22,9 +22,15 @@ export default async function AttemptPage({ params }: { params: Promise<{ attemp
   if (!attempt.submittedAt) {
     return (
       <>
-        <PageHeader
+        <PageIntro
+          eyebrow={
+            <>
+              <Chip tone="violet">Lượt {attempt.attemptNo}</Chip>
+              <Chip icon={<ListChecks className="h-3.5 w-3.5" />}>{attempt.items.length} câu</Chip>
+              {attempt.endsAt ? <Chip tone="amber" icon={<Clock className="h-3.5 w-3.5" />}>Hết giờ lúc {formatTimeDay(attempt.endsAt)}</Chip> : null}
+            </>
+          }
           title={attempt.title}
-          description={`Lượt ${attempt.attemptNo} · ${attempt.items.length} câu${attempt.endsAt ? ` · hết giờ lúc ${formatTimeDay(attempt.endsAt)}` : ""}`}
         />
         <QuizRunner
           attemptId={attempt.id}
@@ -60,48 +66,57 @@ function AttemptResult({ attempt, canRetry }: { attempt: Attempt; canRetry: bool
 
   return (
     <>
-      <PageHeader
+      <PageIntro
+        back={{ href: `/learn/assignments/${attempt.assignmentId}`, label: "Về bài" }}
+        eyebrow={
+          <>
+            <Chip tone="violet">Lượt {attempt.attemptNo}</Chip>
+            <span>nộp lúc {formatTimeDay(attempt.submittedAt!)}</span>
+            {attempt.late ? <Chip tone="rose">Nộp trễ</Chip> : null}
+          </>
+        }
         title={attempt.title}
-        description={`Lượt ${attempt.attemptNo} · nộp lúc ${formatTimeDay(attempt.submittedAt!)}`}
       />
 
-      <Panel className="grid gap-4 text-center sm:grid-cols-[auto_1fr] sm:items-center sm:text-left">
-        <p className="text-5xl font-extrabold tabular-nums tracking-tight text-primary">
-          {score}
-          <span className="text-2xl text-stone-400">/{attempt.maxScore}</span>
-        </p>
-        <div>
-          <p className="text-lg font-bold text-neutralText">{cheer(percent)}</p>
-          <p className="text-sm text-stone-600">
-            Em trả lời đúng {score} trên {attempt.maxScore} câu ({percent}%).
-            {attempt.late ? (
-              <>
-                {" "}
-                <Badge tone="warning">Nộp trễ</Badge>
-              </>
-            ) : null}
+      <Card className="flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
+        <ProgressRing ratio={percent / 100} size={128} stroke={12} tone={scoreTone(percent / 100)}>
+          <span>
+            <span className="block text-3xl font-extrabold tabular-nums text-neutralText">
+              {score}
+              <span className="text-lg text-stone-400">/{attempt.maxScore}</span>
+            </span>
+            <span className="block text-xs font-semibold text-stone-500">{percent}%</span>
+          </span>
+        </ProgressRing>
+        <div className="min-w-0 flex-1">
+          <p className="text-2xl font-bold tracking-tight text-neutralText">{cheer(percent)}</p>
+          <p className="mt-1 text-sm text-stone-600">
+            Em trả lời đúng {score} trên {attempt.maxScore} câu.
           </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+            <Link href={`/learn/assignments/${attempt.assignmentId}`} className={canRetry ? linkButton.primary : linkButton.secondary}>
+              {canRetry ? <RotateCcw className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
+              {canRetry ? "Làm lượt mới" : "Về bài"}
+            </Link>
+            <Link href="/learn" className={linkButton.secondary}>
+              Về trang chủ
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-wrap justify-center gap-2 sm:col-span-2 sm:justify-start">
-          <Link
-            href={`/learn/assignments/${attempt.assignmentId}`}
-            className="focus-ring inline-flex h-11 items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-neutralText shadow-sm hover:bg-stone-50"
-          >
-            {canRetry ? <RotateCcw className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
-            {canRetry ? "Làm lượt mới" : "Về bài"}
-          </Link>
-        </div>
-      </Panel>
+      </Card>
 
       {attempt.showAnswers ? (
-        <Panel>
-          <h2 className="text-lg font-bold text-neutralText">Đáp án</h2>
-          <ol className="mt-3 grid gap-2">
+        <Card>
+          <CardHeader
+            title="Đáp án"
+            subtitle={`${attempt.items.filter((i) => i.isCorrect).length} câu đúng · ${attempt.items.filter((i) => !i.isCorrect).length} câu cần ôn lại`}
+          />
+          <ol className="grid gap-2 md:grid-cols-2">
             {attempt.items.map((item) => (
               <li
                 key={item.position}
                 className={clsx(
-                  "flex items-start gap-3 rounded-xl border p-3",
+                  "flex items-start gap-3 rounded-2xl border p-3.5",
                   item.isCorrect ? "border-emerald-200 bg-emerald-50/60" : "border-rose-200 bg-rose-50/60"
                 )}
               >
@@ -132,7 +147,7 @@ function AttemptResult({ attempt, canRetry }: { attempt: Attempt; canRetry: bool
               </li>
             ))}
           </ol>
-        </Panel>
+        </Card>
       ) : (
         <p className="text-center text-sm text-stone-500">Thầy cô không bật xem đáp án cho bài này.</p>
       )}

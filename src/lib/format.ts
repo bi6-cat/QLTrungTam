@@ -57,3 +57,32 @@ export function toInt(value: FormDataEntryValue | null, fallback = 0) {
 export function toText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
+
+const vnHourFormat = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: "Asia/Ho_Chi_Minh" });
+
+/** Lời chào theo giờ Việt Nam: sáng (trước 11h), trưa (11–13h), chiều (13–18h), tối. */
+export function greetingFor(date: Date) {
+  const hour = Number(vnHourFormat.format(date));
+  if (hour < 11) return "Chào buổi sáng";
+  if (hour < 13) return "Chào buổi trưa";
+  if (hour < 18) return "Chào buổi chiều";
+  return "Chào buổi tối";
+}
+
+const vnWeekdayFormat = new Intl.DateTimeFormat("vi-VN", { weekday: "long", timeZone: "Asia/Ho_Chi_Minh" });
+
+/** "Thứ Sáu, 30/10" theo giờ Việt Nam. */
+export function formatWeekdayDate(date: Date) {
+  const weekday = vnWeekdayFormat.format(date);
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${formatDayMonth(date)}`;
+}
+
+/** Hạn nộp đọc nhanh: "còn 45 phút", "còn 5 giờ", "còn 2 ngày", quá 7 ngày thì ghi ngày; đã qua thì "đã hết hạn". */
+export function formatDueIn(dueAt: Date, now: Date) {
+  const minutes = Math.floor((dueAt.getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return "đã hết hạn";
+  if (minutes < 60) return `còn ${minutes} phút`;
+  if (minutes < 24 * 60) return `còn ${Math.floor(minutes / 60)} giờ`;
+  if (minutes < 7 * 24 * 60) return `còn ${Math.floor(minutes / (24 * 60))} ngày`;
+  return `hạn ${formatDayMonth(dueAt)}`;
+}

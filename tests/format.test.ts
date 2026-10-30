@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { formatCurrency, formatMonth, formatTimeDay, parseVietnamDateTime, toInt, toText } from "../src/lib/format";
+import {
+  formatCurrency,
+  formatDueIn,
+  formatMonth,
+  formatTimeDay,
+  formatWeekdayDate,
+  greetingFor,
+  parseVietnamDateTime,
+  toInt,
+  toText
+} from "../src/lib/format";
 
 describe("format helpers", () => {
   test("formats VND without fractional digits", () => {
@@ -51,4 +61,23 @@ describe("Vietnam date-time helpers", () => {
     assert.equal(parseVietnamDateTime("2026-13-05T20:00"), null);
     assert.equal(parseVietnamDateTime("05/11/2026 20:00"), null);
   });
+});
+
+test("greeting follows Vietnam time of day", () => {
+  assert.equal(greetingFor(new Date("2026-10-30T08:00:00+07:00")), "Chào buổi sáng");
+  assert.equal(greetingFor(new Date("2026-10-30T12:00:00+07:00")), "Chào buổi trưa");
+  assert.equal(greetingFor(new Date("2026-10-30T15:30:00+07:00")), "Chào buổi chiều");
+  assert.equal(greetingFor(new Date("2026-10-30T21:00:00+07:00")), "Chào buổi tối");
+  assert.equal(greetingFor(new Date("2026-10-30T01:30:00Z")), "Chào buổi sáng", "01:30 UTC là 08:30 giờ Việt Nam");
+});
+
+test("weekday date and due-in labels", () => {
+  assert.equal(formatWeekdayDate(new Date("2026-10-30T10:00:00+07:00")), "Thứ Sáu, 30/10");
+  const now = new Date("2026-10-30T10:00:00+07:00");
+  const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000);
+  assert.equal(formatDueIn(at(-1), now), "đã hết hạn");
+  assert.equal(formatDueIn(at(45), now), "còn 45 phút");
+  assert.equal(formatDueIn(at(5 * 60 + 10), now), "còn 5 giờ");
+  assert.equal(formatDueIn(at(2 * 24 * 60 + 30), now), "còn 2 ngày");
+  assert.equal(formatDueIn(at(10 * 24 * 60), now), "hạn 09/11");
 });

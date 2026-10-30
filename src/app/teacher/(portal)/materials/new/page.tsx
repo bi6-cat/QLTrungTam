@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { BookOpen } from "lucide-react";
 import { MaterialForm } from "@/components/learning/MaterialForm";
-import { EmptyState, PageHeader, Panel } from "@/components/ui";
+import { Card, EmptyBlock, PageIntro } from "@/components/portal/kit";
 import { listClassesForTeacher } from "@/modules/center";
 import { requireTeacher } from "@/modules/identity";
 import { MAX_MATERIAL_NOTE, MAX_MATERIAL_TITLE } from "@/modules/learning";
@@ -16,20 +16,20 @@ export default async function NewMaterialPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PageHeader title="Thêm tài liệu" description="Học sinh trong lớp thấy tài liệu ngay ở mục Tài liệu của cổng học sinh." />
+      <PageIntro back={{ href: "/teacher/materials", label: "Tài liệu" }} title="Thêm tài liệu" subtitle="Học sinh trong lớp thấy tài liệu ngay ở mục Tài liệu của cổng học sinh." />
       {classes.length === 0 ? (
-        <EmptyState title="Chưa được gán lớp nào" icon={<BookOpen className="h-5 w-5" />}>
+        <EmptyBlock title="Chưa được gán lớp nào" icon={<BookOpen className="h-6 w-6" />}>
           Nhờ trung tâm gán lớp cho tài khoản của thầy cô trước khi đăng tài liệu.
-        </EmptyState>
+        </EmptyBlock>
       ) : (
-        <Panel>
+        <Card>
           <MaterialForm
             classes={classes.map((c) => ({ id: c.id, label: c.name }))}
             maxTitle={MAX_MATERIAL_TITLE}
             maxNote={MAX_MATERIAL_NOTE}
             defaults={{ classId: classes.some((c) => c.id === classId) ? classId : undefined }}
           />
-        </Panel>
+        </Card>
       )}
     </>
   );

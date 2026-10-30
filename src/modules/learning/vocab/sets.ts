@@ -18,9 +18,20 @@ export async function listVocabSets(teacherId: string) {
   const sets = await prisma.vocabSet.findMany({
     where: { teacherId, archivedAt: null },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, title: true, updatedAt: true, _count: { select: { words: true, quizzes: true } } }
+    select: {
+      id: true,
+      title: true,
+      updatedAt: true,
+      words: { orderBy: { position: "asc" }, take: 8, select: { term: true } },
+      _count: { select: { words: true, quizzes: true } }
+    }
   });
-  return sets.map(({ _count, ...set }) => ({ ...set, wordCount: _count.words, assignmentCount: _count.quizzes }));
+  return sets.map(({ _count, words, ...set }) => ({
+    ...set,
+    wordCount: _count.words,
+    assignmentCount: _count.quizzes,
+    previewTerms: words.map((w) => w.term)
+  }));
 }
 
 /** Bộ từ của chính giáo viên này (chưa lưu trữ); null nếu không có hoặc của người khác. */

@@ -14,11 +14,11 @@ export default async function TeacherPortalLayout({ children }: { children: Reac
   const teacher = await requireTeacher();
   return (
     <PortalShell
-      portalName="Giáo viên"
-      greeting={`Xin chào, ${teacher.fullName}`}
+      portalName="Cổng giáo viên"
+      user={{ name: teacher.fullName, detail: teacher.username }}
       logoutAction={teacherLogoutAction}
       nav={[
-        { href: "/teacher", label: "Lớp của tôi", icon: "classes" },
+        { href: "/teacher", label: "Tổng quan", icon: "home" },
         { href: "/teacher/assignments", label: "Bài tập", icon: "tasks", match: ["/teacher/vocab"] },
         { href: "/teacher/materials", label: "Tài liệu", icon: "materials" },
         { href: "/teacher/account", label: "Tài khoản", icon: "account" }
