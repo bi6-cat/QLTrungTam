@@ -126,7 +126,8 @@ export function VocabSetForm({ setId, defaultTitle = "", defaultWords = "" }: { 
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Button ref={previewRef} type="submit" name="intent" value="preview" variant="secondary" disabled={pending}>
+        {/* Xem trước không cần tên bộ: bỏ kiểm tra ô bắt buộc để tải file lên trước khi đặt tên vẫn xem được. */}
+        <Button ref={previewRef} type="submit" name="intent" value="preview" variant="secondary" formNoValidate disabled={pending}>
           <Eye className="h-4 w-4" />
           Xem trước
         </Button>
