@@ -10,9 +10,9 @@ Unit test chỉ gọi helper thuần, không kết nối database và không tha
 npm test
 ```
 
-Phạm vi hiện có: cú pháp memo học phí, URL VietQR, định dạng, chuyển đổi form, mật khẩu, public token, parser/validator import Excel và kiểm tra phiếu / tổng hợp kết quả khảo sát.
+Phạm vi hiện có: cú pháp memo học phí, URL VietQR, định dạng, chuyển đổi form, mật khẩu, public token, parser/validator import Excel, kiểm tra phiếu / tổng hợp kết quả khảo sát, đọc danh sách từ vựng và sinh câu hỏi, kiểm tra đường dẫn tài liệu, và ranh giới import giữa các module trong `src/modules`.
 
-## Integration test sổ tài chính
+## Integration test
 
 Integration test cần PostgreSQL đã chạy đầy đủ migration:
 
@@ -32,5 +32,8 @@ Phạm vi hiện có:
 - Hai request tranh cùng giao dịch chỉ có một request thắng.
 - Trạng thái/số buổi/đơn giá được cô lập giữa các tháng.
 - Chặn xóa cứng lớp hoặc học sinh đã có ghi danh bằng khóa ngoại `RESTRICT`.
+- Tài khoản giáo viên/học sinh: đăng nhập, khóa khi sai nhiều lần, phiên hết hiệu lực khi đổi mật khẩu.
+- Bài giao từ vựng: chỉ giáo viên của lớp giao được, chỉ học sinh của lớp làm được, đáp án ẩn đến khi nộp, giới hạn lượt và thời gian.
+- Tài liệu: chỉ giáo viên của lớp đăng/sửa/gỡ, chỉ học sinh của lớp thấy, database chặn đường dẫn không phải http(s).
 
 Các test cho webhook HTTP (xác thực, duplicate, chiều tiền, tài khoản nhận và CAS khi hóa đơn đổi tiền) sẽ được bổ sung cùng HTTP test harness. Trước khi triển khai production vẫn phải smoke test bằng SePay Test Mode.
