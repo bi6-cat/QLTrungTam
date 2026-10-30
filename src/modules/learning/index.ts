@@ -31,6 +31,8 @@ export {
   type QuestionType
 } from "./vocab/questions";
 export { archiveVocabSet, createVocabSet, getVocabSet, listVocabSets, updateVocabSet } from "./vocab/sets";
+export { VOCAB_DISABLED_MESSAGE } from "./vocab/access";
+export { MAX_WORD_FILE_BYTES, readWordFile, WORD_FILE_ACCEPT, type WordFileResult } from "./vocab/word-file";
 export {
   createMaterial,
   deleteMaterial,

@@ -1,6 +1,7 @@
 import { compareStudentNames, prisma } from "@/modules/core";
 import { isTeacherOfClass, listClassesForTeacher, listCurrentStudentsInClass } from "@/modules/center";
 import { LearningError } from "./errors";
+import { assertVocabEnabled } from "./vocab/access";
 import { isQuestionType, quizConfigError, type QuestionType } from "./vocab/questions";
 import { getVocabSet } from "./vocab/sets";
 
@@ -30,6 +31,7 @@ export type VocabAssignmentInput = {
 };
 
 export async function createVocabAssignment(teacherId: string, input: VocabAssignmentInput, now = new Date()) {
+  await assertVocabEnabled(teacherId);
   if (!(await isTeacherOfClass(teacherId, input.classId))) throw new LearningError("Thầy cô không được gán dạy lớp này.");
   const set = await getVocabSet(teacherId, input.setId);
   if (!set) throw new LearningError("Không tìm thấy bộ từ.");

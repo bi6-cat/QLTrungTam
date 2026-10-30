@@ -7,7 +7,6 @@ import { prisma } from "../src/lib/prisma";
 import { listClassesForTeacher, listCurrentStudentsInClass } from "../src/modules/center/portal-classes";
 import { assignClassesByTeacherName, setTeacherClasses } from "../src/modules/center/teacher-classes";
 import { authenticateStudent, authenticateTeacher } from "../src/modules/identity/authenticate";
-import { generateStudentCode } from "../src/modules/identity/credentials";
 import {
   changeTeacherPassword,
   createTeacherAccount,
@@ -182,7 +181,8 @@ describe("student accounts", () => {
   test("issuing 'missing' creates once; 'all' renews PINs and keeps codes", async () => {
     const s1 = await student("Hà");
     const s2 = await student("Lan");
-    await prisma.studentAccount.create({ data: { studentId: s2.id, code: generateStudentCode(), pinHash: hashPassword("048213") } });
+    const oldCode = `K7${ns.replace(/[^a-z]/gi, "x").slice(0, 4)}`.toUpperCase();
+    await prisma.studentAccount.create({ data: { studentId: s2.id, code: oldCode, codeKey: oldCode.toLowerCase(), pinHash: hashPassword("048213") } });
 
     const first = await issueStudentAccounts([s1.id, s2.id], "missing");
     assert.deepEqual(first.map((i) => i.studentId), [s1.id]);
@@ -201,14 +201,15 @@ describe("student accounts", () => {
     assert.equal(verifyPassword(renewed.pin, renewedRow.pinHash), true);
   });
 
-  test("retries with a new code when the generated one is taken", async () => {
-    const holder = await student("Giữ mã");
-    const [taken] = await issueStudentAccounts([holder.id], "missing");
-    const s = await student("Mới");
-    const codes = [taken.code, taken.code, generateStudentCode()];
-    const [issued] = await issueStudentAccounts([s.id], "missing", { nextCode: () => codes.shift()! });
-    assert.notEqual(issued.code, taken.code);
-    assert.equal(codes.length, 0, "phải thử 3 mã: 2 lần trùng rồi mới được");
+  test("codes follow the name and count up for namesakes, even when issued at the same time", async () => {
+    const [a, b, c] = [await student("Nguyễn Văn Hương"), await student("Nguyễn Văn Hương"), await student("Nguyễn Văn Hương")];
+    // Họ tên trong test có thêm ns ở cuối nên phần chữ của mã lấy theo ns; chỉ cần ba em chung phần chữ.
+    const base = (await issueStudentAccounts([a.id], "missing"))[0].code.replace(/\d+$/, "");
+    const parallel = await Promise.all([issueStudentAccounts([b.id], "missing"), issueStudentAccounts([c.id], "missing")]);
+    const codes = [`${base}01`, ...parallel.map(([issued]) => issued.code)].sort();
+    assert.deepEqual(codes, [`${base}01`, `${base}02`, `${base}03`]);
+    const [issuedB] = parallel[0];
+    assert.equal((await authenticateStudent(issuedB.code.toLowerCase(), issuedB.pin)).ok, true, "gõ chữ thường vẫn vào được");
   });
 
   test("PIN reset unlocks and logs out; unlock clears the counter; missing account is an error", async () => {

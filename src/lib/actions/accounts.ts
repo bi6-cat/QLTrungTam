@@ -10,6 +10,7 @@ import {
   resetManagerPasswordSchema,
   safeParseForm
 } from "@/lib/validation";
+import { teacherUsernameTaken } from "@/modules/identity";
 
 // Chỉ chủ trung tâm quản lý tài khoản quản lý phụ. Mọi thao tác chỉ chạm tài khoản role=manager
 // để không thể sửa/xóa tài khoản chủ qua các action này.
@@ -20,7 +21,8 @@ export async function createManagerAction(_prevState: ResultState, formData: For
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
 
   const existing = await prisma.adminUser.findUnique({ where: { username: data.username }, select: { id: true } });
-  if (existing) return errorState(`Tên đăng nhập "${data.username}" đã được dùng.`);
+  // Admin và giáo viên đăng nhập chung một form: tên đăng nhập không được trùng giữa hai loại.
+  if (existing || (await teacherUsernameTaken(data.username))) return errorState(`Tên đăng nhập "${data.username}" đã được dùng.`);
 
   try {
     const user = await prisma.adminUser.create({

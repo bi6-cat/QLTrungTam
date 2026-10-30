@@ -76,6 +76,7 @@ async function TeachersTab({ classes, now }: { classes: ClassOption[]; now: Date
         username: t.username,
         fullName: t.fullName,
         disabled: t.disabledAt !== null,
+        vocabEnabled: t.vocabEnabled,
         lockedUntil: t.lockedUntil && t.lockedUntil > now ? t.lockedUntil.toISOString() : null,
         classIds: t.classes.map((c) => c.id),
         classNames: t.classes.map((c) => c.name)

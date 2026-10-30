@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BookOpenCheck, CalendarDays, QrCode, ShieldCheck } from "lucide-react";
-import { clsx } from "clsx";
-import { LoginForm } from "@/components/LoginForm";
-import { StudentLoginForm, TeacherLoginForm } from "@/components/PortalLoginForms";
+import { ArrowLeft, ArrowRight, BookOpenCheck, CalendarDays, GraduationCap, QrCode, ShieldCheck } from "lucide-react";
+import { StaffLoginForm, StudentLoginForm } from "@/components/PortalLoginForms";
+import { getCurrentUser } from "@/lib/auth";
 import { getCurrentStudent, getCurrentTeacher, PORTAL_HOME } from "@/modules/identity";
 
 const FEATURES = [
@@ -51,50 +50,50 @@ function Decoration() {
   );
 }
 
-type Audience = "admin" | "teacher" | "student";
+// Quản lý và giáo viên đăng nhập chung một form; học sinh có trang riêng (mã học sinh + PIN).
+type Audience = "staff" | "student";
 
-const AUDIENCES: Record<Audience, { tab: string; title: string; hint: string; footer: string }> = {
-  admin: {
-    tab: "Quản lý",
-    title: "Chào mừng trở lại",
-    hint: "Đăng nhập bằng tài khoản quản trị được cấp.",
-    footer: "Kết nối bảo mật · chỉ dành cho quản trị viên"
-  },
-  teacher: {
-    tab: "Giáo viên",
-    title: "Chào thầy cô",
-    hint: "Đăng nhập bằng tài khoản giáo viên trung tâm cấp.",
-    footer: "Kết nối bảo mật · tài khoản giáo viên"
+const AUDIENCES: Record<Audience, { title: string; hint: string; footer: string }> = {
+  staff: {
+    title: "Đăng nhập",
+    hint: "Dành cho quản lý và giáo viên của trung tâm.",
+    footer: "Kết nối bảo mật · tài khoản do trung tâm cấp"
   },
   student: {
-    tab: "Học sinh",
     title: "Chào em",
     hint: "Nhập mã học sinh và mã PIN trên phiếu trung tâm phát.",
     footer: "Quên mã PIN? Nhờ thầy cô hoặc trung tâm cấp lại."
   }
 };
 
+// "?as=teacher" là link cũ của cổng giáo viên: giờ dùng chung form với quản lý.
 function parseAudience(value: string | string[] | undefined): Audience {
-  return value === "teacher" || value === "student" ? value : "admin";
+  return value === "student" ? "student" : "staff";
 }
 
-function AudienceTabs({ active }: { active: Audience }) {
+function SwitchLink({ audience }: { audience: Audience }) {
+  if (audience === "staff") {
+    return (
+      <Link
+        href="/login?as=student"
+        className="focus-ring mt-5 flex items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm transition hover:border-indigo-200 hover:bg-indigo-50"
+      >
+        <span className="flex items-center gap-3">
+          <GraduationCap className="h-5 w-5 text-primary" />
+          <span>
+            <span className="block font-semibold text-neutralText">Em là học sinh?</span>
+            <span className="block text-stone-500">Vào học bằng mã học sinh và mã PIN</span>
+          </span>
+        </span>
+        <ArrowRight className="h-4 w-4 text-primary" />
+      </Link>
+    );
+  }
   return (
-    <nav aria-label="Đăng nhập với vai trò" className="grid grid-cols-3 gap-1 rounded-2xl bg-stone-100 p-1">
-      {(Object.keys(AUDIENCES) as Audience[]).map((audience) => (
-        <Link
-          key={audience}
-          href={audience === "admin" ? "/login" : `/login?as=${audience}`}
-          aria-current={audience === active ? "page" : undefined}
-          className={clsx(
-            "rounded-xl px-2 py-2 text-center text-sm font-semibold transition",
-            audience === active ? "bg-white text-neutralText shadow-sm" : "text-stone-500 hover:text-neutralText"
-          )}
-        >
-          {AUDIENCES[audience].tab}
-        </Link>
-      ))}
-    </nav>
+    <Link href="/login" className="focus-ring mt-5 inline-flex items-center gap-1.5 rounded-lg text-sm font-medium text-stone-500 hover:text-primary">
+      <ArrowLeft className="h-4 w-4" />
+      Quản lý, giáo viên đăng nhập tại đây
+    </Link>
   );
 }
 
@@ -109,8 +108,9 @@ function LogoCard({ className = "" }: { className?: string }) {
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ as?: string | string[] }> }) {
   const audience = parseAudience((await searchParams).as);
-  // Đã đăng nhập cổng này rồi thì vào thẳng (vd bấm lại link đăng nhập trên điện thoại).
-  if (audience === "teacher" && (await getCurrentTeacher())) redirect(PORTAL_HOME.teacher);
+  // Đã đăng nhập rồi thì vào thẳng (vd bấm lại link đăng nhập trên điện thoại).
+  if (audience === "staff" && (await getCurrentUser())) redirect("/admin");
+  if (audience === "staff" && (await getCurrentTeacher())) redirect(PORTAL_HOME.teacher);
   if (audience === "student" && (await getCurrentStudent())) redirect(PORTAL_HOME.student);
   const copy = AUDIENCES[audience];
   const year = new Date().getFullYear();
@@ -171,14 +171,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="flex flex-1 items-start justify-center px-4 lg:items-center lg:px-12">
           <div className="-mt-10 w-full max-w-md animate-scale-in rounded-3xl border border-stone-200/80 bg-white p-7 shadow-lift sm:p-9 lg:mt-0">
             <LogoCard className="mx-auto hidden h-16 w-28 lg:block" />
-            <div className="lg:mt-6">
-              <AudienceTabs active={audience} />
-            </div>
-            <h1 className="mt-6 text-center text-2xl font-bold tracking-tight text-neutralText">{copy.title}</h1>
+            <h1 className="mt-2 text-center lg:mt-6 text-2xl font-bold tracking-tight text-neutralText">{copy.title}</h1>
             <p className="mt-1.5 text-center text-sm text-stone-500">{copy.hint}</p>
             <div className="mt-7">
-              {audience === "teacher" ? <TeacherLoginForm /> : audience === "student" ? <StudentLoginForm /> : <LoginForm />}
+              {audience === "student" ? <StudentLoginForm /> : <StaffLoginForm />}
             </div>
+            <SwitchLink audience={audience} />
             <p className="mt-7 flex items-center justify-center gap-1.5 border-t border-stone-100 pt-5 text-xs text-stone-400">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
               {copy.footer}

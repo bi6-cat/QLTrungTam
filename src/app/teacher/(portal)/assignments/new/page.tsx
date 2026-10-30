@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, Languages } from "lucide-react";
+import { BookOpen, Camera, ChevronRight, ListChecks, Languages } from "lucide-react";
+import { clsx } from "clsx";
 import { AssignmentForm } from "@/components/learning/AssignmentForm";
-import { EmptyState, PageHeader, Panel } from "@/components/ui";
+import { Badge, EmptyState, PageHeader, Panel } from "@/components/ui";
 import { listClassesForTeacher } from "@/modules/center";
-import { requireTeacher } from "@/modules/identity";
+import { requireTeacher, type CurrentTeacher } from "@/modules/identity";
 import {
   listVocabSets,
   MAX_ATTEMPTS,
@@ -17,10 +18,66 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Giao bài mới" };
 
-export default async function NewAssignmentPage({ searchParams }: { searchParams: Promise<{ set?: string }> }) {
+export default async function NewAssignmentPage({ searchParams }: { searchParams: Promise<{ type?: string; set?: string }> }) {
   const teacher = await requireTeacher();
-  const [classes, sets] = await Promise.all([listClassesForTeacher(teacher.id), listVocabSets(teacher.id)]);
+  const params = await searchParams;
+  // Link cũ "?set=…" (trước khi có bước chọn loại bài) vẫn mở thẳng form từ vựng.
+  if ((params.type === "vocab" || params.set) && teacher.vocabEnabled) return <VocabAssignment teacher={teacher} setId={params.set} />;
+  return <TypePicker vocabEnabled={teacher.vocabEnabled} />;
+}
 
+function TypePicker({ vocabEnabled }: { vocabEnabled: boolean }) {
+  const types = [
+    {
+      key: "vocab",
+      icon: Languages,
+      title: "Kiểm tra từ vựng",
+      text: "Tự sinh câu hỏi từ bộ từ: chọn nghĩa, chọn từ, gõ từ. Mỗi lượt một đề trộn khác nhau.",
+      href: vocabEnabled ? "/teacher/assignments/new?type=vocab" : null,
+      note: vocabEnabled ? null : "Trung tâm chưa bật cho thầy cô"
+    },
+    { key: "quiz", icon: ListChecks, title: "Trắc nghiệm", text: "Câu hỏi trắc nghiệm cho mọi môn, nhập đề từ Excel.", href: null, note: "Sắp có" },
+    { key: "photo", icon: Camera, title: "Nộp bài bằng ảnh", text: "Học sinh chụp bài làm trên giấy rồi nộp, thầy cô chấm và nhận xét.", href: null, note: "Sắp có" }
+  ];
+  return (
+    <>
+      <PageHeader title="Giao bài mới" description="Chọn loại bài muốn giao cho lớp." />
+      <ul className="grid gap-3">
+        {types.map((t) => {
+          const body = (
+            <Panel className={clsx("flex items-center gap-4", t.href ? "transition hover:border-primary/40 hover:bg-indigo-50/40" : "opacity-70")}>
+              <span className={clsx("grid h-11 w-11 shrink-0 place-items-center rounded-xl", t.href ? "bg-indigo-50 text-primary" : "bg-stone-100 text-stone-400")}>
+                <t.icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2 font-semibold text-neutralText">
+                  {t.title}
+                  {t.note ? <Badge tone="neutral">{t.note}</Badge> : null}
+                </span>
+                <span className="block text-sm text-stone-600">{t.text}</span>
+              </span>
+              {t.href ? <ChevronRight className="h-5 w-5 shrink-0 text-stone-400" /> : null}
+            </Panel>
+          );
+          return (
+            <li key={t.key}>
+              {t.href ? (
+                <Link href={t.href} className="focus-ring block rounded-2xl">
+                  {body}
+                </Link>
+              ) : (
+                body
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+async function VocabAssignment({ teacher, setId }: { teacher: CurrentTeacher; setId?: string }) {
+  const [classes, sets] = await Promise.all([listClassesForTeacher(teacher.id), listVocabSets(teacher.id)]);
   return (
     <>
       <PageHeader title="Giao bài kiểm tra từ vựng" description="Hệ thống tự sinh câu hỏi từ bộ từ, mỗi lượt làm một đề trộn khác nhau." />
@@ -41,7 +98,7 @@ export default async function NewAssignmentPage({ searchParams }: { searchParams
             classes={classes.map((c) => ({ id: c.id, label: `${c.name} (${c.studentCount} HS)` }))}
             sets={sets.map((s) => ({ id: s.id, label: s.title, wordCount: s.wordCount }))}
             types={QUESTION_TYPES.map((t) => ({ value: t, label: QUESTION_TYPE_LABEL[t], choice: t !== "type_term" }))}
-            defaultSetId={(await searchParams).set}
+            defaultSetId={setId}
             minWordsForChoice={MIN_WORDS_FOR_CHOICE}
             maxAttempts={MAX_ATTEMPTS}
             maxTimeLimit={MAX_TIME_LIMIT_MINUTES}

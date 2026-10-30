@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
 import { AssignmentStateBadge } from "@/components/learning/AssignmentStateBadge";
+import { AssignmentsSubnav } from "@/components/learning/AssignmentsSubnav";
 import { EmptyState, PageHeader, Panel } from "@/components/ui";
 import { formatTimeDay } from "@/lib/format";
 import { requireTeacher } from "@/modules/identity";
 import { listAssignmentsForTeacher } from "@/modules/learning";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Bài giao" };
+export const metadata: Metadata = { title: "Bài tập" };
+
+const KIND_LABEL = { vocab_quiz: "Kiểm tra từ vựng" } as const;
 
 export default async function TeacherAssignmentsPage() {
   const teacher = await requireTeacher();
@@ -17,8 +20,8 @@ export default async function TeacherAssignmentsPage() {
   return (
     <>
       <PageHeader
-        title="Bài giao"
-        description="Bài kiểm tra từ vựng đã giao cho các lớp."
+        title="Bài tập"
+        description="Bài đã giao cho các lớp và kết quả của học sinh."
         actions={
           <Link
             href="/teacher/assignments/new"
@@ -29,9 +32,10 @@ export default async function TeacherAssignmentsPage() {
           </Link>
         }
       />
+      <AssignmentsSubnav active="assignments" vocabEnabled={teacher.vocabEnabled} />
       {assignments.length === 0 ? (
         <EmptyState title="Chưa giao bài nào" icon={<ClipboardList className="h-5 w-5" />}>
-          Tạo bộ từ vựng trước, rồi bấm &quot;Giao bài mới&quot; để giao bài kiểm tra cho lớp.
+          Bấm &quot;Giao bài mới&quot; để chọn loại bài và giao cho lớp.
         </EmptyState>
       ) : (
         <Panel className="p-0">
@@ -45,7 +49,7 @@ export default async function TeacherAssignmentsPage() {
                       <AssignmentStateBadge state={a.state} />
                     </span>
                     <span className="block text-xs text-stone-500">
-                      {a.className} · {a.questionCount} câu · {a.dueAt ? `hạn ${formatTimeDay(a.dueAt)}` : "không hạn"}
+                      {KIND_LABEL[a.kind]} · {a.className} · {a.questionCount} câu · {a.dueAt ? `hạn ${formatTimeDay(a.dueAt)}` : "không hạn"}
                     </span>
                   </span>
                   <span className="text-sm tabular-nums text-stone-600">

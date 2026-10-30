@@ -1,5 +1,6 @@
 import { prisma } from "@/modules/core";
 import { LearningError } from "../errors";
+import { assertVocabEnabled } from "./access";
 import { MAX_WORDS_PER_SET, termKey, type ParsedWord } from "./word-list";
 
 const MAX_TITLE = 120;
@@ -40,6 +41,7 @@ export async function getVocabSet(teacherId: string, setId: string) {
 
 export async function createVocabSet(teacherId: string, title: string, words: readonly ParsedWord[]) {
   const cleanTitle = checkSet(title, words);
+  await assertVocabEnabled(teacherId);
   return prisma.vocabSet.create({
     data: { teacherId, title: cleanTitle, words: { create: words.map((w, position) => ({ ...w, position })) } },
     select: { id: true }
@@ -52,6 +54,7 @@ export async function createVocabSet(teacherId: string, title: string, words: re
  */
 export async function updateVocabSet(teacherId: string, setId: string, title: string, words: readonly ParsedWord[]) {
   const cleanTitle = checkSet(title, words);
+  await assertVocabEnabled(teacherId);
   await prisma.$transaction(async (tx) => {
     const set = await tx.vocabSet.findFirst({
       where: { id: setId, teacherId, archivedAt: null },

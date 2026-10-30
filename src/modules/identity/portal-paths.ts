@@ -14,4 +14,4 @@ export function portalForPath(pathname: string): PortalKind | null {
 }
 
 export const PORTAL_HOME: Record<PortalKind, string> = { teacher: "/teacher", student: "/learn" };
-export const PORTAL_LOGIN: Record<PortalKind, string> = { teacher: "/login?as=teacher", student: "/login?as=student" };
+export const PORTAL_LOGIN: Record<PortalKind, string> = { teacher: "/login", student: "/login?as=student" };

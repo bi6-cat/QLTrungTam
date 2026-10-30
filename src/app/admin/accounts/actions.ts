@@ -19,6 +19,7 @@ import {
   resetStudentPin,
   resetTeacherPassword,
   setTeacherDisabled,
+  setTeacherVocabEnabled,
   unlockStudent,
   unlockTeacher
 } from "@/modules/identity";
@@ -43,9 +44,17 @@ export async function createTeacherAction(_prev: ResultState, formData: FormData
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
 
   try {
+    // Admin và giáo viên đăng nhập chung một form: tên đăng nhập không được trùng giữa hai loại.
+    if (await prisma.adminUser.count({ where: { username: { equals: data.username, mode: "insensitive" } } })) {
+      return errorState(`Tên đăng nhập "${data.username}" đã được dùng.`);
+    }
     const teacher = await createTeacherAccount(data);
     const assigned = await assignClassesByTeacherName(teacher.id, teacher.fullName);
-    await audit(actor, "teacher.created", "Teacher", teacher.id, { username: teacher.username, autoAssignedClassIds: assigned });
+    await audit(actor, "teacher.created", "Teacher", teacher.id, {
+      username: teacher.username,
+      vocabEnabled: data.vocabEnabled,
+      autoAssignedClassIds: assigned
+    });
     return successState(
       assigned.length > 0
         ? `Đã tạo tài khoản "${teacher.username}" và gán ${assigned.length} lớp có giáo viên "${teacher.fullName}".`
@@ -100,6 +109,22 @@ export async function setTeacherDisabledAction(teacherId: string, disabled: bool
     return successState(disabled ? "Đã khoá tài khoản và đăng xuất giáo viên." : "Đã mở lại tài khoản.");
   } catch (toggleError) {
     return failure(toggleError, "Không đổi được trạng thái tài khoản.");
+  }
+}
+
+export async function setTeacherVocabAction(teacherId: string, enabled: boolean): Promise<ResultState> {
+  const actor = await requireAdmin();
+  const parsed = teacherIdSchema.safeParse({ teacherId });
+  if (!parsed.success) return errorState("Tài khoản không hợp lệ.");
+
+  try {
+    await setTeacherVocabEnabled(parsed.data.teacherId, enabled === true);
+    await audit(actor, enabled ? "teacher.vocab_enabled" : "teacher.vocab_disabled", "Teacher", parsed.data.teacherId);
+    return successState(
+      enabled ? "Đã bật kiểm tra từ vựng." : "Đã tắt kiểm tra từ vựng. Bài đã giao và kết quả vẫn xem được."
+    );
+  } catch (toggleError) {
+    return failure(toggleError, "Không đổi được tính năng từ vựng.");
   }
 }
 

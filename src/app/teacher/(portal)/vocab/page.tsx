@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Languages, Plus } from "lucide-react";
+import { AssignmentsSubnav } from "@/components/learning/AssignmentsSubnav";
 import { EmptyState, PageHeader, Panel } from "@/components/ui";
 import { formatDayMonth } from "@/lib/format";
-import { requireTeacher } from "@/modules/identity";
+import { requireVocabTeacher } from "@/app/teacher/(portal)/vocab/require-vocab";
 import { listVocabSets } from "@/modules/learning";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ const newButton =
   "focus-ring inline-flex h-11 items-center gap-2 rounded-xl bg-gradient-to-b from-indigo-600 to-primary px-4 text-sm font-semibold text-white shadow-sm hover:from-indigo-700 hover:to-indigo-900";
 
 export default async function VocabSetsPage() {
-  const teacher = await requireTeacher();
+  const teacher = await requireVocabTeacher();
   const sets = await listVocabSets(teacher.id);
 
   return (
@@ -28,9 +29,10 @@ export default async function VocabSetsPage() {
           </Link>
         }
       />
+      <AssignmentsSubnav active="vocab" vocabEnabled />
       {sets.length === 0 ? (
         <EmptyState title="Chưa có bộ từ nào" icon={<Languages className="h-5 w-5" />}>
-          Tạo bộ từ đầu tiên bằng cách dán danh sách từ, mỗi dòng một từ, ví dụ <code>apple - quả táo</code>.
+          Tạo bộ từ đầu tiên bằng cách dán danh sách từ (mỗi dòng một từ, ví dụ <code>apple - quả táo</code>) hoặc tải file Excel lên.
         </EmptyState>
       ) : (
         <Panel className="p-0">

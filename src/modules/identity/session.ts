@@ -36,7 +36,7 @@ export const getCurrentStudent = cache(async () => resolveStudentSession(await r
 /** Gọi ở đầu mọi trang và server action của cổng giáo viên, không chỉ ở layout. */
 export async function requireTeacher() {
   const teacher = await getCurrentTeacher();
-  if (!teacher) redirect("/login?as=teacher");
+  if (!teacher) redirect("/login");
   return teacher;
 }
 

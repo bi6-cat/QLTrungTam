@@ -101,11 +101,6 @@ const looseText = (max: number) =>
 // ---------------------------------------------------------------------------
 // Schema theo từng action.
 // ---------------------------------------------------------------------------
-export const loginSchema = z.object({
-  username: z.string().trim().min(1).max(120),
-  password: z.string().min(1).max(200)
-});
-
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Nhập mật khẩu hiện tại").max(200),
@@ -138,7 +133,8 @@ export const deleteManagerSchema = z.object({ userId: id });
 export const createTeacherSchema = z.object({
   fullName: personName("Nhập họ tên giáo viên", 80),
   username,
-  password: newPassword
+  password: newPassword,
+  vocabEnabled: z.preprocess((v) => v === "on" || v === "true", z.boolean())
 });
 
 export const resetTeacherPasswordSchema = z.object({ teacherId: id, password: newPassword });

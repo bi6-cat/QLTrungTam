@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { hashPassword, prisma, verifyPassword } from "@/modules/core";
-import { generatePin, generateStudentCode } from "./credentials";
+import { formatStudentCode, generatePin, nextStudentCodeNumber, studentCodeBase } from "./credentials";
 
 // Thao tác quản trị tài khoản (admin gọi). Kiểm quyền và ghi audit log do lớp gọi (server action) lo.
 
@@ -27,18 +27,28 @@ export async function listTeacherAccounts() {
       fullName: true,
       lockedUntil: true,
       disabledAt: true,
+      vocabEnabled: true,
       createdAt: true,
       classes: { where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true, shortCode: true } }
     }
   });
 }
 
-export async function createTeacherAccount(input: { username: string; fullName: string; password: string }) {
-  const taken = await prisma.teacher.count({ where: { username: input.username } });
-  if (taken) throw new IdentityError(`Tên đăng nhập "${input.username}" đã được dùng.`);
+/** Tên đăng nhập giáo viên đã có chưa (so không phân biệt hoa thường). */
+export async function teacherUsernameTaken(username: string) {
+  return (await prisma.teacher.count({ where: { username: username.trim().toLowerCase() } })) > 0;
+}
+
+export async function createTeacherAccount(input: { username: string; fullName: string; password: string; vocabEnabled?: boolean }) {
+  if (await teacherUsernameTaken(input.username)) throw new IdentityError(`Tên đăng nhập "${input.username}" đã được dùng.`);
   try {
     return await prisma.teacher.create({
-      data: { username: input.username, fullName: input.fullName, passwordHash: hashPassword(input.password) },
+      data: {
+        username: input.username,
+        fullName: input.fullName,
+        passwordHash: hashPassword(input.password),
+        vocabEnabled: input.vocabEnabled ?? false
+      },
       select: { id: true, username: true, fullName: true }
     });
   } catch (error) {
@@ -91,6 +101,16 @@ export function unlockTeacher(teacherId: string) {
   return updateTeacher(teacherId, { failedLogins: 0, lockedUntil: null });
 }
 
+/** Bật/tắt bộ từ vựng và bài kiểm tra từ vựng. Tắt thì bài đã giao và kết quả vẫn xem được. */
+export function setTeacherVocabEnabled(teacherId: string, enabled: boolean) {
+  return updateTeacher(teacherId, { vocabEnabled: enabled });
+}
+
+/** Giáo viên có được dùng tính năng từ vựng không (module learning gọi trước khi tạo bộ từ, giao bài). */
+export async function isVocabEnabled(teacherId: string) {
+  return (await prisma.teacher.count({ where: { id: teacherId, vocabEnabled: true, disabledAt: null } })) > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Học sinh
 // ---------------------------------------------------------------------------
@@ -107,16 +127,24 @@ export async function getStudentAccounts(studentIds: readonly string[]) {
 
 const CODE_ATTEMPTS = 5;
 
-/** Tạo tài khoản với mã mới; mã trùng (rất hiếm) thì sinh mã khác. */
-async function createAccount(studentId: string, nextCode: () => string): Promise<IssuedCredential> {
+/** Mã kế tiếp cho tên này: "HuongNV01", trùng thì "HuongNV02"… */
+async function nextCodeFor(fullName: string) {
+  const base = studentCodeBase(fullName);
+  const taken = await prisma.studentAccount.findMany({
+    where: { codeKey: { startsWith: base.toLowerCase() } },
+    select: { code: true }
+  });
+  return formatStudentCode(base, nextStudentCodeNumber(base, taken.map((t) => t.code)));
+}
+
+/** Tạo tài khoản với mã theo tên; hai thao tác cùng lấy một số (hiếm) thì tính lại số khác. */
+async function createAccount(studentId: string, fullName: string): Promise<IssuedCredential> {
   const pin = generatePin();
   const pinHash = hashPassword(pin);
   for (let attempt = 1; ; attempt++) {
-    const code = nextCode();
-    // Kiểm trước để mã trùng không thành lỗi Prisma trong log; catch bên dưới chỉ còn cho lúc tranh nhau.
-    if (attempt < CODE_ATTEMPTS && (await prisma.studentAccount.count({ where: { code } }))) continue;
+    const code = await nextCodeFor(fullName);
     try {
-      await prisma.studentAccount.create({ data: { studentId, code, pinHash } });
+      await prisma.studentAccount.create({ data: { studentId, code, codeKey: code.toLowerCase(), pinHash } });
       return { studentId, code, pin };
     } catch (error) {
       if (isUniqueViolation(error, "code") && attempt < CODE_ATTEMPTS) continue;
@@ -142,16 +170,14 @@ async function renewPin(studentId: string): Promise<IssuedCredential | null> {
  * Cấp tài khoản cho các học sinh: "missing" chỉ tạo cho em chưa có; "all" tạo cho em chưa có và
  * đổi PIN của em đã có. PIN chỉ trả về lúc này (DB chỉ giữ bản băm), nên phải in phiếu ngay.
  */
-export async function issueStudentAccounts(
-  studentIds: readonly string[],
-  mode: "missing" | "all",
-  options: { nextCode?: () => string } = {}
-) {
-  const nextCode = options.nextCode ?? generateStudentCode;
+export async function issueStudentAccounts(studentIds: readonly string[], mode: "missing" | "all") {
   const existing = await getStudentAccounts(studentIds);
+  const names = new Map(
+    (await prisma.student.findMany({ where: { id: { in: [...studentIds] } }, select: { id: true, fullName: true } })).map((s) => [s.id, s.fullName])
+  );
   const issued: IssuedCredential[] = [];
   for (const studentId of studentIds) {
-    if (!existing.has(studentId)) issued.push(await createAccount(studentId, nextCode));
+    if (!existing.has(studentId)) issued.push(await createAccount(studentId, names.get(studentId) ?? ""));
     else if (mode === "all") {
       const renewed = await renewPin(studentId);
       if (renewed) issued.push(renewed);

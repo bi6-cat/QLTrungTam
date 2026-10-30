@@ -1,12 +1,13 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { BookOpen, KeyRound, Lock, LockOpen, UserPlus } from "lucide-react";
+import { BookOpen, KeyRound, Languages, Lock, LockOpen, UserPlus } from "lucide-react";
 import {
   createTeacherAction,
   resetTeacherPasswordAction,
   setTeacherClassesAction,
   setTeacherDisabledAction,
+  setTeacherVocabAction,
   unlockTeacherAction
 } from "@/app/admin/accounts/actions";
 import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
@@ -20,6 +21,7 @@ type TeacherRow = {
   username: string;
   fullName: string;
   disabled: boolean;
+  vocabEnabled: boolean;
   /** ISO, chỉ có khi đang bị khoá vì nhập sai. */
   lockedUntil: string | null;
   classIds: string[];
@@ -70,12 +72,18 @@ export function TeacherAccounts({
                       ) : (
                         <Badge tone="success">Đang dùng</Badge>
                       )}
+                      {teacher.vocabEnabled ? <Badge tone="primary">Từ vựng</Badge> : null}
                     </p>
                     <p className="font-mono text-xs text-stone-500">{teacher.username}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
                     <ClassesButton teacher={teacher} classes={classes} />
                     <ResetPasswordButton teacher={teacher} />
+                    <QuickActionButton
+                      label={teacher.vocabEnabled ? "Tắt từ vựng" : "Bật từ vựng"}
+                      icon={<Languages className="h-3.5 w-3.5" />}
+                      run={() => setTeacherVocabAction(teacher.id, !teacher.vocabEnabled)}
+                    />
                     {teacher.lockedUntil && !teacher.disabled ? (
                       <QuickActionButton
                         label="Mở khoá"
@@ -141,6 +149,13 @@ function CreateTeacherForm({ nameSuggestions }: { nameSuggestions: string[] }) {
           <Input name="password" type="password" autoComplete="new-password" required minLength={8} />
         </Field>
       </div>
+      <label className="flex items-start gap-3 text-sm">
+        <input type="checkbox" name="vocabEnabled" className="mt-0.5 h-4 w-4 accent-primary" />
+        <span>
+          <span className="font-medium text-neutralText">Bật kiểm tra từ vựng</span>
+          <span className="block text-xs text-stone-500">Cho giáo viên ngoại ngữ: tạo bộ từ và giao bài kiểm tra từ vựng. Bật/tắt lại được sau.</span>
+        </span>
+      </label>
       {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}
       <div>
         <Button type="submit" disabled={pending}>

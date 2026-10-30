@@ -1,7 +1,8 @@
 "use client";
 
-import { Eye, Save } from "lucide-react";
-import { saveVocabSetAction, type VocabSetFormState } from "@/app/teacher/(portal)/vocab/actions";
+import { useRef, useState, useTransition } from "react";
+import { Download, Eye, FileUp, Save } from "lucide-react";
+import { importWordFileAction, saveVocabSetAction, type VocabSetFormState } from "@/app/teacher/(portal)/vocab/actions";
 import { useKeepValuesAction } from "@/components/useKeepValuesAction";
 import { Button, Field, Input, Textarea } from "@/components/ui";
 
@@ -12,17 +13,59 @@ run (v) - chạy
 well-known - nổi tiếng
 colour / color - màu sắc`;
 
+const FILE_ACCEPT = ".xlsx,.csv,.tsv,.txt";
+
 export function VocabSetForm({ setId, defaultTitle = "", defaultWords = "" }: { setId?: string; defaultTitle?: string; defaultWords?: string }) {
   const [state, onSubmit, pending] = useKeepValuesAction(saveVocabSetAction, EMPTY);
+  const formRef = useRef<HTMLFormElement>(null);
+  const wordsRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLButtonElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileMessage, setFileMessage] = useState({ error: "", info: "" });
+  const [reading, startReading] = useTransition();
+
+  /** Đọc file ở server, điền vào ô danh sách rồi bấm "Xem trước" luôn để thấy dòng lỗi (nếu có). */
+  function onFile(file: File | undefined) {
+    if (!file) return;
+    const data = new FormData();
+    data.append("file", file);
+    startReading(async () => {
+      try {
+        const result = await importWordFileAction(data);
+        if (result.error) return setFileMessage({ error: result.error, info: "" });
+        if (wordsRef.current) wordsRef.current.value = result.text;
+        setFileMessage({ error: "", info: `Đã đọc ${result.count} từ từ file "${file.name}". Kiểm tra bảng xem trước rồi bấm Lưu.` });
+        formRef.current?.requestSubmit(previewRef.current);
+      } catch {
+        setFileMessage({ error: "Không kết nối được máy chủ. Vui lòng thử lại.", info: "" });
+      } finally {
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    });
+  }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4">
+    <form ref={formRef} onSubmit={onSubmit} className="grid gap-4">
       {setId ? <input type="hidden" name="setId" value={setId} /> : null}
       <Field label="Tên bộ từ">
         <Input name="title" defaultValue={defaultTitle} placeholder="vd: Unit 3 - Animals" required maxLength={120} />
       </Field>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5 text-sm">
+        <input ref={fileRef} type="file" accept={FILE_ACCEPT} className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+        <Button type="button" variant="secondary" disabled={reading || pending} onClick={() => fileRef.current?.click()}>
+          <FileUp className="h-4 w-4" />
+          {reading ? "Đang đọc file..." : "Tải file lên"}
+        </Button>
+        <span className="text-stone-600">Excel (.xlsx), CSV hoặc file .txt xuất từ Quizlet.</span>
+        <a href="/teacher/vocab/template" className="focus-ring ml-auto inline-flex items-center gap-1 rounded-lg font-semibold text-primary hover:underline">
+          <Download className="h-4 w-4" />
+          File mẫu
+        </a>
+      </div>
+      {fileMessage.error ? <p className="text-sm font-medium text-warning">{fileMessage.error}</p> : null}
+      {fileMessage.info ? <p className="text-sm text-emerald-700">{fileMessage.info}</p> : null}
       <Field label="Danh sách từ" hint="mỗi dòng một từ">
-        <Textarea name="words" defaultValue={defaultWords} placeholder={PLACEHOLDER} rows={14} spellCheck={false} required className="font-mono text-sm" />
+        <Textarea ref={wordsRef} name="words" defaultValue={defaultWords} placeholder={PLACEHOLDER} rows={14} spellCheck={false} required className="font-mono text-sm" />
       </Field>
       <details className="rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-600">
         <summary className="cursor-pointer font-medium text-stone-700">Cách viết</summary>
@@ -37,6 +80,10 @@ export function VocabSetForm({ setId, defaultTitle = "", defaultWords = "" }: { 
             Câu ví dụ sau dấu <code>|</code>. Từ có nhiều cách viết: <code>colour / color</code>, học sinh gõ cách nào cũng đúng.
           </li>
           <li>Copy 2–4 cột từ Excel (từ, nghĩa, từ loại, ví dụ) rồi dán thẳng vào cũng được.</li>
+          <li>
+            Tải file lên: cột A là từ, B là nghĩa, C từ loại, D ví dụ (dòng tiêu đề có hay không đều được). Quizlet: chọn Xuất (Export), để
+            mặc định &quot;Tab&quot; giữa từ và nghĩa, lưu thành file .txt.
+          </li>
         </ul>
       </details>
 
@@ -79,7 +126,7 @@ export function VocabSetForm({ setId, defaultTitle = "", defaultWords = "" }: { 
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" name="intent" value="preview" variant="secondary" disabled={pending}>
+        <Button ref={previewRef} type="submit" name="intent" value="preview" variant="secondary" disabled={pending}>
           <Eye className="h-4 w-4" />
           Xem trước
         </Button>

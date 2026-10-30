@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Hash, KeyRound, LogIn, UserRound } from "lucide-react";
-import { studentLoginAction, teacherLoginAction } from "@/app/login/actions";
+import { staffLoginAction, studentLoginAction } from "@/app/login/actions";
 import { Button, Field, Input } from "@/components/ui";
 import { useKeepValuesAction } from "@/components/useKeepValuesAction";
 
@@ -23,8 +23,9 @@ function ErrorMessage({ error }: { error: string }) {
   return <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{error}</p>;
 }
 
-export function TeacherLoginForm() {
-  const [state, onSubmit, pending] = useKeepValuesAction(teacherLoginAction, { error: "" });
+/** Quản lý và giáo viên dùng chung form; server tự nhận ra loại tài khoản. */
+export function StaffLoginForm() {
+  const [state, onSubmit, pending] = useKeepValuesAction(staffLoginAction, { error: "" });
   const passwordRef = useClearSecretOnError(state);
 
   return (
@@ -62,11 +63,11 @@ export function StudentLoginForm() {
           <Input
             name="code"
             autoComplete="username"
-            autoCapitalize="characters"
+            autoCapitalize="none"
             spellCheck={false}
-            placeholder="VD: K7M2XQ"
+            placeholder="VD: HuongNV02"
             required
-            className="h-12 pl-10 font-mono uppercase tracking-widest"
+            className="h-12 pl-10 font-mono tracking-wide"
           />
         </span>
       </Field>

@@ -42,8 +42,10 @@ const WORDS = parseWordList(
   ["apple - quả táo", "banana - quả chuối", "cat - con mèo", "dog - con chó", "run - chạy", "swim - bơi"].join("\n")
 ).words;
 
-async function makeTeacher() {
-  const t = await prisma.teacher.create({ data: { username: `lt-${ns}-${seq++}`, passwordHash: hashPassword("x"), fullName: "Cô Trang" } });
+async function makeTeacher(vocabEnabled = true) {
+  const t = await prisma.teacher.create({
+    data: { username: `lt-${ns}-${seq++}`, passwordHash: hashPassword("x"), fullName: "Cô Trang", vocabEnabled }
+  });
   ids.teachers.push(t.id);
   return t;
 }
@@ -134,6 +136,25 @@ describe("vocab sets", () => {
     assert.equal(after.words[2].id, before.get("one"));
     await archiveVocabSet(teacher.id, id);
     assert.equal(await getVocabSet(teacher.id, id), null);
+  });
+});
+
+describe("vocab feature switch", () => {
+  test("a teacher the centre has not enabled cannot create sets or vocab assignments", async () => {
+    const mathTeacher = await makeTeacher(false);
+    const mathClass = await makeClass(mathTeacher.id);
+    await assert.rejects(createVocabSet(mathTeacher.id, "Unit 1", WORDS), /chưa bật tính năng kiểm tra từ vựng/);
+    await assert.rejects(createVocabAssignment(mathTeacher.id, quizInput({ classId: mathClass.id })), /chưa bật tính năng kiểm tra từ vựng/);
+
+    // Tắt sau khi đã giao: bài cũ và kết quả vẫn xem được, chỉ không tạo mới.
+    const { id } = await createVocabAssignment(teacher.id, quizInput({ title: "Trước khi tắt" }));
+    await prisma.teacher.update({ where: { id: teacher.id }, data: { vocabEnabled: false } });
+    try {
+      assert.ok(await getAssignmentResults(teacher.id, id));
+      await assert.rejects(updateVocabSet(teacher.id, setId, "Unit 1", WORDS), LearningError);
+    } finally {
+      await prisma.teacher.update({ where: { id: teacher.id }, data: { vocabEnabled: true } });
+    }
   });
 });
 

@@ -19,8 +19,7 @@ export default async function TeacherPortalLayout({ children }: { children: Reac
       logoutAction={teacherLogoutAction}
       nav={[
         { href: "/teacher", label: "Lớp của tôi", icon: "classes" },
-        { href: "/teacher/assignments", label: "Bài giao", icon: "tasks" },
-        { href: "/teacher/vocab", label: "Bộ từ vựng", icon: "vocab" },
+        { href: "/teacher/assignments", label: "Bài tập", icon: "tasks", match: ["/teacher/vocab"] },
         { href: "/teacher/materials", label: "Tài liệu", icon: "materials" },
         { href: "/teacher/account", label: "Tài khoản", icon: "account" }
       ]}

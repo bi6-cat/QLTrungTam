@@ -10,7 +10,7 @@ export function Button({
   className,
   variant = "primary",
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+}: React.ComponentProps<"button"> & {
   variant?: "primary" | "secondary" | "accent" | "danger" | "ghost";
 }) {
   return (
@@ -44,7 +44,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cn(controlBase, "cursor-pointer", props.className)} />;
 }
 
-export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea(props: React.ComponentProps<"textarea">) {
   return (
     <textarea
       {...props}

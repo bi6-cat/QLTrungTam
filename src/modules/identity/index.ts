@@ -1,13 +1,14 @@
 export {
+  formatStudentCode,
   generatePin,
-  generateStudentCode,
   isValidPin,
   isWeakPin,
-  normalizeStudentCode,
+  nextStudentCodeNumber,
   PIN_LENGTH,
-  STUDENT_CODE_LENGTH
+  studentCodeBase,
+  studentCodeKey
 } from "./credentials";
-export { isLocked, lockAfterFailure, LOCK_MINUTES, MAX_FAILED_LOGINS, minutesUntil } from "./lockout";
+export { isLocked, lockAfterFailure, LOCK_MINUTES, MAX_FAILED_LOGINS, minutesUntil, STUDENT_MAX_FAILED_LOGINS } from "./lockout";
 export {
   decodePortalToken,
   encodePortalToken,
@@ -39,11 +40,14 @@ export {
   createTeacherAccount,
   getStudentAccounts,
   IdentityError,
+  isVocabEnabled,
   issueStudentAccounts,
   listTeacherAccounts,
   resetStudentPin,
   resetTeacherPassword,
   setTeacherDisabled,
+  setTeacherVocabEnabled,
+  teacherUsernameTaken,
   unlockStudent,
   unlockTeacher,
   type IssuedCredential

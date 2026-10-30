@@ -1,23 +1,59 @@
 import { randomInt } from "crypto";
 
-// Bỏ các ký tự dễ nhầm khi đọc/gõ (0/O, 1/I/L) vì học sinh nhỏ tự gõ mã từ giấy phát.
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-export const STUDENT_CODE_LENGTH = 6;
 export const PIN_LENGTH = 6;
+const MAX_CODE_BASE = 20;
 
-/** Mã đăng nhập ngẫu nhiên (31^6 ≈ 887 triệu khả năng), không suy ra được mã của bạn khác. */
-export function generateStudentCode() {
-  let code = "";
-  for (let i = 0; i < STUDENT_CODE_LENGTH; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-  return code;
+/**
+ * Phần chữ của mã học sinh: tên không dấu + chữ cái đầu của họ và tên đệm.
+ * "Nguyễn Văn Hương" → "HuongNV", "Lê Thị Đào" → "DaoLT". Tên trống → "HocSinh".
+ */
+export function studentCodeBase(fullName: string) {
+  // Bỏ ghi chú trong ngoặc và cụm có chữ số ("Ngô Thị Ánh (12A)", "Vũ Minh 2") để chúng không thành tên.
+  const words = fullName
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .split(/\s+/)
+    .filter((word) => !/\d/.test(word))
+    .map((word) => word.replace(/[^A-Za-z]/g, ""))
+    .filter(Boolean);
+  if (words.length === 0) return "HocSinh";
+  const given = words.at(-1)!;
+  const initials = words
+    .slice(0, -1)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  return (given[0].toUpperCase() + given.slice(1).toLowerCase() + initials).slice(0, MAX_CODE_BASE);
 }
 
-/** Mã học sinh gõ vào: bỏ khoảng trắng/gạch, chữ hoa; null nếu không thể là mã hợp lệ. */
-export function normalizeStudentCode(input: string) {
-  const code = input.replace(/[\s-]/g, "").toUpperCase();
-  if (code.length !== STUDENT_CODE_LENGTH) return null;
-  for (const char of code) if (!CODE_ALPHABET.includes(char)) return null;
-  return code;
+/** "HuongNV" + 2 → "HuongNV02"; từ 100 trở đi thì đủ ba chữ số. */
+export function formatStudentCode(base: string, n: number) {
+  return `${base}${String(n).padStart(2, "0")}`;
+}
+
+/** Số nhỏ nhất (từ 1) chưa có trong các mã đã cấp cùng phần chữ (so không phân biệt hoa thường). */
+export function nextStudentCodeNumber(base: string, existingCodes: Iterable<string>) {
+  const pattern = new RegExp(`^${base}(\\d{2,})$`, "i");
+  const used = new Set<number>();
+  for (const code of existingCodes) {
+    const match = pattern.exec(code);
+    if (match) used.add(Number(match[1]));
+  }
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+}
+
+/**
+ * Mã học sinh gõ vào → khoá tra cứu (viết thường, bỏ khoảng trắng/gạch); null nếu không thể là mã.
+ * Nhận cả mã mới ("HuongNV02") lẫn mã ngẫu nhiên 6 ký tự của tài khoản cũ.
+ */
+export function studentCodeKey(input: string) {
+  const code = input.replace(/[\s-]/g, "").toLowerCase();
+  return /^[a-z0-9]{4,24}$/.test(code) ? code : null;
 }
 
 export function isValidPin(pin: string) {

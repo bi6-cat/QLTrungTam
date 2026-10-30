@@ -5,7 +5,7 @@ import { CheckCircle2, Send } from "lucide-react";
 import { ArchiveVocabSetButton } from "@/components/learning/ArchiveVocabSetButton";
 import { VocabSetForm } from "@/components/learning/VocabSetForm";
 import { PageHeader, Panel } from "@/components/ui";
-import { requireTeacher } from "@/modules/identity";
+import { requireVocabTeacher } from "@/app/teacher/(portal)/vocab/require-vocab";
 import { formatWordList, getVocabSet } from "@/modules/learning";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export default async function VocabSetPage({
   params: Promise<{ setId: string }>;
   searchParams: Promise<{ saved?: string }>;
 }) {
-  const teacher = await requireTeacher();
+  const teacher = await requireVocabTeacher();
   const set = await getVocabSet(teacher.id, (await params).setId);
   if (!set) notFound();
   const saved = (await searchParams).saved === "1";
@@ -31,7 +31,7 @@ export default async function VocabSetPage({
         actions={
           <>
             <Link
-              href={`/teacher/assignments/new?set=${set.id}`}
+              href={`/teacher/assignments/new?type=vocab&set=${set.id}`}
               className="focus-ring inline-flex h-11 items-center gap-2 rounded-xl bg-gradient-to-b from-indigo-600 to-primary px-4 text-sm font-semibold text-white shadow-sm hover:from-indigo-700 hover:to-indigo-900"
             >
               <Send className="h-4 w-4" />

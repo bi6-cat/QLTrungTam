@@ -9,14 +9,16 @@ Một ứng dụng Next.js (App Router), một database PostgreSQL qua Prisma, c
 
 | Khu | Đường dẫn | Ai dùng | Làm được gì |
 |---|---|---|---|
-| Quản trị | `/admin` (đăng nhập `/login`) | Chủ trung tâm, quản lý phụ | Tổng quan, lớp học, học sinh (nhập từ Excel), thời khóa biểu, công nợ, giao dịch, thu chi, lương GV, báo cáo Excel, khảo sát, tài khoản học tập, cài đặt (VietQR, mẫu nhắc nợ, đồng bộ Google Sheets) |
-| Cổng giáo viên | `/teacher` (đăng nhập `/login?as=teacher`) | Giáo viên có tài khoản | Xem lớp được gán, tạo bộ từ vựng, giao bài kiểm tra từ vựng và xem kết quả, đăng tài liệu cho lớp |
-| Cổng học sinh | `/learn` (đăng nhập `/login?as=student`, mã học sinh + PIN) | Học sinh | Làm bài được giao, xem điểm và đáp án, xem tài liệu của lớp |
+| Quản trị | `/admin` (đăng nhập `/login`, chung với giáo viên) | Chủ trung tâm, quản lý phụ | Tổng quan, lớp học, học sinh (nhập từ Excel), thời khóa biểu, công nợ, giao dịch, thu chi, lương GV, báo cáo Excel, khảo sát, tài khoản học tập, cài đặt (VietQR, mẫu nhắc nợ, đồng bộ Google Sheets) |
+| Cổng giáo viên | `/teacher` (đăng nhập `/login`, chung với quản lý) | Giáo viên có tài khoản | Xem lớp được gán, giao bài và xem kết quả (tab Bài tập), đăng tài liệu cho lớp |
+| Cổng học sinh | `/learn` (đăng nhập `/login?as=student`, mã dạng `HuongNV02` + PIN) | Học sinh | Làm bài được giao, xem điểm và đáp án, xem tài liệu của lớp |
 | Trang công khai | `/pay/<mã lớp>`, `/survey/<slug>`, `/teacher/classes/<mã lớp>-<mã>` | Phụ huynh, giáo viên chưa có tài khoản | Quét QR đóng học phí, làm khảo sát, mở trang điểm danh của lớp bằng link riêng |
 
 Quản lý phụ chỉ vào được một phần trang admin, danh sách trang nằm trong
 [src/lib/roles.ts](src/lib/roles.ts). Tài khoản giáo viên và học sinh do chủ trung tâm tạo ở
-**Tài khoản học tập**. Mỗi khu dùng cookie phiên riêng, nên đăng nhập khu này không mở được khu khác.
+**Tài khoản học tập**. Quản lý và giáo viên đăng nhập chung một form: hệ thống thử tài khoản quản
+trị trước rồi tới giáo viên, nên tên đăng nhập không được trùng giữa hai loại (chặn lúc tạo). Mỗi khu
+vẫn dùng cookie phiên riêng.
 
 ### Học phí qua SePay
 
@@ -28,12 +30,18 @@ tiền. Giao dịch không khớp được thì nằm ở trang **Giao dịch** 
 
 ### Cổng học tập
 
-- **Từ vựng:** giáo viên dán danh sách từ (hoặc copy từ Excel) để tạo bộ từ, rồi giao bài cho
+- **Bài tập:** tab chung cho mọi loại bài. Hiện có kiểm tra từ vựng; trắc nghiệm và nộp bài bằng
+  ảnh sẽ thêm vào cùng tab.
+- **Từ vựng:** chỉ hiện với giáo viên được bật ở Tài khoản học tập (giáo viên ngoại ngữ). Giáo viên
+  dán danh sách từ hoặc tải file Excel/CSV/Quizlet để tạo bộ từ, rồi giao bài cho
   lớp với số câu, dạng câu, giới hạn thời gian, số lượt làm và hạn nộp. Mỗi lượt làm sinh một
   đề trộn khác nhau. Đáp án chỉ nằm ở server cho đến khi nộp. Giáo viên thấy điểm từng học
   sinh và những từ hay sai.
 - **Tài liệu:** giáo viên đăng đường dẫn (Google Drive, YouTube…) và/hoặc ghi chú cho lớp.
   App không lưu file, chỉ nhận đường dẫn `http`/`https`.
+- **Tài khoản học sinh:** mã là tên không dấu + chữ cái đầu của họ và đệm + số thứ tự
+  (Nguyễn Văn Hương → `HuongNV01`), gõ hoa thường đều được. Mã đoán được nên chặn dò PIN theo cặp
+  (mã, IP): một máy gõ sai 5 lần bị chặn 15 phút; cả tài khoản chỉ khoá sau 30 lần sai.
 - Học sinh thấy bài và tài liệu của các lớp đang học, kể cả khi đang bảo lưu. Lớp đổi giáo
   viên thì giáo viên mới quản lý tiếp bài và tài liệu cũ.
 

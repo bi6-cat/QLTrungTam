@@ -1,6 +1,6 @@
 import { hashPassword, prisma, verifyPassword } from "@/modules/core";
-import { normalizeStudentCode } from "./credentials";
-import { isLocked, lockAfterFailure } from "./lockout";
+import { studentCodeKey } from "./credentials";
+import { isLocked, lockAfterFailure, MAX_FAILED_LOGINS, STUDENT_MAX_FAILED_LOGINS } from "./lockout";
 import type { PortalSession } from "./portal-token";
 
 export type AuthResult =
@@ -10,6 +10,7 @@ export type AuthResult =
 
 type Credential = { id: string; secretHash: string; sessionVersion: number; lockedUntil: Date | null; usable: boolean };
 type CounterStore = {
+  maxFailures: number;
   recordFailure(id: string): Promise<number>;
   lock(id: string, data: { failedLogins: number; lockedUntil: Date }): Promise<unknown>;
   reset(id: string): Promise<unknown>;
@@ -35,7 +36,7 @@ async function authenticate(credential: Credential | null, secret: string, store
   if (!credential.usable) return { ok: false, reason: "invalid" };
   if (!valid) {
     const failedLogins = await store.recordFailure(credential.id);
-    const lock = lockAfterFailure(failedLogins, now);
+    const lock = lockAfterFailure(failedLogins, now, store.maxFailures);
     if (lock) {
       await store.lock(credential.id, lock);
       return { ok: false, reason: "locked", lockedUntil: lock.lockedUntil };
@@ -47,6 +48,7 @@ async function authenticate(credential: Credential | null, secret: string, store
 }
 
 const teacherCounters: CounterStore = {
+  maxFailures: MAX_FAILED_LOGINS,
   recordFailure: async (id) =>
     (await prisma.teacher.update({ where: { id }, data: { failedLogins: { increment: 1 } }, select: { failedLogins: true } }))
       .failedLogins,
@@ -55,6 +57,7 @@ const teacherCounters: CounterStore = {
 };
 
 const studentCounters: CounterStore = {
+  maxFailures: STUDENT_MAX_FAILED_LOGINS,
   recordFailure: async (studentId) =>
     (
       await prisma.studentAccount.update({
@@ -84,9 +87,9 @@ export async function authenticateTeacher(username: string, password: string, no
 }
 
 export async function authenticateStudent(codeInput: string, pin: string, now = new Date()) {
-  const code = normalizeStudentCode(codeInput);
-  const account = code
-    ? await prisma.studentAccount.findUnique({ where: { code }, include: { student: { select: { archivedAt: true } } } })
+  const codeKey = studentCodeKey(codeInput);
+  const account = codeKey
+    ? await prisma.studentAccount.findUnique({ where: { codeKey }, include: { student: { select: { archivedAt: true } } } })
     : null;
   return authenticate(
     account && {
@@ -102,7 +105,7 @@ export async function authenticateStudent(codeInput: string, pin: string, now = 
   );
 }
 
-export type CurrentTeacher = { id: string; username: string; fullName: string };
+export type CurrentTeacher = { id: string; username: string; fullName: string; vocabEnabled: boolean };
 export type CurrentStudent = { id: string; fullName: string; code: string };
 
 /** Phiên còn hiệu lực khi tài khoản còn dùng được và chưa bị đặt lại/khoá sau lúc đăng nhập. */
@@ -110,10 +113,10 @@ export async function resolveTeacherSession(session: PortalSession | null): Prom
   if (!session) return null;
   const teacher = await prisma.teacher.findUnique({
     where: { id: session.sub },
-    select: { id: true, username: true, fullName: true, sessionVersion: true, disabledAt: true }
+    select: { id: true, username: true, fullName: true, vocabEnabled: true, sessionVersion: true, disabledAt: true }
   });
   if (!teacher || teacher.disabledAt || teacher.sessionVersion !== session.ver) return null;
-  return { id: teacher.id, username: teacher.username, fullName: teacher.fullName };
+  return { id: teacher.id, username: teacher.username, fullName: teacher.fullName, vocabEnabled: teacher.vocabEnabled };
 }
 
 export async function resolveStudentSession(session: PortalSession | null): Promise<CurrentStudent | null> {

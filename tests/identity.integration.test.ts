@@ -11,7 +11,7 @@ import {
   resolveStudentSession,
   resolveTeacherSession
 } from "../src/modules/identity/authenticate";
-import { MAX_FAILED_LOGINS } from "../src/modules/identity/lockout";
+import { MAX_FAILED_LOGINS, STUDENT_MAX_FAILED_LOGINS } from "../src/modules/identity/lockout";
 import { assertSafeLedgerIntegrationDatabase } from "./helpers/ledger-test-db";
 
 assertSafeLedgerIntegrationDatabase();
@@ -34,10 +34,11 @@ async function createStudentAccount(pin = "048213", extra: { archived?: boolean 
     data: { fullName: `HS ${ns}`, phone: "0900000000", address: "", archivedAt: extra.archived ? new Date() : null }
   });
   created.studentIds.push(student.id);
-  // Mã thử nghiệm riêng mỗi lượt chạy: 4 ký tự từ ns (chỉ lấy ký tự hợp lệ) + 2 ký tự đếm.
-  const prefix = ns.toUpperCase().replace(/[^ABCDEFGHJKMNPQRSTUVWXYZ23456789]/g, "Z").slice(0, 4);
-  const code = `${prefix}${"ABCDEFGHJK"[Math.floor(codeSeq / 10)]}${"ABCDEFGHJK"[codeSeq++ % 10]}`;
-  const account = await prisma.studentAccount.create({ data: { studentId: student.id, code, pinHash: hashPassword(pin) } });
+  // Mã thử nghiệm riêng mỗi lượt chạy, dạng mã thật: chữ (từ ns) + số đếm.
+  const code = `Hs${ns.replace(/[^a-z]/gi, "x").slice(0, 6)}${String(codeSeq++).padStart(2, "0")}`;
+  const account = await prisma.studentAccount.create({
+    data: { studentId: student.id, code, codeKey: code.toLowerCase(), pinHash: hashPassword(pin) }
+  });
   return { student, account };
 }
 
@@ -92,9 +93,9 @@ describe("teacher login", () => {
 });
 
 describe("student login", () => {
-  test("accepts the code as typed (lowercase, spaces) with the right PIN", async () => {
+  test("accepts the code as typed (any case, spaces) with the right PIN", async () => {
     const { student, account } = await createStudentAccount();
-    const typed = ` ${account.code.slice(0, 3).toLowerCase()} ${account.code.slice(3)} `;
+    const typed = ` ${account.code.slice(0, 3).toUpperCase()} ${account.code.slice(3).toLowerCase()} `;
     assert.deepEqual(await authenticateStudent(typed, "048213"), { ok: true, sub: student.id, ver: 0 });
   });
 
@@ -106,10 +107,12 @@ describe("student login", () => {
     assert.deepEqual(await authenticateStudent(archived.account.code, "048213"), { ok: false, reason: "invalid" });
   });
 
-  test(`locks after ${MAX_FAILED_LOGINS} wrong PINs`, async () => {
+  test(`a whole student account locks only after ${STUDENT_MAX_FAILED_LOGINS} wrong PINs (guessable codes)`, async () => {
     const { account } = await createStudentAccount();
     const now = new Date();
-    for (let i = 1; i < MAX_FAILED_LOGINS; i++) await authenticateStudent(account.code, "999111", now);
+    for (let i = 1; i < STUDENT_MAX_FAILED_LOGINS; i++) {
+      assert.deepEqual(await authenticateStudent(account.code, "999111", now), { ok: false, reason: "invalid" });
+    }
     const locked = await authenticateStudent(account.code, "999111", now);
     assert.equal(locked.ok === false && locked.reason, "locked");
     const stillLocked = await authenticateStudent(account.code, "048213", later(now, 1));

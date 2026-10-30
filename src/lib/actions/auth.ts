@@ -1,45 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { login, logout, requireStaff } from "@/lib/auth";
+import { logout, requireStaff } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
-import { changePasswordSchema, loginSchema, safeParseForm } from "@/lib/validation";
-
-const LOGIN_LIMIT = { max: 8, windowMs: 15 * 60 * 1000 };
-
-async function getClientIp() {
-  const h = await headers();
-  const forwarded = h.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || h.get("x-real-ip")?.trim() || "unknown";
-}
-
-export async function loginAction(_prevState: { error: string }, formData: FormData) {
-  const ip = await getClientIp();
-  const rlKey = `login:${ip}`;
-  const limit = checkRateLimit(rlKey, LOGIN_LIMIT);
-  if (!limit.allowed) {
-    return {
-      error: `Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ${limit.retryAfterSec} giây.`
-    };
-  }
-
-  const { data, error } = safeParseForm(loginSchema, formData);
-  if (error || !data) {
-    recordFailure(rlKey, LOGIN_LIMIT);
-    return { error: "Sai tên đăng nhập hoặc mật khẩu." };
-  }
-  const ok = await login(data.username, data.password);
-  if (!ok) {
-    recordFailure(rlKey, LOGIN_LIMIT);
-    return { error: "Sai tên đăng nhập hoặc mật khẩu." };
-  }
-  resetLimit(rlKey);
-  redirect("/admin");
-}
+import { changePasswordSchema, safeParseForm } from "@/lib/validation";
 
 export async function logoutAction() {
   await logout();

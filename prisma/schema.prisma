@@ -477,6 +477,8 @@ model Teacher {
   failedLogins   Int         @default(0)
   lockedUntil    DateTime?
   disabledAt     DateTime?
+  /// Trung tâm bật cho giáo viên dạy ngoại ngữ: bộ từ vựng và bài kiểm tra từ vựng.
+  vocabEnabled   Boolean     @default(false)
   createdAt      DateTime    @default(now())
   classes        ClassRoom[]
   vocabSets      VocabSet[]
@@ -487,8 +489,10 @@ model Teacher {
 /// Tài khoản học sinh đăng nhập cổng /learn bằng mã học sinh + PIN (module identity).
 model StudentAccount {
   studentId      String    @id
-  /// Mã đăng nhập ngẫu nhiên, không đoán được từ mã khác (tránh dò rồi khoá hàng loạt).
+  /// Tên đăng nhập dạng tên rút gọn + số, vd "HuongNV02" (tài khoản cũ còn mã ngẫu nhiên 6 ký tự).
   code           String    @unique
+  /// code viết thường: học sinh gõ hoa hay thường đều đăng nhập được, và không cấp trùng khác hoa thường.
+  codeKey        String    @unique
   pinHash        String
   sessionVersion Int       @default(0)
   failedLogins   Int       @default(0)

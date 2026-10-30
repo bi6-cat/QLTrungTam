@@ -3,39 +3,53 @@ import { describe, test } from "node:test";
 
 import { decodeSessionToken, encodeSessionToken } from "../src/lib/session-token";
 import {
+  formatStudentCode,
   generatePin,
-  generateStudentCode,
   isValidPin,
   isWeakPin,
-  normalizeStudentCode,
-  STUDENT_CODE_LENGTH
+  nextStudentCodeNumber,
+  studentCodeBase,
+  studentCodeKey
 } from "../src/modules/identity/credentials";
-import { isLocked, lockAfterFailure, LOCK_MINUTES, MAX_FAILED_LOGINS, minutesUntil } from "../src/modules/identity/lockout";
+import {
+  isLocked,
+  lockAfterFailure,
+  LOCK_MINUTES,
+  MAX_FAILED_LOGINS,
+  minutesUntil,
+  STUDENT_MAX_FAILED_LOGINS
+} from "../src/modules/identity/lockout";
 import { decodePortalToken, encodePortalToken } from "../src/modules/identity/portal-token";
 import { portalForPath } from "../src/modules/identity/portal-paths";
 import { teacherNameKey } from "../src/modules/center/teacher-classes";
 
 describe("student code", () => {
-  test("is 6 characters without look-alike characters", () => {
-    const codes = Array.from({ length: 500 }, generateStudentCode);
-    for (const code of codes) {
-      assert.equal(code.length, STUDENT_CODE_LENGTH);
-      assert.doesNotMatch(code, /[01ILO]/);
-      assert.equal(normalizeStudentCode(code), code);
-    }
-    assert.ok(new Set(codes).size > 495, "mã sinh ra phải gần như không trùng");
+  test("is the given name without accents plus initials of family and middle names", () => {
+    assert.equal(studentCodeBase("Nguyễn Văn Hương"), "HuongNV");
+    assert.equal(studentCodeBase("  lê   thị   đào "), "DaoLT");
+    assert.equal(studentCodeBase("Trần Đức Anh Khoa"), "KhoaTDA");
+    assert.equal(studentCodeBase("Minh"), "Minh");
+    assert.equal(studentCodeBase("Phạm Nguyễn Hoàng Bảo Ngọc"), "NgocPNHB");
+    assert.equal(studentCodeBase("Ngô Thị Ánh (12A)"), "AnhNT");
+    assert.equal(studentCodeBase("Vũ Minh 2"), "MinhV");
+    assert.equal(studentCodeBase("  "), "HocSinh");
   });
 
-  test("normalizes what students type", () => {
-    assert.equal(normalizeStudentCode(" k7m-2xq "), "K7M2XQ");
-    assert.equal(normalizeStudentCode("K7M 2XQ"), "K7M2XQ");
+  test("numbers start at 01 and take the first free number, ignoring case and other names", () => {
+    assert.equal(formatStudentCode("HuongNV", 2), "HuongNV02");
+    assert.equal(formatStudentCode("HuongNV", 100), "HuongNV100");
+    assert.equal(nextStudentCodeNumber("HuongNV", []), 1);
+    assert.equal(nextStudentCodeNumber("HuongNV", ["HuongNV01", "huongnv03", "HuongNVA01", "HuongNV1x"]), 2);
+    assert.equal(nextStudentCodeNumber("Huong", ["HuongNV01"]), 1);
   });
 
-  test("rejects wrong length and characters outside the alphabet", () => {
-    assert.equal(normalizeStudentCode("K7M2X"), null);
-    assert.equal(normalizeStudentCode("K7M2XQQ"), null);
-    assert.equal(normalizeStudentCode("K7M2X0"), null);
-    assert.equal(normalizeStudentCode(""), null);
+  test("login key ignores case, spaces and dashes; old random codes still work", () => {
+    assert.equal(studentCodeKey(" huongnv-02 "), "huongnv02");
+    assert.equal(studentCodeKey("HuongNV 02"), "huongnv02");
+    assert.equal(studentCodeKey("K7M2XQ"), "k7m2xq");
+    assert.equal(studentCodeKey("abc"), null);
+    assert.equal(studentCodeKey("Hương01"), null);
+    assert.equal(studentCodeKey(""), null);
   });
 });
 
@@ -66,6 +80,8 @@ describe("lockout", () => {
 
   test("locks only when the failure count reaches the limit", () => {
     assert.equal(lockAfterFailure(MAX_FAILED_LOGINS - 1, now), null);
+    assert.equal(lockAfterFailure(STUDENT_MAX_FAILED_LOGINS - 1, now, STUDENT_MAX_FAILED_LOGINS), null);
+    assert.notEqual(lockAfterFailure(STUDENT_MAX_FAILED_LOGINS, now, STUDENT_MAX_FAILED_LOGINS), null);
     const lock = lockAfterFailure(MAX_FAILED_LOGINS, now);
     assert.ok(lock);
     assert.equal(lock.failedLogins, 0);
