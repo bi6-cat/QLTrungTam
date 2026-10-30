@@ -174,6 +174,11 @@ async function main() {
   // 2. Xoá sạch dữ liệu demo cũ (CHỈ khi seed demo). Giữ AdminUser + AppSetting.
   //    Thứ tự an toàn với ràng buộc khoá ngoại (kể cả FK vòng invoice<->transaction).
   // -------------------------------------------------------------------------
+  // Cổng học tập: bài giao giữ lớp bằng khoá RESTRICT nên xoá trước lớp (lượt làm, đề đi theo).
+  // Tài khoản giáo viên giữ lại như AdminUser; tài khoản học sinh đi theo học sinh.
+  await prisma.assignment.deleteMany({});
+  await prisma.vocabSet.deleteMany({});
+  await prisma.material.deleteMany({});
   await prisma.monthlyInvoice.updateMany({ data: { transactionId: null } });
   await prisma.transaction.deleteMany({});
   await prisma.monthlyInvoice.deleteMany({});
