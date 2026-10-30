@@ -19,6 +19,14 @@ import {
   submitAttempt
 } from "../src/modules/learning/attempts";
 import { LearningError } from "../src/modules/learning/errors";
+import {
+  createMaterial,
+  deleteMaterial,
+  getMaterialForTeacher,
+  listMaterialsForStudent,
+  listMaterialsForTeacher,
+  updateMaterial
+} from "../src/modules/learning/materials";
 import { seededRng } from "../src/modules/learning/random";
 import { archiveVocabSet, createVocabSet, getVocabSet, listVocabSets, updateVocabSet } from "../src/modules/learning/vocab/sets";
 import { parseWordList } from "../src/modules/learning/vocab/word-list";
@@ -299,5 +307,54 @@ describe("teacher results", () => {
     const results = (await getAssignmentResults(teacher.id, assignmentId))!;
     assert.ok(results.hardWords.some((w) => w.label === "cat"));
     await assert.rejects(startAttempt(student.id, assignmentId), /hết số lượt/);
+  });
+});
+
+describe("materials", () => {
+  test("only the class's teacher posts them and only students of the class see them", async () => {
+    const input = { classId: klass.id, title: "Đề cương Unit 1", url: "drive.google.com/x", note: "" };
+    await assert.rejects(createMaterial(otherTeacher.id, input), /không được gán dạy lớp này/);
+    await assert.rejects(createMaterial(teacher.id, { ...input, url: "javascript:alert(1)" }), LearningError);
+    const { id } = await createMaterial(teacher.id, input);
+
+    const student = await makeStudent("Tài liệu", klass.id);
+    const outsider = await makeStudent("Ngoài TL", otherClass.id);
+    const mine = (await listMaterialsForStudent(student.id)).find((g) => g.classId === klass.id)!;
+    assert.deepEqual(mine.materials.map((m) => [m.id, m.url]), [[id, "https://drive.google.com/x"]]);
+    assert.ok(!(await listMaterialsForStudent(outsider.id)).some((g) => g.materials.some((m) => m.id === id)));
+
+    assert.equal(await getMaterialForTeacher(otherTeacher.id, id), null);
+    await assert.rejects(updateMaterial(otherTeacher.id, id, { ...input, title: "Sửa trộm" }), /Không tìm thấy/);
+    await assert.rejects(deleteMaterial(otherTeacher.id, id), /Không tìm thấy/);
+    await assert.rejects(updateMaterial(teacher.id, id, { ...input, classId: otherClass.id }), /không được gán dạy lớp này/);
+
+    await updateMaterial(teacher.id, id, { ...input, title: "Đề cương mới", url: "", note: "Ôn trang 5" });
+    const edited = (await getMaterialForTeacher(teacher.id, id))!;
+    assert.deepEqual([edited.title, edited.url, edited.note, edited.classId], ["Đề cương mới", null, "Ôn trang 5", klass.id]);
+
+    await deleteMaterial(teacher.id, id);
+    assert.equal(await getMaterialForTeacher(teacher.id, id), null);
+  });
+
+  test("the class's new teacher takes over, and the old one still sees what they posted", async () => {
+    const shared = await makeClass(teacher.id);
+    const { id } = await createMaterial(teacher.id, { classId: shared.id, title: "Bài nghe", url: "youtube.com/watch?v=1", note: "" });
+    await prisma.classRoom.update({ where: { id: shared.id }, data: { teacherId: otherTeacher.id } });
+
+    const newTeacherGroups = await listMaterialsForTeacher(otherTeacher.id);
+    assert.deepEqual(newTeacherGroups.find((g) => g.classId === shared.id)?.materials.map((m) => m.id), [id]);
+    await updateMaterial(otherTeacher.id, id, { classId: shared.id, title: "Bài nghe (đã sửa)", url: "youtube.com/watch?v=1", note: "" });
+
+    const oldGroup = (await listMaterialsForTeacher(teacher.id)).find((g) => g.classId === shared.id)!;
+    assert.equal(oldGroup.teaching, false);
+    assert.deepEqual(oldGroup.materials.map((m) => m.title), ["Bài nghe (đã sửa)"]);
+    const teachingGroup = (await listMaterialsForTeacher(teacher.id)).find((g) => g.classId === klass.id)!;
+    assert.equal(teachingGroup.teaching, true, "lớp đang dạy hiện cả khi chưa có tài liệu");
+  });
+
+  test("the database refuses links that are not http(s) and materials with no content", async () => {
+    const base = { classId: klass.id, teacherId: teacher.id, title: "Chặn ở DB" };
+    await assert.rejects(prisma.material.create({ data: { ...base, url: "javascript:alert(1)" } }), /Material_url_http_check/);
+    await assert.rejects(prisma.material.create({ data: { ...base, url: null, note: "" } }), /Material_content_check/);
   });
 });

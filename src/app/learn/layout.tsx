@@ -18,6 +18,7 @@ export default async function LearnLayout({ children }: { children: React.ReactN
       logoutAction={studentLogoutAction}
       nav={[
         { href: "/learn", label: "Bài cần làm", icon: "tasks", match: ["/learn/assignments", "/learn/attempts"] },
+        { href: "/learn/materials", label: "Tài liệu", icon: "materials" },
         { href: "/learn/classes", label: "Lớp của em", icon: "classes" }
       ]}
     >

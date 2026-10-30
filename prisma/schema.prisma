@@ -66,6 +66,7 @@ model ClassRoom {
   surveyResponses         SurveyResponse[]
   teacher                 Teacher?        @relation(fields: [teacherId], references: [id], onDelete: SetNull)
   assignments             Assignment[]
+  materials               Material[]
 
   @@index([shortCode])
   @@index([publicToken])
@@ -480,6 +481,7 @@ model Teacher {
   classes        ClassRoom[]
   vocabSets      VocabSet[]
   assignments    Assignment[]
+  materials      Material[]
 }
 
 /// Tài khoản học sinh đăng nhập cổng /learn bằng mã học sinh + PIN (module identity).
@@ -613,4 +615,24 @@ model VocabAttemptItem {
 
   @@id([attemptId, position])
   @@index([wordId])
+}
+
+/// Tài liệu giáo viên chia sẻ cho một lớp: đường dẫn (Google Drive, YouTube…) và/hoặc ghi chú.
+/// Không lưu file trên máy chủ; tài liệu không có dữ liệu phụ thuộc nên xoá hẳn khi gỡ.
+model Material {
+  id        String    @id @default(cuid())
+  classId   String
+  /// Giáo viên đăng; null khi tài khoản giáo viên đã bị xoá (tài liệu vẫn giữ cho lớp).
+  teacherId String?
+  title     String
+  /// Chỉ http/https (kiểm tra ở learning/materials).
+  url       String?
+  note      String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  classRoom ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher   Teacher?  @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@index([classId, createdAt])
+  @@index([teacherId])
 }

@@ -31,3 +31,15 @@ export {
   type QuestionType
 } from "./vocab/questions";
 export { archiveVocabSet, createVocabSet, getVocabSet, listVocabSets, updateVocabSet } from "./vocab/sets";
+export {
+  createMaterial,
+  deleteMaterial,
+  getMaterialForTeacher,
+  listMaterialsForStudent,
+  listMaterialsForTeacher,
+  materialHost,
+  MAX_MATERIAL_NOTE,
+  MAX_MATERIAL_TITLE,
+  updateMaterial,
+  type MaterialInput
+} from "./materials";
