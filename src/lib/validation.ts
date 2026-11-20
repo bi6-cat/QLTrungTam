@@ -351,10 +351,6 @@ export const updateClassDetailsSchema = z.object({
 export const updateSettingsSchema = z.object({
   sepayApiKey: looseText(200),
   sepayWebhookSecret: looseText(200),
-  bankAccountNumber: requiredText("Thiếu số tài khoản", 40),
-  bankAccountName: requiredText("Thiếu tên tài khoản", 120),
-  bankBin: requiredText("Thiếu mã ngân hàng", 20),
-  appUrl: looseText(200),
   debtReminderTemplate: requiredText("Thiếu mẫu tin nhắn nhắc nợ", 5000),
   salaryCutoff: salaryCutoffCode
 });

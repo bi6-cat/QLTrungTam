@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { errorState, successState, type ResultState } from "@/lib/action-states";
-import { login, logout, requireStaff } from "@/lib/auth";
+import { login, logout, requireStaff, setSessionCookie } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, recordFailure, resetLimit } from "@/lib/rate-limit";
@@ -57,9 +58,20 @@ export async function changePasswordAction(_prevState: ResultState, formData: Fo
     return errorState("Mật khẩu hiện tại không đúng.");
   }
 
-  await prisma.adminUser.update({
-    where: { id: user.id },
-    data: { passwordHash: hashPassword(data.newPassword) }
+  // Tăng sessionVersion: mọi thiết bị khác đang đăng nhập tài khoản này bị đăng xuất,
+  // còn thiết bị đang dùng được cấp cookie mới.
+  const updated = await prisma.$transaction(async (tx) => {
+    const next = await tx.adminUser.update({
+      where: { id: user.id },
+      data: { passwordHash: hashPassword(data.newPassword), sessionVersion: { increment: 1 } }
+    });
+    await logAudit(tx, { userId: user.id, username: user.username }, {
+      action: "admin_user.password_changed",
+      entityType: "AdminUser",
+      entityId: user.id
+    });
+    return next;
   });
-  return successState("Đã đổi mật khẩu thành công.");
+  await setSessionCookie(updated);
+  return successState("Đã đổi mật khẩu. Các thiết bị khác đã bị đăng xuất.");
 }

@@ -270,6 +270,8 @@ model AdminUser {
   username     String     @unique
   passwordHash String
   role         AdminRole  @default(owner)
+  /// Tăng khi đổi/đặt lại mật khẩu để đá mọi phiên cũ (cookie mang số này, xem auth.ts).
+  sessionVersion Int      @default(0)
   createdAt    DateTime   @default(now())
   auditLogs    AuditLog[]
 }

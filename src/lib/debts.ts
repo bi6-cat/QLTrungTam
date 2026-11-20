@@ -265,17 +265,23 @@ export function buildReminderMessage(
   row: DebtRow,
   template = DEFAULT_DEBT_REMINDER_TEMPLATE
 ) {
-  // Gọn: chỉ ghi tên lớp khi em học nhiều lớp; kèm lý do trừ buổi nếu có.
-  const multiClass = row.classes.length > 1;
+  // Mỗi dòng luôn ghi tên lớp để phụ huynh biết nợ lớp nào; kèm lý do trừ/cộng buổi nếu có.
   const debtDetails = row.invoices.map((invoice) => {
-    const label = `T${invoice.month}/${invoice.year}${multiClass ? ` ${invoice.className}` : ""}`;
     const note = invoice.sessionsNote ? ` (${invoice.sessionsNote})` : "";
     const overdueNote = invoice.monthsOverdue > 0 ? ` – quá hạn ${invoice.monthsOverdue} tháng` : "";
-    return `• ${label}: ${formatCurrency(invoice.amount)}${note}${overdueNote}`;
+    return `• ${invoice.className} – T${invoice.month}/${invoice.year}: ${formatCurrency(invoice.amount)}${note}${overdueNote}`;
   }).join("\n");
-  const paymentSection = row.primaryPayUrl
-    ? `Thanh toán (quét QR, không cần sửa nội dung): ${row.primaryPayUrl}`
-    : "";
+  // Nợ nhiều lớp thì mỗi lớp một link: trang nộp tiền của một lớp chỉ hiện hóa đơn lớp đó.
+  const payLinks = reminderPayLinks(row);
+  const paymentSection =
+    payLinks.length === 0
+      ? ""
+      : payLinks.length === 1
+        ? `Thanh toán lớp ${payLinks[0].className} (quét QR, không cần sửa nội dung): ${payLinks[0].url}`
+        : [
+            "Thanh toán từng lớp (quét QR, không cần sửa nội dung):",
+            ...payLinks.map((link) => `• ${link.className}: ${link.url}`)
+          ].join("\n");
   const values: Record<string, string> = {
     studentName: row.studentName,
     parentName: row.parentName ?? "",
@@ -294,6 +300,18 @@ export function buildReminderMessage(
     )
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/** Link nộp tiền của từng lớp đang nợ, không lặp, theo thứ tự khoản nợ cũ nhất trước. */
+export function reminderPayLinks(row: Pick<DebtRow, "invoices">) {
+  const links: Array<{ className: string; url: string }> = [];
+  const seen = new Set<string>();
+  for (const invoice of row.invoices) {
+    if (!invoice.payUrl || seen.has(invoice.payUrl)) continue;
+    seen.add(invoice.payUrl);
+    links.push({ className: invoice.className, url: invoice.payUrl });
+  }
+  return links;
 }
 
 /** Link mở cửa sổ chat Zalo với số phụ huynh. */

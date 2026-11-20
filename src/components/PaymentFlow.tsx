@@ -605,13 +605,19 @@ export function PaymentFlow({
             </div>
 
             <div className="px-5">
-              <div className="mx-auto w-fit rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-                <img
-                  src={invoice.qrImageUrl}
-                  alt={`Ma QR thanh toan ${invoice.memoContent}`}
-                  className="aspect-square w-full max-w-64 rounded-lg object-contain"
-                />
-              </div>
+              {invoice.qrImageUrl ? (
+                <div className="mx-auto w-fit rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+                  <img
+                    src={invoice.qrImageUrl}
+                    alt={`Ma QR thanh toan ${invoice.memoContent}`}
+                    className="aspect-square w-full max-w-64 rounded-lg object-contain"
+                  />
+                </div>
+              ) : (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-center text-sm font-medium text-rose-700">
+                  Trung tâm đang cập nhật tài khoản nhận tiền. Phụ huynh vui lòng liên hệ trung tâm trước khi chuyển khoản.
+                </p>
+              )}
               <p className="mt-2 text-center text-xs text-stone-400">Quét mã QR bằng app ngân hàng bất kỳ</p>
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-sm text-indigo-800">
                 <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />

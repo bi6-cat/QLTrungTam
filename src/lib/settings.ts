@@ -11,6 +11,7 @@ Nếu đã chuyển khoản, phụ huynh vui lòng bỏ qua tin này. Liên hệ
 export type AppSettings = {
   sepayApiKey: string;
   sepayWebhookSecret: string;
+  /** STK, tên TK, BIN và địa chỉ app chỉ đọc từ .env (xem readBankEnv), không sửa được trên web. */
   bankAccountNumber: string;
   bankAccountName: string;
   bankBin: string;
@@ -20,39 +21,70 @@ export type AppSettings = {
   salaryCutoff: string;
 };
 
-const settingKeys: Record<keyof AppSettings, string> = {
+/** Phần cài đặt còn sửa được trên trang Cài đặt (lưu trong bảng AppSetting). */
+export type EditableAppSettings = Pick<AppSettings, "sepayApiKey" | "sepayWebhookSecret" | "debtReminderTemplate" | "salaryCutoff">;
+
+const settingKeys: Record<keyof EditableAppSettings, string> = {
   sepayApiKey: "SEPAY_API_KEY",
   sepayWebhookSecret: "SEPAY_WEBHOOK_SECRET",
-  bankAccountNumber: "BANK_ACCOUNT_NUMBER",
-  bankAccountName: "BANK_ACCOUNT_NAME",
-  bankBin: "BANK_BIN",
-  appUrl: "NEXT_PUBLIC_APP_URL",
   debtReminderTemplate: "DEBT_REMINDER_TEMPLATE",
   salaryCutoff: SALARY_CUTOFF_SETTING_KEY
 };
 
-const defaults: AppSettings = {
+const defaults: EditableAppSettings = {
   sepayApiKey: process.env.SEPAY_API_KEY || "",
   sepayWebhookSecret: process.env.SEPAY_WEBHOOK_SECRET || "",
-  bankAccountNumber: process.env.BANK_ACCOUNT_NUMBER || "19000000000000",
-  bankAccountName: process.env.BANK_ACCOUNT_NAME || "APLUS ACADEMY",
-  bankBin: process.env.BANK_BIN || "970407",
-  appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001",
   debtReminderTemplate: process.env.DEBT_REMINDER_TEMPLATE || DEFAULT_DEBT_REMINDER_TEMPLATE,
   salaryCutoff: DEFAULT_SALARY_CUTOFF_CODE
 };
 
+// Đọc env lúc chạy qua biến trung gian: Next.js thay sẵn `process.env.NEXT_PUBLIC_*` viết thẳng
+// lúc build, mà image build không có .env.
+const runtimeEnv: Record<string, string | undefined> = process.env;
+
+export type BankEnv = {
+  bankAccountNumber: string;
+  bankAccountName: string;
+  bankBin: string;
+  appUrl: string;
+  /** Tên biến .env đang thiếu hoặc sai định dạng; rỗng = dùng được. */
+  problems: string[];
+};
+
+/**
+ * Tài khoản nhận học phí. Cố ý chỉ lấy từ .env trên máy chủ, không lưu DB, không có ô sửa trên
+ * web: ai chiếm được tài khoản admin cũng không đổi được STK trên mã QR hay link trong tin nhắc nợ.
+ * Sai định dạng thì coi như chưa cấu hình (không hiện QR) thay vì dùng một giá trị lạ.
+ */
+export function readBankEnv(): BankEnv {
+  const problems: string[] = [];
+  const pick = (name: string, valid: (value: string) => boolean) => {
+    const value = (runtimeEnv[name] ?? "").trim();
+    if (!value || !valid(value)) {
+      problems.push(name);
+      return "";
+    }
+    return value;
+  };
+  const bankAccountNumber = pick("BANK_ACCOUNT_NUMBER", (value) => /^\d{6,19}$/.test(value));
+  const bankBin = pick("BANK_BIN", (value) => /^\d{6}$/.test(value));
+  const bankAccountName = pick("BANK_ACCOUNT_NAME", (value) => value.length <= 120);
+  const appUrl = pick("NEXT_PUBLIC_APP_URL", (value) => /^https?:\/\/[^\s/?#]+$/.test(value.replace(/\/$/, ""))).replace(/\/$/, "");
+  return { bankAccountNumber, bankAccountName, bankBin, appUrl, problems };
+}
+
 export async function getAppSettings(): Promise<AppSettings> {
-  const rows = await prisma.appSetting.findMany();
+  const rows = await prisma.appSetting.findMany({ where: { key: { in: Object.values(settingKeys) } } });
   const byKey = new Map(rows.map((row) => [row.key, row.value]));
+  const bank = readBankEnv();
 
   return {
     sepayApiKey: byKey.get(settingKeys.sepayApiKey) ?? defaults.sepayApiKey,
     sepayWebhookSecret: byKey.get(settingKeys.sepayWebhookSecret) ?? defaults.sepayWebhookSecret,
-    bankAccountNumber: byKey.get(settingKeys.bankAccountNumber) ?? defaults.bankAccountNumber,
-    bankAccountName: byKey.get(settingKeys.bankAccountName) ?? defaults.bankAccountName,
-    bankBin: byKey.get(settingKeys.bankBin) ?? defaults.bankBin,
-    appUrl: byKey.get(settingKeys.appUrl) ?? defaults.appUrl,
+    bankAccountNumber: bank.bankAccountNumber,
+    bankAccountName: bank.bankAccountName,
+    bankBin: bank.bankBin,
+    appUrl: bank.appUrl,
     debtReminderTemplate:
       byKey.get(settingKeys.debtReminderTemplate) ?? defaults.debtReminderTemplate,
     salaryCutoff: byKey.get(settingKeys.salaryCutoff) ?? defaults.salaryCutoff
@@ -65,13 +97,13 @@ export function maskSecret(value: string) {
   return `••••${value.length > 8 ? value.slice(-4) : ""}`;
 }
 
-export async function saveAppSettings(settings: AppSettings) {
+export async function saveAppSettings(settings: EditableAppSettings) {
   await prisma.$transaction(
     Object.entries(settingKeys).map(([field, key]) =>
       prisma.appSetting.upsert({
         where: { key },
-        update: { value: settings[field as keyof AppSettings] },
-        create: { key, value: settings[field as keyof AppSettings] }
+        update: { value: settings[field as keyof EditableAppSettings] },
+        create: { key, value: settings[field as keyof EditableAppSettings] }
       })
     )
   );

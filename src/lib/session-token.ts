@@ -11,6 +11,8 @@ export type SessionPayload = {
   username: string;
   /** Chỉ dùng để middleware chuyển hướng sớm; quyền thật đọc lại từ DB ở mỗi request. */
   role?: AdminRole;
+  /** AdminUser.sessionVersion lúc đăng nhập; thiếu (cookie cũ) coi là 0. */
+  sv?: number;
   exp: number;
 };
 

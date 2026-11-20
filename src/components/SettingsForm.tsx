@@ -1,18 +1,15 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertTriangle, Save } from "lucide-react";
+import { AlertTriangle, Lock, Save } from "lucide-react";
 import { updateSettingsAction } from "@/lib/actions/settings";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { useResultToast } from "@/components/Toaster";
 import { SalaryCutoffSelect } from "@/components/SalaryCutoffSelect";
 import { Button, Field, Input, Textarea } from "@/components/ui";
+import type { BankEnv } from "@/lib/settings";
 
 export type SettingsFormValues = {
-  bankAccountNumber: string;
-  bankAccountName: string;
-  bankBin: string;
-  appUrl: string;
   debtReminderTemplate: string;
   salaryCutoff: string;
   /** Chỉ là gợi ý đã che (vd "••••a1b2"), không bao giờ là secret thật. */
@@ -20,26 +17,50 @@ export type SettingsFormValues = {
   sepayWebhookSecretHint: string;
 };
 
-export function SettingsForm({ values }: { values: SettingsFormValues }) {
+const BANK_ROWS: Array<{ label: string; env: string; key: "bankAccountNumber" | "bankAccountName" | "bankBin" | "appUrl" }> = [
+  { label: "Số tài khoản nhận tiền", env: "BANK_ACCOUNT_NUMBER", key: "bankAccountNumber" },
+  { label: "Tên tài khoản", env: "BANK_ACCOUNT_NAME", key: "bankAccountName" },
+  { label: "Mã ngân hàng (BIN)", env: "BANK_BIN", key: "bankBin" },
+  { label: "Địa chỉ app (link gửi phụ huynh)", env: "NEXT_PUBLIC_APP_URL", key: "appUrl" }
+];
+
+/** STK chỉ để xem: đổi bằng .env trên máy chủ rồi khởi động lại app. */
+function BankInfo({ bank }: { bank: BankEnv }) {
+  return (
+    <div className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+      <div className="flex items-start gap-2 text-sm text-stone-700">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-stone-500" />
+        <p>
+          <strong>Tài khoản nhận học phí bị khóa trên web</strong> để không ai chiếm được tài khoản admin mà đổi được STK
+          trên mã QR. Muốn đổi thì sửa file <code className="font-mono">.env</code> trên máy chủ và khởi động lại app.
+        </p>
+      </div>
+      <dl className="grid gap-2 sm:grid-cols-2">
+        {BANK_ROWS.map((row) => {
+          const missing = bank.problems.includes(row.env);
+          return (
+            <div key={row.env} className="rounded-lg border border-stone-200 bg-white px-3 py-2">
+              <dt className="text-xs text-stone-500">
+                {row.label} · <code className="font-mono">{row.env}</code>
+              </dt>
+              <dd className={`mt-0.5 break-all font-mono text-sm font-semibold ${missing ? "text-rose-600" : "text-neutralText"}`}>
+                {missing ? "Chưa cấu hình hoặc sai định dạng" : bank[row.key]}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+export function SettingsForm({ values, bank }: { values: SettingsFormValues; bank: BankEnv }) {
   const [state, action, pending] = useActionState(updateSettingsAction, EMPTY_RESULT_STATE);
   useResultToast(state);
 
   return (
     <form action={action} className="grid gap-5">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Field label="Số tài khoản nhận tiền">
-          <Input name="bankAccountNumber" defaultValue={values.bankAccountNumber} required />
-        </Field>
-        <Field label="Tên tài khoản">
-          <Input name="bankAccountName" defaultValue={values.bankAccountName} required />
-        </Field>
-        <Field label="Mã ngân hàng VietQR / BIN">
-          <Input name="bankBin" defaultValue={values.bankBin} required />
-        </Field>
-        <Field label="Địa chỉ app">
-          <Input name="appUrl" defaultValue={values.appUrl} placeholder="http://localhost:3001" />
-        </Field>
-      </div>
+      <BankInfo bank={bank} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Field label="Ngày chốt lương giáo viên" hint="Lớp nào khác thì đặt riêng ở Sửa lớp">

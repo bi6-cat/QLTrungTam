@@ -14,7 +14,8 @@ export async function updateSettingsAction(_prevState: ResultState, formData: Fo
     // Trang cài đặt không gửi secret thật xuống trình duyệt: ô để trống nghĩa là giữ nguyên.
     const current = await getAppSettings();
     await saveAppSettings({
-      ...data,
+      debtReminderTemplate: data.debtReminderTemplate,
+      salaryCutoff: data.salaryCutoff,
       sepayApiKey: data.sepayApiKey || current.sepayApiKey,
       sepayWebhookSecret: data.sepayWebhookSecret || current.sepayWebhookSecret
     });

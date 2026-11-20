@@ -59,8 +59,10 @@ export default async function DebtsPage({
 
   const periods = summarizeDebtPeriods(debts.rows);
   const periodKey = period ? debtPeriodKey(period.month, period.year) : "";
-  // Tin nhắc nợ luôn dựng từ toàn bộ khoản nợ của học sinh, kể cả khi đang lọc một tháng.
-  const fullRows = new Map(debts.rows.map((row) => [row.studentId, row]));
+  // Tin nhắc nợ luôn dựng từ toàn bộ khoản nợ của học sinh (mọi tháng, mọi lớp), kể cả khi đang
+  // lọc một tháng hay một lớp.
+  const allDebts = classId ? await getOutstandingDebts({ appUrl: settings.appUrl }) : debts;
+  const fullRows = new Map(allDebts.rows.map((row) => [row.studentId, row]));
   const rows = sortDebtRows(period ? filterDebtRowsByPeriod(debts.rows, period) : debts.rows, sort);
   const summary = period ? summarizeDebtRows(rows) : debts;
   const parsedPage = Number(params.page);
@@ -253,7 +255,7 @@ export default async function DebtsPage({
                         {otherInvoices.length > 0 ? (
                           <p className="mt-1 text-xs text-stone-500">
                             Còn nợ thêm{" "}
-                            {otherInvoices.map((invoice) => `T${invoice.month}/${invoice.year}`).join(", ")} ·{" "}
+                            {otherInvoices.map((invoice) => `T${invoice.month}/${invoice.year} ${invoice.classShortCode}`).join(", ")} ·{" "}
                             {formatCurrency(otherInvoices.reduce((sum, invoice) => sum + invoice.amount, 0))}
                           </p>
                         ) : null}
