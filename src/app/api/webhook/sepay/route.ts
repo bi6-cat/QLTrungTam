@@ -4,6 +4,7 @@ import { matchInvoiceFromTransaction } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
 import { isKnownPrismaError, runSerializable } from "@/lib/serializable";
 import { getAppSettings } from "@/lib/settings";
+import { logAudit } from "@/lib/audit";
 
 const MAX_INT32 = 2_147_483_647;
 const MIN_INT32 = -2_147_483_648;
@@ -255,20 +256,16 @@ export async function POST(request: Request) {
           throw new Error("Không thể hoàn tất liên kết giao dịch SePay với hóa đơn.");
         }
 
-        await tx.auditLog.create({
-          data: {
-            actorUserId: null,
-            actorUsername: "system:sepay",
-            action: "transaction.auto_assigned",
-            entityType: "Transaction",
-            entityId: transaction.id,
-            metadata: {
-              invoiceId: match.invoice.id,
-              amount,
-              paymentMethod: "bank_transfer",
-              transferredAt: transferredAt.toISOString(),
-              source: "sepay_webhook"
-            }
+        await logAudit(tx, { userId: null, username: "system:sepay" }, {
+          action: "transaction.auto_assigned",
+          entityType: "Transaction",
+          entityId: transaction.id,
+          metadata: {
+            invoiceId: match.invoice.id,
+            amount,
+            paymentMethod: "bank_transfer",
+            transferredAt: transferredAt.toISOString(),
+            source: "sepay_webhook"
           }
         });
 

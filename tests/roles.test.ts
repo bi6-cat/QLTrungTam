@@ -23,7 +23,8 @@ describe("admin roles", () => {
       "/admin/students/",
       "/admin/students/abc",
       "/admin/students/abc/",
-      "/admin/schedule"
+      "/admin/schedule",
+      "/admin/logs"
     ]) {
       assert.equal(canAccessAdminPath("manager", path), true, path);
     }

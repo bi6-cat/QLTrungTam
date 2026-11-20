@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
+import { logAudit } from "@/lib/audit";
 
 export type InvoiceLifecycleStatus = "unpaid" | "void" | "waived";
 
@@ -208,21 +209,17 @@ export async function changeInvoiceLifecycle(
           ? "invoice.voided"
           : "invoice.waived";
 
-    await tx.auditLog.create({
-      data: {
-        actorUserId: input.actor.userId,
-        actorUsername: input.actor.username.trim(),
-        action,
-        entityType: "MonthlyInvoice",
-        entityId: invoice.id,
-        reason,
-        metadata: {
-          previousStatus,
-          targetStatus: input.targetStatus,
-          amount: invoice.amount,
-          month: invoice.month,
-          year: invoice.year
-        }
+    await logAudit(tx, input.actor, {
+      action,
+      entityType: "MonthlyInvoice",
+      entityId: invoice.id,
+      reason,
+      metadata: {
+        previousStatus,
+        targetStatus: input.targetStatus,
+        amount: invoice.amount,
+        month: invoice.month,
+        year: invoice.year
       }
     });
 

@@ -185,6 +185,7 @@ export async function setClassSalaryCutoffAction(_prevState: ResultState, formDa
         action: "salary.class_cutoff_changed",
         entityType: "ClassSalaryCutoff",
         entityId: `${classId}:${year}-${month}`,
+        classId,
         metadata: { classId, month, year, ...metadata }
       }
     });
@@ -254,6 +255,7 @@ export async function setSalaryWriteOffAction(input: {
         action: input.undo ? "salary.write_off_undone" : "salary.written_off",
         entityType: "ClassRoom",
         entityId: classRoom.id,
+        classId: classRoom.id,
         metadata: { month, year, note }
       }
     })

@@ -15,7 +15,7 @@ import {
   stopScheduleSlot,
   updateScheduleSlot
 } from "@/lib/class-session-ops";
-import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 import { weekdayLabel } from "@/lib/schedule";
 import {
   bulkHeldSchema,
@@ -36,11 +36,27 @@ function parseInput<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<
 }
 
 export async function createScheduleAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  await requireStaff();
+  const actor = await requireStaff();
   const { data, error } = safeParseForm(createScheduleSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   try {
-    const classRoom = await runSerializableAction((tx) => createScheduleSlot(tx, data));
+    const classRoom = await runSerializableAction(async (tx) => {
+      const created = await createScheduleSlot(tx, data);
+      await logAudit(tx, actor, {
+        action: "schedule.created",
+        entityType: "ClassRoom",
+        entityId: data.classId,
+        metadata: {
+          className: created.name,
+          weekday: data.weekday,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          room: data.room,
+          effectiveFrom: data.effectiveFrom ?? null
+        }
+      });
+      return created;
+    });
     return successState(
       `Đã thêm buổi ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime} cho lớp ${classRoom.name}.`
     );
@@ -50,11 +66,29 @@ export async function createScheduleAction(_prevState: ResultState, formData: Fo
 }
 
 export async function updateScheduleAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
-  await requireStaff();
+  const actor = await requireStaff();
   const { data, error } = safeParseForm(updateScheduleSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   try {
-    await runSerializableAction((tx) => updateScheduleSlot(tx, data));
+    await runSerializableAction(async (tx) => {
+      const before = await tx.classSchedule.findUnique({
+        where: { id: data.id },
+        select: { classId: true, weekday: true, startTime: true, endTime: true, room: true }
+      });
+      await updateScheduleSlot(tx, data);
+      if (before) {
+        await logAudit(tx, actor, {
+          action: "schedule.updated",
+          entityType: "ClassRoom",
+          entityId: before.classId,
+          metadata: {
+            scheduleId: data.id,
+            from: { weekday: before.weekday, startTime: before.startTime, endTime: before.endTime, room: before.room },
+            to: { weekday: data.weekday, startTime: data.startTime, endTime: data.endTime, room: data.room }
+          }
+        });
+      }
+    });
   } catch (updateError) {
     return actionFailure(updateError, "Không thể sửa lịch học.");
   }
@@ -62,11 +96,26 @@ export async function updateScheduleAction(_prevState: ResultState, formData: Fo
 }
 
 export async function stopScheduleAction(scheduleId: string, fromDate: string): Promise<ResultState> {
-  await requireStaff();
+  const actor = await requireStaff();
   const date = parseIsoDate(fromDate);
   if (!date) return errorState("Ngày ngừng không hợp lệ.");
   try {
-    const result = await stopScheduleSlot(prisma, { id: String(scheduleId), fromDate: date });
+    const result = await runSerializableAction(async (tx) => {
+      const before = await tx.classSchedule.findUnique({
+        where: { id: String(scheduleId) },
+        select: { classId: true, weekday: true, startTime: true, endTime: true }
+      });
+      const outcome = await stopScheduleSlot(tx, { id: String(scheduleId), fromDate: date });
+      if (before) {
+        await logAudit(tx, actor, {
+          action: outcome === "deleted" ? "schedule.deleted" : "schedule.stopped",
+          entityType: "ClassRoom",
+          entityId: before.classId,
+          metadata: { scheduleId: String(scheduleId), ...before, fromDate: date }
+        });
+      }
+      return outcome;
+    });
     return successState(result === "deleted" ? "Đã xóa buổi học khỏi lịch." : `Đã ngừng buổi học từ ${formatIsoDayMonth(date)}.`);
   } catch (stopError) {
     return actionFailure(stopError, "Không thể ngừng buổi học.");
@@ -83,7 +132,20 @@ export async function markSessionAction(input: {
   const actor = await requireStaff();
   try {
     const data = parseInput(markSessionSchema, input);
-    const warning = await runSerializableAction((tx) => markSession(tx, data, actor.username));
+    const warning = await runSerializableAction(async (tx) => {
+      const result = await markSession(tx, data, actor.username);
+      // Điểm danh "đã học" diễn ra hằng ngày nên không ghi nhật ký; chỉ ghi buổi lớp nghỉ.
+      if (data.status === "cancelled") {
+        await logAudit(tx, actor, {
+          action: "session.cancelled",
+          entityType: "ClassRoom",
+          entityId: data.classId,
+          reason: data.reason,
+          metadata: { date: data.date, startTime: data.startTime }
+        });
+      }
+      return result;
+    });
     return successState(
       `${data.status === "held" ? "Đã điểm danh đã học" : "Đã ghi lớp nghỉ"} buổi ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
     );
@@ -93,9 +155,29 @@ export async function markSessionAction(input: {
 }
 
 export async function clearSessionAction(recordId: string): Promise<ResultState> {
-  await requireStaff();
+  const actor = await requireStaff();
   try {
-    await clearSession(prisma, String(recordId));
+    await runSerializableAction(async (tx) => {
+      const before = await tx.classSession.findUnique({
+        where: { id: String(recordId) },
+        select: { classId: true, date: true, startTime: true, status: true, reason: true }
+      });
+      await clearSession(tx, String(recordId));
+      // Bỏ điểm danh "đã học" là việc thường ngày; chỉ ghi khi gỡ buổi nghỉ/buổi bù.
+      if (before && before.status !== "held") {
+        await logAudit(tx, actor, {
+          action: "session.cleared",
+          entityType: "ClassRoom",
+          entityId: before.classId,
+          metadata: {
+            date: before.date.toISOString().slice(0, 10),
+            startTime: before.startTime,
+            previousStatus: before.status,
+            previousReason: before.reason
+          }
+        });
+      }
+    });
   } catch (clearError) {
     return actionFailure(clearError, "Không thể bỏ điểm danh.");
   }
@@ -115,7 +197,23 @@ export async function addMakeupSessionAction(input: {
   const actor = await requireStaff();
   try {
     const data = parseInput(makeupSessionSchema, input);
-    const warning = await runSerializableAction((tx) => addMakeupSession(tx, data, actor.username));
+    const warning = await runSerializableAction(async (tx) => {
+      const result = await addMakeupSession(tx, data, actor.username);
+      await logAudit(tx, actor, {
+        action: "session.makeup_added",
+        entityType: "ClassRoom",
+        entityId: data.classId,
+        reason: data.reason,
+        metadata: {
+          date: data.date,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          fromDate: data.fromDate ?? null,
+          fromStartTime: data.fromStartTime ?? null
+        }
+      });
+      return result;
+    });
     return successState(
       data.fromDate
         ? `Đã dời buổi ${formatIsoDayMonth(data.fromDate)} sang ${formatIsoDayMonth(data.date)} ${data.startTime}.${warning}`
@@ -141,7 +239,19 @@ export async function cancelDayAction(input: { date: string; reason: string }): 
   const actor = await requireStaff();
   try {
     const data = parseInput(cancelDaySchema, input);
-    const result = await runSerializableAction((tx) => cancelDay(tx, data, actor.username));
+    const result = await runSerializableAction(async (tx) => {
+      const outcome = await cancelDay(tx, data, actor.username);
+      if (outcome.count > 0) {
+        await logAudit(tx, actor, {
+          action: "session.day_cancelled",
+          entityType: "Center",
+          entityId: data.date,
+          reason: data.reason,
+          metadata: { date: data.date, cancelledSessions: outcome.count }
+        });
+      }
+      return outcome;
+    });
     return successState(
       result.count > 0
         ? `Đã ghi nghỉ ${result.count} buổi ngày ${formatIsoDayMonth(data.date)} (${data.reason}).${result.warning}`

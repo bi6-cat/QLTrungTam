@@ -283,9 +283,15 @@ model AuditLog {
   entityId      String
   reason        String?
   metadata      Json?
+  /// Lớp/học sinh liên quan, để lọc nhật ký theo lớp hoặc học sinh (không ràng buộc khóa ngoại:
+  /// log phải còn nguyên kể cả khi dữ liệu gốc thay đổi).
+  classId       String?
+  studentId     String?
   createdAt     DateTime   @default(now())
   actorUser     AdminUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
+  @@index([classId, createdAt])
+  @@index([studentId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])

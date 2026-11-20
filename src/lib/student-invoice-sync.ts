@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { buildMemo, normalizePhone, parseMemo, pickMemoSuffix, usedMemoSuffixes } from "@/lib/payment";
+import { logAudit } from "@/lib/audit";
 
 type Actor = { userId: string | null; username: string };
 
@@ -85,16 +86,12 @@ export async function syncUnpaidInvoicesWithStudent(
 
     if (memoContent !== invoice.memoContent) {
       changedMemos.push({ from: invoice.memoContent, to: memoContent });
-      await tx.auditLog.create({
-        data: {
-          actorUserId: actor.userId,
-          actorUsername: actor.username.trim(),
-          action: "invoice.memo_changed",
-          entityType: "MonthlyInvoice",
-          entityId: invoice.id,
-          reason: "Đổi SĐT hồ sơ học sinh",
-          metadata: { from: invoice.memoContent, to: memoContent, month: invoice.month, year: invoice.year }
-        }
+      await logAudit(tx, actor, {
+        action: "invoice.memo_changed",
+        entityType: "MonthlyInvoice",
+        entityId: invoice.id,
+        reason: "Đổi SĐT hồ sơ học sinh",
+        metadata: { from: invoice.memoContent, to: memoContent, month: invoice.month, year: invoice.year }
       });
     }
   }

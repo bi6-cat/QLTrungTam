@@ -198,6 +198,12 @@ export default async function ClassesPage({
                   teacherUrl={`${absoluteUrl(settings.appUrl, teacherPath(selectedClass))}?month=${month}&year=${year}`}
                 />
               ) : null}
+              <Link
+                href={`/admin/logs?classId=${selectedClass.id}`}
+                className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
+              >
+                Nhật ký
+              </Link>
               <CopyParentLinkButton
                 className={selectedClass.name}
                 classShortCode={selectedClass.shortCode}

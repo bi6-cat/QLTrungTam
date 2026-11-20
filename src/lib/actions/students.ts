@@ -6,66 +6,27 @@ import { changeArchiveState, parseArchiveInput } from "@/lib/archive";
 import { requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncUnpaidInvoicesWithStudent } from "@/lib/student-invoice-sync";
+import { diffFields, logAudit } from "@/lib/audit";
+import { createStudentRecord } from "@/lib/students-core";
 import { createStudentSchema, safeParseForm, updateStudentSchema } from "@/lib/validation";
 
-/**
- * Thêm học sinh thủ công, chặn trùng hồ sơ.
- *
- * - Trùng cả tên lẫn SĐT  -> chặn hẳn (gần như chắc chắn là nhập lặp).
- * - Trùng ở hồ sơ đã lưu trữ -> chặn, hướng dẫn khôi phục thay vì tạo bản sao.
- * - Chỉ trùng SĐT (khác tên) -> vẫn tạo, kèm cảnh báo vì anh chị em dùng chung
- *   số phụ huynh là bình thường, nhưng cùng lớp thì memo sẽ đụng nhau.
- */
+/** Thêm học sinh thủ công, chặn trùng hồ sơ (quy tắc trong createStudentRecord). */
 export async function createStudentAction(
   _prevState: CreateStudentState,
   formData: FormData
 ): Promise<CreateStudentState> {
-  await requireStaff();
+  const actor = await requireStaff();
   const { data, error } = safeParseForm(createStudentSchema, formData);
   if (error || !data) {
     return { warning: "", success: "", error: error ?? "Dữ liệu không hợp lệ." };
   }
-
-  const samePhone = await prisma.student.findMany({
-    where: { phone: data.phone },
-    select: { id: true, fullName: true, archivedAt: true },
-    take: 20
-  });
-
-  const normalized = data.fullName.toLocaleLowerCase("vi");
-  const duplicate = samePhone.find((student) => student.fullName.toLocaleLowerCase("vi") === normalized);
-  if (duplicate) {
-    return {
-      warning: "",
-      success: "",
-      error: duplicate.archivedAt
-        ? `"${duplicate.fullName}" (${data.phone}) đã có trong hồ sơ lưu trữ. Hãy khôi phục hồ sơ đó thay vì tạo mới.`
-        : `"${duplicate.fullName}" (${data.phone}) đã tồn tại. Không tạo thêm hồ sơ trùng.`
-    };
+  try {
+    const result = await createStudentRecord(data, actor);
+    if (!result.ok) return { warning: "", success: "", error: result.error };
+    return { error: "", success: `Đã thêm học sinh ${result.fullName}.`, warning: result.warning };
+  } catch (createError) {
+    return { warning: "", success: "", error: actionFailure(createError, "Không thể thêm học sinh.").error };
   }
-
-  const created = await prisma.student.create({
-    data: {
-      fullName: data.fullName,
-      phone: data.phone,
-      address: data.address,
-      parentName: data.parentName,
-      note: data.note
-    },
-    select: { fullName: true }
-  });
-
-  const activeSiblings = samePhone.filter((student) => !student.archivedAt);
-  return {
-    error: "",
-    success: `Đã thêm học sinh ${created.fullName}.`,
-    warning:
-      activeSiblings.length > 0
-        ? `SĐT ${data.phone} đang dùng cho ${activeSiblings
-            .map((student) => student.fullName)
-            .join(", ")}. Nếu là anh chị em thì bình thường, nhưng tránh xếp chung một lớp vì nội dung chuyển khoản sẽ trùng nhau.`
-        : ""
-  };
 }
 
 export async function updateStudentAction(_prevState: ResultState, formData: FormData): Promise<ResultState> {
@@ -76,6 +37,10 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
   let changedMemos: Array<{ from: string; to: string }>;
   try {
     changedMemos = await prisma.$transaction(async (tx) => {
+      const before = await tx.student.findUnique({
+        where: { id: data.id },
+        select: { fullName: true, phone: true, address: true, parentName: true, note: true }
+      });
       const updated = await tx.student.updateMany({
         where: { id: data.id, archivedAt: null },
         data: {
@@ -88,6 +53,23 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
       });
       if (updated.count !== 1) {
         throw new Error("Học sinh đã lưu trữ hoặc không còn tồn tại. Hãy khôi phục hồ sơ trước khi sửa.");
+      }
+      const changes = before
+        ? diffFields(before, {
+            fullName: data.fullName,
+            phone: data.phone,
+            address: data.address,
+            parentName: data.parentName ?? null,
+            note: data.note ?? null
+          })
+        : {};
+      if (Object.keys(changes).length > 0) {
+        await logAudit(tx, actor, {
+          action: "student.updated",
+          entityType: "Student",
+          entityId: data.id,
+          metadata: { fullName: data.fullName, changes }
+        });
       }
       // Trang lớp hiển thị tên/SĐT/memo theo bản chụp trên hóa đơn, nên phải đồng bộ hóa đơn chưa đóng.
       return syncUnpaidInvoicesWithStudent(tx, { id: data.id, fullName: data.fullName, phone: data.phone }, actor);

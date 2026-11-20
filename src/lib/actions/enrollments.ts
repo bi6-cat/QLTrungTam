@@ -6,6 +6,8 @@ import { requireStaff } from "@/lib/auth";
 import { periodIndex, periodStartDate } from "@/lib/enrollment-period";
 import { formatMonth } from "@/lib/format";
 import { enrollmentSchema, safeParseForm } from "@/lib/validation";
+import { logAudit } from "@/lib/audit";
+import { enrollStudentInClass } from "@/lib/enrollments-core";
 
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
 
@@ -24,60 +26,19 @@ export async function createEnrollmentAction(formData: FormData): Promise<Result
   if (!startDate) return errorState("Ngày bắt đầu học không hợp lệ.");
 
   try {
-    const result = await runSerializableAction(async (tx) => {
-      const [student, classRoom, existing] = await Promise.all([
-        tx.student.findUnique({ where: { id: data.studentId }, select: { fullName: true, archivedAt: true } }),
-        tx.classRoom.findUnique({ where: { id: data.classId }, select: { name: true, archivedAt: true } }),
-        tx.enrollment.findUnique({
-          where: { studentId_classId: { studentId: data.studentId, classId: data.classId } },
-          select: { id: true, startDate: true, leftAt: true }
-        })
-      ]);
-
-      if (!student) throw new Error("Không tìm thấy học sinh.");
-      if (!classRoom) throw new Error("Không tìm thấy lớp học.");
-      if (student.archivedAt) throw new Error("Không thể ghi danh học sinh đã lưu trữ.");
-      if (classRoom.archivedAt) throw new Error("Không thể ghi danh vào lớp đã lưu trữ.");
-
-      if (!existing) {
-        await tx.enrollment.create({
-          data: {
-            studentId: data.studentId,
-            classId: data.classId,
-            sessionsOverride: data.sessionsOverride,
-            status: data.status,
-            startDate
-          }
-        });
-        return { studentName: student.fullName, rejoined: false };
-      }
-
-      if (!existing.leftAt) {
-        throw new Error(`${student.fullName} đã có trong lớp (bắt đầu học ${dateFormatter.format(existing.startDate)}).`);
-      }
-
-      await tx.enrollment.update({
-        where: { id: existing.id },
-        data: { sessionsOverride: data.sessionsOverride, status: data.status, leftAt: null, startDate }
-      });
-      await tx.auditLog.create({
-        data: {
-          actorUserId: actor.userId,
-          actorUsername: actor.username.trim(),
-          action: "enrollment.rejoined",
-          entityType: "Enrollment",
-          entityId: existing.id,
-          metadata: {
-            className: classRoom.name,
-            studentName: student.fullName,
-            previousStartDate: existing.startDate.toISOString(),
-            previousLeftAt: existing.leftAt.toISOString(),
-            startDate: startDate.toISOString()
-          }
-        }
-      });
-      return { studentName: student.fullName, rejoined: true };
-    });
+    const result = await runSerializableAction((tx) =>
+      enrollStudentInClass(
+        tx,
+        {
+          studentId: data.studentId,
+          classId: data.classId,
+          sessionsOverride: data.sessionsOverride,
+          status: data.status,
+          startDate
+        },
+        actor
+      )
+    );
 
     return successState(
       result.rejoined
@@ -169,16 +130,12 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
         if (voided.count !== 1) {
           throw new Error(`Hóa đơn tháng ${invoice.month}/${invoice.year} vừa thay đổi. Vui lòng tải lại.`);
         }
-        await tx.auditLog.create({
-          data: {
-            actorUserId: actor.userId,
-            actorUsername: actor.username.trim(),
-            action: "invoice.voided",
-            entityType: "MonthlyInvoice",
-            entityId: invoice.id,
-            reason: voidReason,
-            metadata: { previousStatus: "unpaid", targetStatus: "void", month: invoice.month, year: invoice.year }
-          }
+        await logAudit(tx, actor, {
+          action: "invoice.voided",
+          entityType: "MonthlyInvoice",
+          entityId: invoice.id,
+          reason: voidReason,
+          metadata: { previousStatus: "unpaid", targetStatus: "void", month: invoice.month, year: invoice.year }
         });
       }
 
@@ -192,21 +149,17 @@ export async function leaveClassAction(input: LeaveClassInput): Promise<ResultSt
 
       const leftAt = periodStartDate(fromMonth, fromYear);
       await tx.enrollment.update({ where: { id: enrollment.id }, data: { leftAt } });
-      await tx.auditLog.create({
-        data: {
-          actorUserId: actor.userId,
-          actorUsername: actor.username.trim(),
-          action: "enrollment.left",
-          entityType: "Enrollment",
-          entityId: enrollment.id,
-          reason: reason || null,
-          metadata: {
-            className: enrollment.classRoom.name,
-            studentName: enrollment.student.fullName,
-            previousLeftAt: enrollment.leftAt?.toISOString() ?? null,
-            leftAt: leftAt.toISOString(),
-            voidedInvoiceIds: voidable.map((item) => item.id)
-          }
+      await logAudit(tx, actor, {
+        action: "enrollment.left",
+        entityType: "Enrollment",
+        entityId: enrollment.id,
+        reason: reason || null,
+        metadata: {
+          className: enrollment.classRoom.name,
+          studentName: enrollment.student.fullName,
+          previousLeftAt: enrollment.leftAt?.toISOString() ?? null,
+          leftAt: leftAt.toISOString(),
+          voidedInvoiceIds: voidable.map((item) => item.id)
         }
       });
       return { studentName: enrollment.student.fullName, className: enrollment.classRoom.name };

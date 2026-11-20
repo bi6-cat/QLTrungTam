@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ClipboardList,
   FileSpreadsheet,
+  History,
   LayoutDashboard,
   PiggyBank,
   ReceiptText,
@@ -30,6 +31,7 @@ const ownerNav = [
   { href: "/admin/salary", label: "Lương GV", icon: Banknote },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
   { href: "/admin/surveys", label: "Khảo sát", icon: ClipboardList },
+  { href: "/admin/logs", label: "Nhật ký", icon: History },
   { href: "/admin/settings", label: "Cài đặt", icon: Settings }
 ];
 
@@ -42,6 +44,7 @@ const managerNav = [
   { href: "/admin/debts", label: "Công nợ", icon: Wallet },
   { href: "/admin/transactions", label: "Giao dịch", icon: ReceiptText },
   { href: "/admin/reports", label: "Báo cáo", icon: FileSpreadsheet },
+  { href: "/admin/logs", label: "Nhật ký", icon: History },
   { href: "/admin/settings", label: "Tài khoản", icon: Settings }
 ];
 

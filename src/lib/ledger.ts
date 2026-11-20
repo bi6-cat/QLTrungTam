@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { runSerializable as runSerializableTransaction } from "@/lib/serializable";
+import { logAudit } from "@/lib/audit";
 
 export type LedgerErrorCode =
   | "INVALID_ACTOR"
@@ -128,16 +129,12 @@ async function writeAudit(
     metadata?: Prisma.InputJsonValue;
   }
 ) {
-  await tx.auditLog.create({
-    data: {
-      actorUserId: input.actor.userId,
-      actorUsername: input.actor.username.trim(),
-      action: input.action,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      reason: input.reason ?? null,
-      metadata: input.metadata
-    }
+  await logAudit(tx, input.actor, {
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    reason: input.reason ?? null,
+    metadata: input.metadata
   });
 }
 

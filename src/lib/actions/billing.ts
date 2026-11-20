@@ -9,6 +9,8 @@ import type { SessionSuggestion } from "@/lib/class-sessions";
 import { loadSessionSuggestions } from "@/lib/class-sessions-server";
 import { buildMemo, normalizePhone, pickMemoSuffix, usedMemoSuffixes } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
+import { diffFields, logAudit } from "@/lib/audit";
 import { NOTE_MAX_LENGTH, safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
 
 function clampSessions(value: FormDataEntryValue | null) {
@@ -60,6 +62,8 @@ async function saveClassDetails(
     new Set(formData.getAll("enrollmentId").map((value) => String(value)).filter(Boolean))
   );
 
+  // Mọi dòng nhật ký của một lần bấm Lưu dùng chung batchId để trang Nhật ký gom lại.
+  const batchId = randomUUID();
   return runSerializableAction(async (tx) => {
     const summary = { created: 0, updated: 0, voided: 0, suffixed: [] as string[] };
     const classState = await tx.classRoom.findUnique({
@@ -127,6 +131,25 @@ async function saveClassDetails(
       const noteField = formData.get(`note:${enrollmentId}`);
       const note = noteField === null ? undefined : String(noteField).trim().slice(0, NOTE_MAX_LENGTH) || null;
       const noteChanged = note !== undefined && note !== (existingMonth?.note ?? null);
+      const logMonthPlan = (changes: ReturnType<typeof diffFields>, extra: Record<string, number | string | null> = {}) =>
+        Object.keys(changes).length === 0
+          ? Promise.resolve()
+          : logAudit(tx, actor, {
+              action: "month_plan.updated",
+              entityType: "Enrollment",
+              entityId: enrollmentId,
+              classId: enrollment.classId,
+              studentId: enrollment.studentId,
+              metadata: {
+                batchId,
+                month,
+                year,
+                className: enrollment.classRoom.name,
+                studentName: enrollment.student.fullName,
+                changes,
+                ...extra
+              }
+            });
 
       // Quản lý phụ không đổi được tình trạng học (bảo lưu sẽ hủy hóa đơn), bất kể form gửi gì.
       const statusField = formData.get(`status:${enrollmentId}`);
@@ -156,6 +179,7 @@ async function saveClassDetails(
               note
             }
           });
+          await logMonthPlan(diffFields({ note: existingMonth?.note ?? null }, { note: note ?? null }));
           summary.updated += 1;
         }
         continue;
@@ -177,6 +201,16 @@ async function saveClassDetails(
         where: { enrollmentId_month_year: { enrollmentId, month, year } },
         update: { status, sessions, note },
         create: { enrollmentId, month, year, status, sessions, pricePerSession: periodPricePerSession, note }
+      });
+      const planBefore = {
+        status: existingMonth?.status ?? plan.status,
+        sessions: existingMonth?.sessions ?? plan.sessions,
+        note: existingMonth?.note ?? null
+      };
+      const planChanges = diffFields(planBefore, {
+        status,
+        sessions,
+        ...(note !== undefined ? { note } : {})
       });
 
       // Tình trạng hiện hành của ghi danh = tình trạng của tháng có kế hoạch mới nhất,
@@ -206,6 +240,11 @@ async function saveClassDetails(
           }
           summary.updated += 1;
         }
+        await logMonthPlan(planChanges, {
+          invoiceId: existingInvoice.id,
+          amountFrom: existingInvoice.amount,
+          amountTo: sessions * existingInvoice.pricePerSession
+        });
       } else if (existingInvoice?.status === "unpaid" && status === "on_leave") {
         // Bảo lưu cả tháng: hủy hóa đơn chưa đóng để phụ huynh không còn bị đòi tiền.
         // Muốn học lại thì bấm "Khôi phục" hóa đơn, kế hoạch tháng tự về "Đang học".
@@ -223,17 +262,16 @@ async function saveClassDetails(
         if (voided.count !== 1) {
           throw new Error(`Hóa đơn của ${enrollment.student.fullName} vừa thay đổi hoặc đang gắn giao dịch. Vui lòng tải lại.`);
         }
-        await tx.auditLog.create({
-          data: {
-            actorUserId: actor.userId,
-            actorUsername: actor.username.trim(),
-            action: "invoice.voided",
-            entityType: "MonthlyInvoice",
-            entityId: existingInvoice.id,
-            reason: "Bảo lưu",
-            metadata: { previousStatus: "unpaid", targetStatus: "void", month, year }
-          }
+        await logAudit(tx, actor, {
+          action: "invoice.voided",
+          entityType: "MonthlyInvoice",
+          entityId: existingInvoice.id,
+          classId: enrollment.classId,
+          studentId: enrollment.studentId,
+          reason: "Bảo lưu",
+          metadata: { batchId, previousStatus: "unpaid", targetStatus: "void", month, year }
         });
+        await logMonthPlan(planChanges);
         summary.voided += 1;
       } else if (!existingInvoice && parsed.intent === "create" && status === "active") {
         // Cùng lớp, cùng kỳ, cùng SĐT (anh chị em) thì memo gốc đã bị dùng: thêm hậu tố B, C, ...
@@ -268,7 +306,8 @@ async function saveClassDetails(
         if (memoSuffix) summary.suffixed.push(`${enrollment.student.fullName} (${memoContent})`);
         const suggestion = suggestions.get(enrollmentId);
         const sessionsNote = suggestion?.note && suggestion.sessions === sessions ? suggestion.note : null;
-        await tx.monthlyInvoice.create({
+        const createdInvoice = await tx.monthlyInvoice.create({
+          select: { id: true },
           data: {
             enrollmentId,
             month,
@@ -285,8 +324,28 @@ async function saveClassDetails(
             teacherNameSnapshot: enrollment.classRoom.teacherName
           }
         });
+        await logAudit(tx, actor, {
+          action: "invoice.created",
+          entityType: "MonthlyInvoice",
+          entityId: createdInvoice.id,
+          classId: enrollment.classId,
+          studentId: enrollment.studentId,
+          metadata: {
+            batchId,
+            month,
+            year,
+            className: enrollment.classRoom.name,
+            studentName: enrollment.student.fullName,
+            sessions,
+            amount: sessions * periodPricePerSession,
+            memoContent,
+            sessionsNote
+          }
+        });
+        await logMonthPlan(planChanges);
         summary.created += 1;
       } else if (monthChanged) {
+        await logMonthPlan(planChanges);
         summary.updated += 1;
       }
     }

@@ -18,6 +18,7 @@ const MANAGER_PATHS = [
   "/admin/debts",
   "/admin/transactions",
   "/admin/reports",
+  "/admin/logs",
   "/admin/settings"
 ];
 

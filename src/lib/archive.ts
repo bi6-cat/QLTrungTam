@@ -1,5 +1,6 @@
 import { runSerializableAction } from "@/lib/actions/shared";
 import { idSchema, parseForm } from "@/lib/validation";
+import { logAudit } from "@/lib/audit";
 
 type ArchiveEntity = "class" | "student";
 type ArchiveMode = "archive" | "restore";
@@ -58,18 +59,14 @@ export async function changeArchiveState(input: {
       throw new Error(`${EntityLabel} vừa được thay đổi. Vui lòng tải lại.`);
     }
 
-    await tx.auditLog.create({
-      data: {
-        actorUserId: input.actor.userId,
-        actorUsername: input.actor.username.trim(),
-        action: `${input.entity}.${input.mode === "archive" ? "archived" : "restored"}`,
-        entityType: input.entity === "class" ? "ClassRoom" : "Student",
-        entityId: current.id,
-        reason: input.reason,
-        metadata: {
-          previousArchivedAt: current.archivedAt?.toISOString() ?? null,
-          archivedAt: nextArchivedAt?.toISOString() ?? null
-        }
+    await logAudit(tx, input.actor, {
+      action: `${input.entity}.${input.mode === "archive" ? "archived" : "restored"}`,
+      entityType: input.entity === "class" ? "ClassRoom" : "Student",
+      entityId: current.id,
+      reason: input.reason,
+      metadata: {
+        previousArchivedAt: current.archivedAt?.toISOString() ?? null,
+        archivedAt: nextArchivedAt?.toISOString() ?? null
       }
     });
 
