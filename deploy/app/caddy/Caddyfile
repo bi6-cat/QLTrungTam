@@ -1,5 +1,7 @@
 # Caddy App chạy trên host (không trong Compose), cài vào /etc/caddy/Caddyfile.
 # Chỉ cài sau khi DNS đã trỏ về host này; cài sớm thì ACME thất bại và Caddy lùi lịch thử lại.
+# Không bật access log cho site này: /api/mcp?key=<token> sẽ lộ token MCP vào log. Nếu cần log,
+# dùng log { format filter { request>uri query { delete key } } }.
 aplus.zett.io.vn {
 	reverse_proxy 127.0.0.1:3001
 }
