@@ -24,16 +24,31 @@ function tooMany(retryAfterSec: number) {
  * Mỗi request tạo server + transport mới; không giữ phiên trong bộ nhớ.
  */
 async function handle(request: Request) {
-  const badTokenKey = `mcp-auth:${clientIp(request)}`;
-  const badToken = checkRateLimit(badTokenKey, BAD_TOKEN_LIMIT);
-  if (!badToken.allowed) return tooMany(badToken.retryAfterSec);
-  if (!isAuthorizedMcpRequest(request)) {
+  const ip = clientIp(request);
+  // Một dòng log mỗi request (không có token) để chẩn đoán kết nối từ Claude.
+  const logLine = (status: number, note = "") =>
+    console.info(`[mcp] ${request.method} ${status} ip=${ip} auth=${request.headers.has("authorization") ? "header" : new URL(request.url).searchParams.has("key") ? "query" : "none"}${note}`);
+
+  // Request có token đúng không bao giờ bị chặn bởi bộ đếm sai token: Claude dò kết nối không kèm
+  // token (khi thêm connector) cũng đi từ cùng IP của Anthropic.
+  const authorized = isAuthorizedMcpRequest(request);
+  const badTokenKey = `mcp-auth:${ip}`;
+  if (!authorized) {
+    const badToken = checkRateLimit(badTokenKey, BAD_TOKEN_LIMIT);
+    if (!badToken.allowed) {
+      logLine(429, " bad-token-limit");
+      return tooMany(badToken.retryAfterSec);
+    }
     recordFailure(badTokenKey, BAD_TOKEN_LIMIT);
+    logLine(401);
     return new Response("Unauthorized", { status: 401 });
   }
 
   const calls = checkRateLimit("mcp-calls", CALL_LIMIT);
-  if (!calls.allowed) return tooMany(calls.retryAfterSec);
+  if (!calls.allowed) {
+    logLine(429, " call-limit");
+    return tooMany(calls.retryAfterSec);
+  }
   recordFailure("mcp-calls", CALL_LIMIT);
 
   const server = createCenterMcpServer();
@@ -43,7 +58,9 @@ async function handle(request: Request) {
   });
   await server.connect(transport);
   try {
-    return await transport.handleRequest(request);
+    const response = await transport.handleRequest(request);
+    logLine(response.status);
+    return response;
   } finally {
     // Với enableJsonResponse, response đã đủ khi handleRequest trả về.
     void transport.close();

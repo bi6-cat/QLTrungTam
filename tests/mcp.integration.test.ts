@@ -41,6 +41,25 @@ describe("MCP endpoint", { concurrency: false }, () => {
     assert.equal(result.status, 401);
   });
 
+  test("a valid token still works after many bad-token attempts from the same IP", async () => {
+    const send = (auth: string) =>
+      POST(
+        new Request("http://localhost/api/mcp", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            authorization: auth,
+            "x-forwarded-for": "203.0.113.7"
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/list", params: {} })
+        })
+      );
+    for (let attempt = 0; attempt < 25; attempt++) await send("Bearer wrong");
+    assert.equal((await send("Bearer wrong")).status, 429);
+    assert.equal((await send(`Bearer ${TOKEN}`)).status, 200);
+  });
+
   test("lists the 7 tools", async () => {
     const result = await rpc("tools/list", {});
     assert.equal(result.status, 200);
