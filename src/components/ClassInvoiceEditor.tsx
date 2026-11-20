@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, FilePlus2, Lock, Pencil, X } from "lucide-react";
+import { Check, FilePlus2, Lock, Minus, Pencil, Plus, X } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 import { updateClassDetailsAction } from "@/lib/actions/billing";
 import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
@@ -85,14 +85,22 @@ export function ClassInvoiceEditor({
   const [page, setPage] = useState(1);
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  // ±1 buổi cả lớp: tổng số buổi đã cộng/trừ (để hiện) và lý do gửi kèm khi lưu.
+  const [bulkDelta, setBulkDelta] = useState(0);
+  const [bulkReason, setBulkReason] = useState("");
+  const resetDrafts = () => {
+    setSessionDrafts({});
+    setNoteDrafts({});
+    setBulkDelta(0);
+    setBulkReason("");
+  };
   const [saveState, saveAction, saving] = useActionState(
     async (prevState: ResultState, formData: FormData) => {
       const result = await updateClassDetailsAction(prevState, formData);
       // Action không redirect nên component không mount lại: tự thoát chế độ sửa.
       if (result.success) {
         setEditing(false);
-        setSessionDrafts({});
-        setNoteDrafts({});
+        resetDrafts();
         toast.success(result.success);
       }
       return result;
@@ -107,9 +115,44 @@ export function ClassInvoiceEditor({
   useEffect(() => {
     if (!billingLocked) return;
     setEditing(false);
-    setSessionDrafts({});
-    setNoteDrafts({});
+    resetDrafts();
   }, [billingLocked]);
+  /**
+   * Cộng/trừ 1 buổi cho mọi học sinh còn sửa được (đang học, hóa đơn chưa đóng hoặc chưa tạo).
+   * Chỉ đổi số trên màn hình; bấm Lưu mới ghi. Bỏ qua học sinh đã đóng/hủy/miễn, bảo lưu, lưu trữ.
+   */
+  const adjustAll = (delta: 1 | -1) => {
+    let changed = 0;
+    let skipped = 0;
+    const next = { ...sessionDrafts };
+    for (const row of rows) {
+      const invoice = row.invoice;
+      const planningLocked = billingLocked || row.studentArchived || Boolean(invoice && invoice.status !== "unpaid");
+      if (planningLocked || row.monthlyStatus !== "active") {
+        skipped += 1;
+        continue;
+      }
+      const key = invoice?.id ?? row.enrollmentId;
+      const current = next[key] ?? invoice?.sessions ?? row.defaultSessions;
+      const value = Math.min(60, Math.max(1, current + delta));
+      if (value === current) {
+        skipped += 1;
+        continue;
+      }
+      next[key] = value;
+      changed += 1;
+    }
+    if (changed === 0) {
+      toast.info("Không có học sinh nào đổi được số buổi.");
+      return;
+    }
+    setSessionDrafts(next);
+    setBulkDelta((value) => value + delta);
+    toast.info(
+      `${delta > 0 ? "Cộng" : "Trừ"} 1 buổi cho ${changed} học sinh${skipped > 0 ? `, bỏ qua ${skipped} (đã đóng/hủy/miễn, bảo lưu hoặc lưu trữ)` : ""}. Bấm "Lưu thay đổi" để ghi.`
+    );
+  };
+
   const summary = useMemo(
     () =>
       rows.reduce(
@@ -194,8 +237,7 @@ export function ClassInvoiceEditor({
                 variant="secondary"
                 disabled={saving}
                 onClick={() => {
-                  setSessionDrafts({});
-                  setNoteDrafts({});
+                  resetDrafts();
                   setEditing(false);
                 }}
             >
@@ -216,6 +258,32 @@ export function ClassInvoiceEditor({
         <input type="hidden" name="classId" value={classId} />
         <input type="hidden" name="month" value={month} />
         <input type="hidden" name="year" value={year} />
+        {bulkDelta !== 0 && bulkReason.trim() ? <input type="hidden" name="sessionsReason" value={bulkReason.trim()} /> : null}
+        {editing && !billingLocked ? (
+          <div className="flex flex-col gap-2 border-b border-stone-200/80 bg-stone-50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-6">
+            <span className="text-sm font-semibold text-stone-700">Cả lớp:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => adjustAll(-1)}>
+                <Minus className="h-4 w-4" />1 buổi
+              </Button>
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => adjustAll(1)}>
+                <Plus className="h-4 w-4" />1 buổi
+              </Button>
+              {bulkDelta !== 0 ? (
+                <span className="text-sm font-semibold text-amber-700">
+                  Đã {bulkDelta > 0 ? "cộng" : "trừ"} {Math.abs(bulkDelta)} buổi, chưa lưu
+                </span>
+              ) : null}
+            </div>
+            <Input
+              value={bulkReason}
+              onChange={(event) => setBulkReason(event.target.value)}
+              maxLength={120}
+              placeholder="Lý do (vd: Nghỉ 15/11) – hiện trong tin gửi phụ huynh"
+              className="w-full sm:max-w-sm"
+            />
+          </div>
+        ) : null}
         {saveState.error && !billingLocked && (editing || hasMissingInvoice) ? (
           <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700">
             {saveState.error}

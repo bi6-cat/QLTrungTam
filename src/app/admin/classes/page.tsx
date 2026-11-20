@@ -125,13 +125,18 @@ export default async function ClassesPage({
       classRoom: selectedClass!,
       suggestedSessions: sessionPlan?.byEnrollment.get(enrollment.id)?.sessions
     });
-  const classAdjustmentNote = sessionPlan
+  const scheduleAdjustmentNote = sessionPlan
     ? describeAdjustment({
         previousMonth: sessionPlan.adjustment.previous.month,
         cancelled: sessionPlan.adjustment.previous.cancelled,
         makeups: sessionPlan.adjustment.previous.makeups
       })
     : "";
+  // Lý do admin nhập khi ±1 buổi cả lớp được lưu trên hóa đơn: lý do chung của đa số hóa đơn
+  // trong tháng thì đưa vào tin gửi nhóm phụ huynh.
+  const classAdjustmentNote = [scheduleAdjustmentNote, commonInvoiceNote(selectedClass?.enrollments ?? [])]
+    .filter((note, index, notes) => note && notes.indexOf(note) === index)
+    .join(", ");
   // Memo dự kiến cho học sinh chưa có hóa đơn: cùng SĐT với người đã/sắp có memo gốc thì nhận hậu tố B, C, ...
   const predictedMemos = selectedClass
     ? predictMemos({
@@ -435,4 +440,17 @@ export default async function ClassesPage({
       </div>
     </div>
   );
+}
+
+/** Diễn giải số buổi xuất hiện trên quá nửa số hóa đơn chưa hủy của tháng; không có thì "". */
+function commonInvoiceNote(enrollments: Array<{ invoices: Array<{ status: string; sessionsNote: string | null }> }>) {
+  const invoices = enrollments
+    .map((enrollment) => enrollment.invoices[0])
+    .filter((invoice) => invoice && (invoice.status === "unpaid" || invoice.status === "paid"));
+  const counts = new Map<string, number>();
+  for (const invoice of invoices) {
+    if (invoice.sessionsNote) counts.set(invoice.sessionsNote, (counts.get(invoice.sessionsNote) ?? 0) + 1);
+  }
+  const [note, count] = [...counts.entries()].sort((left, right) => right[1] - left[1])[0] ?? ["", 0];
+  return count * 2 > invoices.length ? note : "";
 }

@@ -13,6 +13,8 @@ import { randomUUID } from "node:crypto";
 import { diffFields, logAudit } from "@/lib/audit";
 import { NOTE_MAX_LENGTH, safeParseForm, updateClassDetailsSchema } from "@/lib/validation";
 
+const SESSIONS_REASON_MAX = 120;
+
 function clampSessions(value: FormDataEntryValue | null) {
   const parsed = Math.floor(Number(String(value ?? "").replace(/[^\d.-]/g, "")));
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
@@ -58,6 +60,9 @@ async function saveClassDetails(
   const month = parsed.month || new Date().getMonth() + 1;
   const year = parsed.year || new Date().getFullYear();
   const periodEnd = new Date(year, month, 1);
+  // Lý do đổi số buổi (vd "Nghỉ 15/11", nhập khi bấm ±1 buổi cả lớp): lưu vào diễn giải số buổi
+  // của hóa đơn để hiện trong tin gửi phụ huynh. Chỉ áp cho học sinh có số buổi thay đổi lần này.
+  const sessionsReason = String(formData.get("sessionsReason") ?? "").trim().slice(0, SESSIONS_REASON_MAX) || null;
   const enrollmentIds = Array.from(
     new Set(formData.getAll("enrollmentId").map((value) => String(value)).filter(Boolean))
   );
@@ -232,8 +237,8 @@ async function saveClassDetails(
               transactionId: null,
               updatedAt: existingInvoice.updatedAt
             },
-            // Sửa tay số buổi thì lý do trừ buổi lúc tạo không còn đúng.
-            data: { sessions, amount: sessions * existingInvoice.pricePerSession, sessionsNote: null }
+            // Sửa tay số buổi thì lý do trừ buổi lúc tạo không còn đúng: thay bằng lý do mới (nếu có).
+            data: { sessions, amount: sessions * existingInvoice.pricePerSession, sessionsNote: sessionsReason }
           });
           if (updatedInvoice.count !== 1) {
             throw new Error(`Hóa đơn của ${enrollment.student.fullName} vừa được thanh toán hoặc thay đổi. Vui lòng tải lại.`);
@@ -243,7 +248,8 @@ async function saveClassDetails(
         await logMonthPlan(planChanges, {
           invoiceId: existingInvoice.id,
           amountFrom: existingInvoice.amount,
-          amountTo: sessions * existingInvoice.pricePerSession
+          amountTo: sessions * existingInvoice.pricePerSession,
+          ...(existingInvoice.sessions !== sessions ? { sessionsNote: sessionsReason } : {})
         });
       } else if (existingInvoice?.status === "unpaid" && status === "on_leave") {
         // Bảo lưu cả tháng: hủy hóa đơn chưa đóng để phụ huynh không còn bị đòi tiền.
@@ -305,7 +311,13 @@ async function saveClassDetails(
         );
         if (memoSuffix) summary.suffixed.push(`${enrollment.student.fullName} (${memoContent})`);
         const suggestion = suggestions.get(enrollmentId);
-        const sessionsNote = suggestion?.note && suggestion.sessions === sessions ? suggestion.note : null;
+        // Số buổi khớp gợi ý theo lịch thì dùng lý do của lịch; admin đổi số buổi kèm lý do thì dùng lý do đó.
+        const sessionsNote =
+          suggestion?.note && suggestion.sessions === sessions
+            ? suggestion.note
+            : sessions !== (suggestion?.sessions ?? plan.sessions)
+              ? sessionsReason
+              : null;
         const createdInvoice = await tx.monthlyInvoice.create({
           select: { id: true },
           data: {
