@@ -351,10 +351,12 @@ async function saveClassDetails(
             sessions,
             amount: sessions * periodPricePerSession,
             memoContent,
-            sessionsNote
+            sessionsNote,
+            // Thay đổi kế hoạch tháng đi kèm (vd số buổi 8 → 9) ghi chung dòng này: mỗi học sinh
+            // một dòng, trang Nhật ký gom cả lớp thành một mục.
+            ...(Object.keys(planChanges).length > 0 ? { changes: planChanges } : {})
           }
         });
-        await logMonthPlan(planChanges);
         summary.created += 1;
       } else if (monthChanged) {
         await logMonthPlan(planChanges);

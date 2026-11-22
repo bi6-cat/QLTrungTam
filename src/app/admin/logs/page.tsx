@@ -102,8 +102,39 @@ function metaOf(log: AuditLog) {
     : {};
 }
 
+/**
+ * Log cũ: tạo hóa đơn ghi 2 dòng cho mỗi học sinh ("Sửa số buổi" + "Tạo hóa đơn") xen kẽ nên không
+ * gom được. Ghép dòng "Sửa số buổi" vào dòng "Tạo hóa đơn" cùng lần bấm, cùng học sinh.
+ */
+function foldPlanIntoInvoice(logs: AuditLog[]) {
+  const keyOf = (log: AuditLog) => {
+    const batchId = metaOf(log).batchId;
+    return typeof batchId === "string" && log.studentId ? `${batchId}|${log.studentId}` : null;
+  };
+  const planByKey = new Map<string, AuditLog>();
+  for (const log of logs) {
+    const key = keyOf(log);
+    if (key && log.action === "month_plan.updated") planByKey.set(key, log);
+  }
+  const folded = new Set<AuditLog>();
+  const result: AuditLog[] = [];
+  for (const log of logs) {
+    const key = keyOf(log);
+    const plan = key && log.action === "invoice.created" ? planByKey.get(key) : undefined;
+    if (plan && !folded.has(plan)) {
+      folded.add(plan);
+      const meta = metaOf(log);
+      result.push(meta.changes ? log : { ...log, metadata: { ...meta, changes: metaOf(plan).changes ?? null } as AuditLog["metadata"] });
+    } else {
+      result.push(log);
+    }
+  }
+  return result.filter((log) => !folded.has(log));
+}
+
 /** Một lần bấm Lưu số buổi cả lớp ghi nhiều dòng cùng batchId: gom các dòng liền nhau thành một. */
-function groupBatches(logs: AuditLog[]) {
+function groupBatches(input: AuditLog[]) {
+  const logs = foldPlanIntoInvoice(input);
   const items: Array<{ head: AuditLog; rows: AuditLog[] }> = [];
   for (const log of logs) {
     const batchId = metaOf(log).batchId;
