@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertTriangle, Lock, Save } from "lucide-react";
+import { AlertTriangle, Save } from "lucide-react";
 import { updateSettingsAction } from "@/lib/actions/settings";
 import { EMPTY_RESULT_STATE } from "@/lib/action-states";
 import { useResultToast } from "@/components/Toaster";
@@ -28,13 +28,6 @@ const BANK_ROWS: Array<{ label: string; env: string; key: "bankAccountNumber" | 
 function BankInfo({ bank }: { bank: BankEnv }) {
   return (
     <div className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
-      <div className="flex items-start gap-2 text-sm text-stone-700">
-        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-stone-500" />
-        <p>
-          <strong>Tài khoản nhận học phí bị khóa trên web</strong> để không ai chiếm được tài khoản admin mà đổi được STK
-          trên mã QR. Muốn đổi thì sửa file <code className="font-mono">.env</code> trên máy chủ và khởi động lại app.
-        </p>
-      </div>
       <dl className="grid gap-2 sm:grid-cols-2">
         {BANK_ROWS.map((row) => {
           const missing = bank.problems.includes(row.env);
