@@ -33,25 +33,10 @@ async function tuesdayClass(fixture: LedgerFixture) {
   });
 }
 
-async function billSeptember(fixture: LedgerFixture) {
-  await prisma.monthlyInvoice.create({
-    data: {
-      enrollmentId: fixture.enrollmentId,
-      month: 9,
-      year: 2026,
-      sessions: 5,
-      pricePerSession: 100_000,
-      amount: 500_000,
-      memoContent: `IT-SESSIONS-${fixture.classId}`
-    }
-  });
-  await prisma.enrollment.update({ where: { id: fixture.enrollmentId }, data: { startDate: new Date(2026, 7, 1) } });
-}
-
-async function suggestOctober(fixture: LedgerFixture) {
+async function suggestSeptember(fixture: LedgerFixture) {
   const classRoom = await prisma.classRoom.findUniqueOrThrow({ where: { id: fixture.classId } });
   const enrollments = await prisma.enrollment.findMany({ where: { classId: fixture.classId } });
-  const result = await loadSessionSuggestions(prisma, { classRoom, month: 10, year: 2026, enrollments });
+  const result = await loadSessionSuggestions(prisma, { classRoom, month: 9, year: 2026, enrollments });
   return result.byEnrollment.get(fixture.enrollmentId)!;
 }
 
@@ -68,12 +53,11 @@ describe("thời khóa biểu: điểm danh và gợi ý số buổi", { concurr
     await harness.stop();
   });
 
-  test("buổi nghỉ tháng 9 trừ vào tháng 10; buổi dời (nghỉ + bù) không trừ", async () => {
+  test("tháng nào thu tháng nấy: nghỉ trong tháng 9 trừ vào tháng 9; buổi dời (nghỉ + bù) không trừ", async () => {
     const fixture = await harness.createFixture();
     await tuesdayClass(fixture);
-    await billSeptember(fixture);
 
-    assert.deepEqual(await suggestOctober(fixture), { sessions: 4, hint: "4 theo lịch", note: "" });
+    assert.deepEqual(await suggestSeptember(fixture), { sessions: 5, hint: "5 theo lịch", note: "" });
 
     await markSession(prisma, { classId: fixture.classId, date: "2026-09-15", startTime: "18:00", status: "cancelled", reason: "GV ốm" }, markedBy);
     await addMakeupSession(
@@ -88,18 +72,11 @@ describe("thời khóa biểu: điểm danh và gợi ý số buổi", { concurr
     assert.equal(moved.status, "cancelled");
     assert.equal(moved.reason, "Dời sang 24/09");
 
-    assert.deepEqual(await suggestOctober(fixture), {
-      sessions: 3,
-      hint: "4 theo lịch − 1 nghỉ T9",
-      note: "đã trừ 1 buổi lớp nghỉ T9: 15/09 (GV ốm)"
+    assert.deepEqual(await suggestSeptember(fixture), {
+      sessions: 4,
+      hint: "5 theo lịch − 1 nghỉ",
+      note: "đã trừ 1 buổi lớp nghỉ: 15/09 (GV ốm)"
     });
-  });
-
-  test("học sinh không có hóa đơn tháng trước thì không bị trừ", async () => {
-    const fixture = await harness.createFixture();
-    await tuesdayClass(fixture);
-    await markSession(prisma, { classId: fixture.classId, date: "2026-09-15", startTime: "18:00", status: "cancelled", reason: null }, markedBy);
-    assert.equal((await suggestOctober(fixture)).sessions, 4);
   });
 
   test("điểm danh hàng loạt, nghỉ cả ngày, bỏ điểm danh", async () => {

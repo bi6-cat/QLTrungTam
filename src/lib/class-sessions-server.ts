@@ -4,9 +4,7 @@ import {
   isoFromDbDate,
   isoToDbDate,
   monthRange,
-  previousMonth,
   suggestSessions,
-  todayInVietnam,
   type ScheduleSlot,
   type SessionAdjustment,
   type SessionRecord,
@@ -67,18 +65,16 @@ export function toSessionRecord(row: {
   return { ...row, date: isoFromDbDate(row.date) };
 }
 
-/** Số buổi theo lịch tháng M và các buổi nghỉ / học bù tháng M-1 của một lớp. */
+/** Số buổi theo lịch tháng M và các buổi nghỉ / học bù trong chính tháng M của một lớp. */
 export async function loadSessionAdjustment(db: Db, classId: string, month: number, year: number): Promise<SessionAdjustment> {
-  const previous = previousMonth(month, year);
   const range = monthRange(month, year);
-  const previousRange = monthRange(previous.month, previous.year);
   const [slots, records] = await Promise.all([
     db.classSchedule.findMany({ where: { classId }, select: scheduleSlotSelect }),
     db.classSession.findMany({
       where: {
         classId,
         status: { in: ["cancelled", "makeup"] },
-        date: { gte: isoToDbDate(previousRange.from), lte: isoToDbDate(previousRange.to) }
+        date: { gte: isoToDbDate(range.from), lte: isoToDbDate(range.to) }
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
       select: { date: true, status: true, reason: true, makeupForDate: true }
@@ -93,17 +89,12 @@ export async function loadSessionAdjustment(db: Db, classId: string, month: numb
         reason: record.reason,
         makeupFor: record.makeupForDate ? isoFromDbDate(record.makeupForDate) : null
       }));
-  return {
-    month,
-    year,
-    scheduled: scheduled > 0 ? scheduled : null,
-    previous: { ...previous, cancelled: pick("cancelled"), makeups: pick("makeup") }
-  };
+  return { month, year, scheduled: scheduled > 0 ? scheduled : null, cancelled: pick("cancelled"), makeups: pick("makeup") };
 }
 
 /**
  * Gợi ý số buổi tháng M cho từng ghi danh của một lớp (chỉ dùng cho kỳ chưa khởi tạo; kỳ đã có
- * kế hoạch/hóa đơn giữ nguyên số đã chốt).
+ * kế hoạch/hóa đơn giữ nguyên số đã chốt). Học sinh vào giữa tháng: admin sửa tay.
  */
 export async function loadSessionSuggestions(
   db: Db,
@@ -111,25 +102,10 @@ export async function loadSessionSuggestions(
     classRoom: { id: string; sessionsPerMonthDefault: number };
     month: number;
     year: number;
-    enrollments: Array<{ id: string; startDate: Date; sessionsOverride: number | null }>;
+    enrollments: Array<{ id: string; sessionsOverride: number | null }>;
   }
 ) {
   const adjustment = await loadSessionAdjustment(db, input.classRoom.id, input.month, input.year);
-  const hasAdjustment = adjustment.previous.cancelled.length > 0 || adjustment.previous.makeups.length > 0;
-  const billed = hasAdjustment && input.enrollments.length > 0
-    ? await db.monthlyInvoice.findMany({
-        where: {
-          enrollmentId: { in: input.enrollments.map((enrollment) => enrollment.id) },
-          month: adjustment.previous.month,
-          year: adjustment.previous.year,
-          status: { in: ["paid", "unpaid"] },
-          sessions: { gt: 0 }
-        },
-        select: { enrollmentId: true }
-      })
-    : [];
-  const billedIds = new Set(billed.map((invoice) => invoice.enrollmentId));
-
   const byEnrollment = new Map<string, SessionSuggestion>();
   for (const enrollment of input.enrollments) {
     byEnrollment.set(
@@ -137,9 +113,7 @@ export async function loadSessionSuggestions(
       suggestSessions({
         adjustment,
         classDefault: input.classRoom.sessionsPerMonthDefault,
-        sessionsOverride: enrollment.sessionsOverride,
-        startDate: todayInVietnam(enrollment.startDate),
-        billedPreviousMonth: billedIds.has(enrollment.id)
+        sessionsOverride: enrollment.sessionsOverride
       })
     );
   }

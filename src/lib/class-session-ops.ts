@@ -115,15 +115,14 @@ async function findSession(db: Db, classId: string, date: IsoDate, startTime: st
   return { slot, record: record ? toSessionRecord(record) : null };
 }
 
-/** Cảnh báo khi buổi nghỉ/học bù rơi vào tháng mà hóa đơn tháng sau đã tạo (không tự trừ nữa). */
-async function nextMonthInvoiceWarning(db: Db, classIds: string[], date: IsoDate) {
+/** Cảnh báo khi ghi nghỉ/học bù vào tháng mà hóa đơn của chính tháng đó đã tạo (không tự trừ nữa). */
+async function invoiceIssuedWarning(db: Db, classIds: string[], date: IsoDate) {
   const { month, year } = isoParts(date);
-  const next = month === 12 ? { month: 1, year: year + 1 } : { month: month + 1, year };
   const issued = await db.monthlyInvoice.count({
-    where: { month: next.month, year: next.year, status: { in: ["unpaid", "paid"] }, enrollment: { classId: { in: classIds } } }
+    where: { month, year, status: { in: ["unpaid", "paid"] }, enrollment: { classId: { in: classIds } } }
   });
   return issued > 0
-    ? ` Hóa đơn T${next.month}/${next.year} đã tạo nên số buổi không tự điều chỉnh, hãy sửa tay ở trang Lớp học nếu cần.`
+    ? ` Hóa đơn T${month}/${year} đã tạo nên số buổi không tự điều chỉnh, hãy sửa tay ở trang Lớp học nếu cần.`
     : "";
 }
 
@@ -153,7 +152,7 @@ export async function markSession(
       markedBy
     }
   });
-  return input.status === "cancelled" ? nextMonthInvoiceWarning(db, [input.classId], input.date) : "";
+  return input.status === "cancelled" ? invoiceIssuedWarning(db, [input.classId], input.date) : "";
 }
 
 /** Bỏ điểm danh (buổi theo lịch về "chưa điểm danh") hoặc xóa buổi học bù. */
@@ -232,7 +231,7 @@ export async function addMakeupSession(
   }
 
   const dates = [input.date, ...(input.fromDate ? [input.fromDate] : [])];
-  const warnings = await Promise.all(dates.map((date) => nextMonthInvoiceWarning(db, [input.classId], date)));
+  const warnings = await Promise.all(dates.map((date) => invoiceIssuedWarning(db, [input.classId], date)));
   return warnings.find(Boolean) ?? "";
 }
 
@@ -314,6 +313,6 @@ export async function cancelDay(db: Db, input: { date: IsoDate; reason: string }
     });
     count += 1;
   }
-  const warning = count > 0 ? await nextMonthInvoiceWarning(db, [...new Set(slots.map((slot) => slot.classId))], input.date) : "";
+  const warning = count > 0 ? await invoiceIssuedWarning(db, [...new Set(slots.map((slot) => slot.classId))], input.date) : "";
   return { count, warning };
 }

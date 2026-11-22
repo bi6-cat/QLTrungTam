@@ -46,8 +46,10 @@ export default async function SchedulePage({
   const previous = previousMonth(todayParts.month, todayParts.year);
   const pendingFrom = monthRange(previous.month, previous.year).from;
   const pendingTo = addDays(today, -1);
-  const loadFrom = range.from < pendingFrom ? range.from : pendingFrom;
-  const loadTo = range.to > today ? range.to : today;
+  // Tháng thu tiền = tháng đang xem (xem theo tuần thì là tháng của ngày đang xem).
+  const billRange = monthRange(month, year);
+  const loadFrom = [range.from, pendingFrom, billRange.from].sort()[0];
+  const loadTo = [range.to, today, billRange.to].sort()[2];
 
   const classes = await prisma.classRoom.findMany({
     where: { archivedAt: null },
@@ -79,14 +81,15 @@ export default async function SchedulePage({
   const classIndex = new Map(classes.map((classRoom, index) => [classRoom.id, index]));
   const sessions: BoardSession[] = calendar.map((session) => ({ ...session, colorIndex: classIndex.get(session.classId) ?? 0 }));
 
-  // Bảng tháng: thống kê theo lớp + số buổi gợi ý thu tháng sau (lịch tháng sau − nghỉ chưa bù tháng này).
-  const nextMonth = month === 12 ? { month: 1, year: year + 1 } : { month: month + 1, year };
-  const nextRange = monthRange(nextMonth.month, nextMonth.year);
+  // Bảng tháng: thống kê theo lớp + số buổi gợi ý thu tháng này (tháng nào thu tháng nấy): cả tháng
+  // theo lịch, trừ buổi lớp nghỉ, cộng buổi học bù trong chính tháng — khớp gợi ý ở trang Lớp học.
+  const billCalendar = buildCalendar({ slots, records, from: billRange.from, to: billRange.to, today });
   const boardClasses: BoardClass[] = visibleClasses.map((classRoom) => {
     const classSessions = calendar.filter((session) => session.classId === classRoom.id);
     const summary = summarizeSessions(classSessions);
-    const nextScheduled = countScheduledInRange(classRoom.schedules.map(toScheduleSlot), nextRange.from, nextRange.to);
-    const net = summary.cancelled - summary.makeup;
+    const billSummary = summarizeSessions(billCalendar.filter((session) => session.classId === classRoom.id));
+    const scheduled = countScheduledInRange(classRoom.schedules.map(toScheduleSlot), billRange.from, billRange.to);
+    const net = billSummary.cancelled - billSummary.makeup;
     return {
       id: classRoom.id,
       name: classRoom.name,
@@ -94,10 +97,10 @@ export default async function SchedulePage({
       teacherName: classRoom.teacherName,
       colorIndex: classIndex.get(classRoom.id) ?? 0,
       summary,
-      nextMonthSessions: nextScheduled > 0 ? Math.max(0, nextScheduled - net) : null,
-      nextMonthHint:
-        nextScheduled > 0
-          ? `${nextScheduled} theo lịch T${nextMonth.month}${net > 0 ? ` − ${net} nghỉ` : net < 0 ? ` + ${-net} bù` : ""}`
+      billSessions: scheduled > 0 ? Math.max(0, scheduled - net) : null,
+      billHint:
+        scheduled > 0
+          ? `${scheduled} theo lịch T${month}${net > 0 ? ` − ${net} nghỉ` : net < 0 ? ` + ${-net} bù` : ""}`
           : "Chưa xếp lịch"
     };
   });
@@ -106,7 +109,7 @@ export default async function SchedulePage({
     <div className="grid gap-6">
       <PageHeader
         title="Thời khóa biểu"
-        description="Bấm vào buổi học để điểm danh, ghi lớp nghỉ hoặc dời buổi. Buổi lớp nghỉ chưa bù được trừ vào số buổi thu tháng sau."
+        description="Bấm vào buổi học để điểm danh, ghi lớp nghỉ hoặc dời buổi. Mặc định buổi đã qua là đã học; buổi lớp nghỉ ghi trước khi tạo hóa đơn được trừ vào học phí chính tháng đó."
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -160,7 +163,7 @@ export default async function SchedulePage({
         sessions={sessions}
         hasSchedules={classes.some((classRoom) => classRoom.schedules.length > 0)}
         pendingInRange={calendar.filter((session) => session.scheduled && !session.recordId && session.date <= today).length}
-        nextMonth={nextMonth.month}
+        billMonth={month}
       />
 
       <FixedScheduleManager

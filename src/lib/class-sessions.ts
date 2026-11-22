@@ -236,9 +236,10 @@ export function summarizeSessions(sessions: CalendarSession[]) {
 // ---------------------------------------------------------------------------
 // Gợi ý số buổi thu tiền.
 //
-// Thu trước theo tháng: tháng M thu theo lịch của tháng M, trừ đi số buổi lớp nghỉ chưa bù của
-// tháng M-1 (buổi nghỉ - buổi học bù trong tháng M-1). Buổi nghỉ của tháng M luôn để sang M+1
-// trừ, nên mỗi buổi nghỉ chỉ bị trừ đúng một lần dù hóa đơn tạo lúc nào.
+// Tháng nào thu tháng nấy: tháng M thu đủ các buổi theo lịch từ ngày 1 tới cuối tháng M, coi như
+// mặc định học hết. Buổi lớp nghỉ ghi trong chính tháng M (trước khi tạo hóa đơn) thì trừ, buổi
+// học bù thêm thì cộng; buổi dời (nghỉ + bù trong tháng) tự triệt tiêu. Học sinh vào giữa tháng
+// do admin sửa tay số buổi.
 // ---------------------------------------------------------------------------
 
 export type SessionAdjustment = {
@@ -246,12 +247,9 @@ export type SessionAdjustment = {
   year: number;
   /** Số buổi theo lịch cố định của tháng M; null = lớp chưa xếp lịch cho tháng này. */
   scheduled: number | null;
-  previous: {
-    month: number;
-    year: number;
-    cancelled: AdjustmentItem[];
-    makeups: AdjustmentItem[];
-  };
+  /** Buổi lớp nghỉ / học bù trong chính tháng M. */
+  cancelled: AdjustmentItem[];
+  makeups: AdjustmentItem[];
 };
 
 /** Một buổi nghỉ / học bù; makeupFor = buổi gốc mà buổi bù này dời từ đó (chỉ buổi bù). */
@@ -259,7 +257,7 @@ export type AdjustmentItem = { date: IsoDate; reason: string | null; makeupFor?:
 
 export type SessionSuggestion = {
   sessions: number;
-  /** Diễn giải ngắn cho admin, vd "8 theo lịch − 1 nghỉ T10". */
+  /** Diễn giải ngắn cho admin, vd "9 theo lịch − 1 nghỉ". */
   hint: string;
   /** Lý do trừ/cộng gửi phụ huynh, rỗng nếu không điều chỉnh. */
   note: string;
@@ -272,14 +270,10 @@ function describeDates(items: AdjustmentItem[]) {
 }
 
 /**
- * Lý do điều chỉnh buổi gửi phụ huynh. Buổi dời (nghỉ + bù trong cùng tháng) tự triệt tiêu nên
- * không kể ra; chỉ kể buổi nghỉ chưa bù, hoặc buổi học bù dư.
+ * Lý do điều chỉnh buổi gửi phụ huynh. Buổi dời (nghỉ + bù cùng tháng) tự triệt tiêu nên không kể
+ * ra; chỉ kể buổi nghỉ chưa bù, hoặc buổi học bù dư.
  */
-export function describeAdjustment(input: {
-  previousMonth: number;
-  cancelled: AdjustmentItem[];
-  makeups: AdjustmentItem[];
-}) {
+export function describeAdjustment(input: { cancelled: AdjustmentItem[]; makeups: AdjustmentItem[] }) {
   const cancelledDates = new Set(input.cancelled.map((item) => item.date));
   const pairedDates = new Set(
     input.makeups.flatMap((item) => (item.makeupFor && cancelledDates.has(item.makeupFor) ? [item.makeupFor] : []))
@@ -290,51 +284,34 @@ export function describeAdjustment(input: {
   if (net > 0) {
     // Còn buổi bù chung (không gắn buổi cụ thể): kể hết buổi nghỉ kèm số buổi đã bù để tự đối chiếu.
     const madeUp = openMakeups.length > 0 ? `, đã bù ${openMakeups.length}` : "";
-    return `đã trừ ${net} buổi lớp nghỉ T${input.previousMonth}: ${describeDates(openCancelled)}${madeUp}`;
+    return `đã trừ ${net} buổi lớp nghỉ: ${describeDates(openCancelled)}${madeUp}`;
   }
   if (net < 0) {
-    return `cộng ${-net} buổi học bù T${input.previousMonth}: ${describeDates(openMakeups)}`;
+    return `cộng ${-net} buổi học bù: ${describeDates(openMakeups)}`;
   }
   return "";
 }
 
 /**
- * Số buổi gợi ý của một học sinh cho tháng M.
- *
- * - Số buổi gốc: buổi riêng của học sinh, không có thì theo lịch tháng M, lớp chưa xếp lịch thì
- *   theo mặc định của lớp.
- * - Chỉ trừ/cộng khi tháng trước học sinh có hóa đơn thu tiền (đang học), và chỉ các buổi từ
- *   ngày học sinh bắt đầu học.
+ * Số buổi gợi ý của một học sinh cho tháng M: số buổi gốc (buổi riêng của học sinh, không có thì
+ * theo lịch tháng M, lớp chưa xếp lịch thì mặc định của lớp) trừ buổi nghỉ, cộng buổi bù của tháng M.
  */
 export function suggestSessions(input: {
   adjustment: SessionAdjustment;
   classDefault: number;
   sessionsOverride: number | null;
-  startDate: IsoDate;
-  billedPreviousMonth: boolean;
 }): SessionSuggestion {
   const { adjustment } = input;
   const baseSource =
     input.sessionsOverride !== null ? "riêng" : adjustment.scheduled !== null ? "theo lịch" : "mặc định";
   const base = input.sessionsOverride ?? adjustment.scheduled ?? input.classDefault;
 
-  const counts = (item: { date: IsoDate }) => item.date >= input.startDate;
-  const cancelled = input.billedPreviousMonth ? adjustment.previous.cancelled.filter(counts) : [];
-  const makeups = input.billedPreviousMonth ? adjustment.previous.makeups.filter(counts) : [];
+  const { cancelled, makeups } = adjustment;
   const net = cancelled.length - makeups.length;
   const sessions = Math.max(0, Math.min(60, base - net));
 
-  const previousLabel = `T${adjustment.previous.month}`;
   const hint =
-    net > 0
-      ? `${base} ${baseSource} − ${net} nghỉ ${previousLabel}`
-      : net < 0
-        ? `${base} ${baseSource} + ${-net} bù ${previousLabel}`
-        : `${base} ${baseSource}`;
+    net > 0 ? `${base} ${baseSource} − ${net} nghỉ` : net < 0 ? `${base} ${baseSource} + ${-net} bù` : `${base} ${baseSource}`;
 
-  return {
-    sessions,
-    hint,
-    note: describeAdjustment({ previousMonth: adjustment.previous.month, cancelled, makeups })
-  };
+  return { sessions, hint, note: describeAdjustment({ cancelled, makeups }) };
 }

@@ -30,8 +30,8 @@ export type BoardClass = {
   teacherName: string;
   colorIndex: number;
   summary: { total: number; held: number; cancelled: number; makeup: number; pending: number; upcoming: number };
-  nextMonthSessions: number | null;
-  nextMonthHint: string;
+  billSessions: number | null;
+  billHint: string;
 };
 
 export type BoardClassOption = { id: string; name: string; teacherName: string; colorIndex: number };
@@ -60,7 +60,7 @@ export function ScheduleBoard(props: {
   sessions: BoardSession[];
   hasSchedules: boolean;
   pendingInRange: number;
-  nextMonth: number;
+  billMonth: number;
 }) {
   const { view, today, classFilter } = props;
   const router = useRouter();
@@ -210,7 +210,7 @@ export function ScheduleBoard(props: {
           today={today}
           classes={props.classes}
           sessions={props.sessions}
-          nextMonth={props.nextMonth}
+          billMonth={props.billMonth}
           onSelect={setSelected}
           onCancelDay={setCancelDay}
         />
@@ -358,7 +358,7 @@ function MonthView({
   today,
   classes,
   sessions,
-  nextMonth,
+  billMonth,
   onSelect,
   onCancelDay
 }: {
@@ -366,7 +366,7 @@ function MonthView({
   today: IsoDate;
   classes: BoardClass[];
   sessions: BoardSession[];
-  nextMonth: number;
+  billMonth: number;
   onSelect: (session: BoardSession) => void;
   onCancelDay: (date: IsoDate) => void;
 }) {
@@ -423,8 +423,8 @@ function MonthView({
             <th className="border-b border-stone-200 px-2 py-2 text-right font-semibold">Nghỉ</th>
             <th className="border-b border-stone-200 px-2 py-2 text-right font-semibold">Bù</th>
             <th className="border-b border-stone-200 px-2 py-2 text-right font-semibold" title="Đã qua mà chưa điểm danh">Chưa ĐD</th>
-            <th className="border-b border-stone-200 px-3 py-2 text-right font-semibold" title="Số buổi gợi ý thu tháng sau">
-              Thu T{nextMonth}
+            <th className="border-b border-stone-200 px-3 py-2 text-right font-semibold" title="Số buổi gợi ý thu tháng này: cả tháng theo lịch, trừ buổi nghỉ, cộng buổi bù">
+              Thu T{billMonth}
             </th>
           </tr>
         </thead>
@@ -477,9 +477,9 @@ function MonthView({
               <td className={clsx("border-b border-stone-100 px-2 py-2 text-right tabular-nums", classRoom.summary.pending > 0 && "font-semibold text-amber-700")}>
                 {classRoom.summary.pending}
               </td>
-              <td className="border-b border-stone-100 px-3 py-2 text-right" title={classRoom.nextMonthHint}>
-                <span className="font-bold text-primary">{classRoom.nextMonthSessions ?? "—"}</span>
-                <span className="block whitespace-nowrap text-[11px] text-stone-500">{classRoom.nextMonthHint}</span>
+              <td className="border-b border-stone-100 px-3 py-2 text-right" title={classRoom.billHint}>
+                <span className="font-bold text-primary">{classRoom.billSessions ?? "—"}</span>
+                <span className="block whitespace-nowrap text-[11px] text-stone-500">{classRoom.billHint}</span>
               </td>
             </tr>
           ))}

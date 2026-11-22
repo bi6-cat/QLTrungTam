@@ -29,12 +29,10 @@ const slot = (overrides: Partial<ScheduleSlot> = {}): ScheduleSlot => ({
   ...overrides
 });
 
-const adjustment = (overrides: Partial<SessionAdjustment["previous"]> = {}, scheduled: number | null = 8): SessionAdjustment => ({
-  month: 11,
-  year: 2026,
-  scheduled,
-  previous: { month: 10, year: 2026, cancelled: [], makeups: [], ...overrides }
-});
+const adjustment = (
+  overrides: Partial<Pick<SessionAdjustment, "cancelled" | "makeups">> = {},
+  scheduled: number | null = 9
+): SessionAdjustment => ({ month: 11, year: 2026, scheduled, cancelled: [], makeups: [], ...overrides });
 
 describe("ngày ISO", () => {
   test("parse chặn ngày không tồn tại", () => {
@@ -109,52 +107,40 @@ describe("countScheduledInRange", () => {
 });
 
 describe("suggestSessions", () => {
-  const base = { classDefault: 10, sessionsOverride: null, startDate: "2026-01-01", billedPreviousMonth: true };
+  const base = { classDefault: 10, sessionsOverride: null };
 
-  test("lịch tháng này trừ buổi nghỉ chưa bù tháng trước, kèm lý do", () => {
-    const suggestion = suggestSessions({
-      ...base,
-      adjustment: adjustment({ cancelled: [{ date: "2026-10-15", reason: "GV ốm" }] })
-    });
-    assert.equal(suggestion.sessions, 7);
-    assert.equal(suggestion.hint, "8 theo lịch − 1 nghỉ T10");
-    assert.equal(suggestion.note, "đã trừ 1 buổi lớp nghỉ T10: 15/10 (GV ốm)");
+  test("tháng nào thu tháng nấy: cả tháng theo lịch, coi như học hết", () => {
+    const suggestion = suggestSessions({ ...base, adjustment: adjustment() });
+    assert.deepEqual(suggestion, { sessions: 9, hint: "9 theo lịch", note: "" });
   });
 
-  test("học bù bù trừ buổi nghỉ", () => {
+  test("buổi lớp nghỉ trong chính tháng được trừ, kèm lý do", () => {
+    const suggestion = suggestSessions({
+      ...base,
+      adjustment: adjustment({ cancelled: [{ date: "2026-11-15", reason: "GV ốm" }] })
+    });
+    assert.equal(suggestion.sessions, 8);
+    assert.equal(suggestion.hint, "9 theo lịch − 1 nghỉ");
+    assert.equal(suggestion.note, "đã trừ 1 buổi lớp nghỉ: 15/11 (GV ốm)");
+  });
+
+  test("buổi dời (nghỉ + bù trong tháng) không đổi số buổi", () => {
     const suggestion = suggestSessions({
       ...base,
       adjustment: adjustment({
-        cancelled: [{ date: "2026-10-15", reason: null }],
-        makeups: [{ date: "2026-10-18", reason: null }]
+        cancelled: [{ date: "2026-11-15", reason: null }],
+        makeups: [{ date: "2026-11-18", reason: null, makeupFor: "2026-11-15" }]
       })
     });
-    assert.equal(suggestion.sessions, 8);
+    assert.equal(suggestion.sessions, 9);
     assert.equal(suggestion.note, "");
   });
 
-  test("tháng trước không có hóa đơn (mới vào / bảo lưu) thì không trừ", () => {
-    const suggestion = suggestSessions({
-      ...base,
-      billedPreviousMonth: false,
-      adjustment: adjustment({ cancelled: [{ date: "2026-10-15", reason: null }] })
-    });
-    assert.equal(suggestion.sessions, 8);
-  });
-
-  test("chỉ trừ buổi nghỉ từ ngày học sinh bắt đầu học", () => {
-    const suggestion = suggestSessions({
-      ...base,
-      startDate: "2026-10-10",
-      adjustment: adjustment({
-        cancelled: [
-          { date: "2026-10-06", reason: null },
-          { date: "2026-10-20", reason: null }
-        ]
-      })
-    });
-    assert.equal(suggestion.sessions, 7);
-    assert.equal(suggestion.note, "đã trừ 1 buổi lớp nghỉ T10: 20/10");
+  test("buổi học bù thêm được cộng", () => {
+    const suggestion = suggestSessions({ ...base, adjustment: adjustment({ makeups: [{ date: "2026-11-20", reason: null }] }) });
+    assert.equal(suggestion.sessions, 10);
+    assert.equal(suggestion.hint, "9 theo lịch + 1 bù");
+    assert.equal(suggestion.note, "cộng 1 buổi học bù: 20/11");
   });
 
   test("buổi riêng của học sinh và lớp chưa xếp lịch", () => {

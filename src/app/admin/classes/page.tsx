@@ -105,7 +105,7 @@ export default async function ClassesPage({
     list.push({ month: debt.month, year: debt.year, amount: debt.amount });
     olderDebtsByEnrollment.set(debt.enrollmentId, list);
   }
-  // Số buổi gợi ý theo thời khóa biểu: lịch tháng này trừ buổi lớp nghỉ chưa bù của tháng trước.
+  // Số buổi gợi ý theo thời khóa biểu: lịch cả tháng này, trừ buổi lớp nghỉ / cộng buổi bù của chính tháng này.
   const sessionPlan = selectedClass
     ? await loadSessionSuggestions(prisma, {
         classRoom: selectedClass,
@@ -126,11 +126,7 @@ export default async function ClassesPage({
       suggestedSessions: sessionPlan?.byEnrollment.get(enrollment.id)?.sessions
     });
   const scheduleAdjustmentNote = sessionPlan
-    ? describeAdjustment({
-        previousMonth: sessionPlan.adjustment.previous.month,
-        cancelled: sessionPlan.adjustment.previous.cancelled,
-        makeups: sessionPlan.adjustment.previous.makeups
-      })
+    ? describeAdjustment({ cancelled: sessionPlan.adjustment.cancelled, makeups: sessionPlan.adjustment.makeups })
     : "";
   // Lý do admin nhập khi ±1 buổi cả lớp được lưu trên hóa đơn: lý do chung của đa số hóa đơn
   // trong tháng thì đưa vào tin gửi nhóm phụ huynh.
