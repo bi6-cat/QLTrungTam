@@ -85,7 +85,7 @@ describe("buildCalendar", () => {
     assert.equal(calendar[0].reason, "GV ốm");
   });
 
-  test("buổi đã qua chưa điểm danh là pending; lịch ngừng không sinh buổi sau ngày ngừng", () => {
+  test("buổi đã qua chưa ghi nhận mặc định là đã học; lịch ngừng không sinh buổi sau ngày ngừng", () => {
     const calendar = buildCalendar({
       slots: [slot({ effectiveTo: "2026-10-13" })],
       records: [],
@@ -94,7 +94,7 @@ describe("buildCalendar", () => {
       today: "2026-10-14"
     });
     assert.deepEqual(calendar.map((session) => session.date), ["2026-10-06", "2026-10-13"]);
-    assert.ok(calendar.every((session) => session.status === "pending"));
+    assert.ok(calendar.every((session) => session.status === "held"));
   });
 });
 

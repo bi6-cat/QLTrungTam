@@ -29,7 +29,11 @@ export type SessionRecord = {
   reason: string | null;
 };
 
-/** pending = đã qua mà chưa điểm danh; upcoming = hôm nay hoặc sắp tới, chưa điểm danh. */
+/**
+ * upcoming = hôm nay hoặc sắp tới, chưa có ghi nhận. Buổi đã qua mà không có ghi nhận mặc định là
+ * "held"; "pending" (đã qua chưa điểm danh) không còn được sinh ra, giữ trong kiểu cho các chỗ
+ * hiển thị cũ.
+ */
 export type CalendarStatus = SessionRecordStatus | "pending" | "upcoming";
 
 export type CalendarSession = {
@@ -174,7 +178,8 @@ export function buildCalendar(input: {
         room: record?.room || slot.room,
         scheduled: true,
         recordId: record?.id ?? null,
-        status: record?.status ?? (date < input.today ? "pending" : "upcoming"),
+        // Mặc định buổi đã qua là "đã học": admin chỉ cần ghi buổi nghỉ / học bù, không phải điểm danh từng buổi.
+        status: record?.status ?? (date < input.today ? "held" : "upcoming"),
         reason: record?.reason ?? null
       });
     }
