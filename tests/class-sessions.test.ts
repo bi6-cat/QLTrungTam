@@ -179,10 +179,12 @@ describe("buildParentNotice", () => {
       ],
       adjustmentNote: "đã trừ 1 buổi lớp nghỉ T10: 15/10 (GV ốm)"
     });
-    assert.match(message, /^Kính gửi phụ huynh lớp Toán 9,$/m);
-    assert.match(message, /Học phí Tháng 11\/2026 \(7 buổi, đã trừ 1 buổi lớp nghỉ T10: 15\/10 \(GV ốm\)\)\./);
+    assert.match(message, /^Thông báo học phí Tháng 11\/2026$/m);
+    assert.match(message, /^Kính gửi phụ huynh lớp Toán 9, @All$/m);
+    assert.match(message, /^Tổng số buổi T11 dự kiến: 7 buổi$/m);
+    assert.match(message, /^\[đã trừ 1 buổi lớp nghỉ T10: 15\/10 \(GV ốm\)\]$/m);
     assert.ok(!message.includes("(T9)"));
-    assert.ok(message.split("\n").length <= 5);
+    assert.ok(message.split("\n").length <= 6);
   });
 
   test("số buổi khác nhau thì không ghi số buổi chung", () => {
@@ -197,6 +199,7 @@ describe("buildParentNotice", () => {
       ],
       adjustmentNote: ""
     });
-    assert.match(message, /Học phí Tháng 11\/2026\./);
+    assert.match(message, /^Thông báo học phí Tháng 11\/2026$/m);
+    assert.doesNotMatch(message, /Tổng số buổi/);
   });
 });

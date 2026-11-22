@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Check, Copy, Download, ExternalLink, ListChecks, Loader2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { toast } from "@/components/Toaster";
-import { buildParentNotice } from "@/lib/parent-notice";
+import { buildParentNotice, swapReasonLine } from "@/lib/parent-notice";
 import { renderTuitionOverviewImage } from "@/lib/tuition-overview-image";
 
 // Ô nội dung cao vừa đủ theo chữ thay vì cố định 10 dòng để lại khoảng trống. Ref dạng hàm mới
@@ -100,11 +100,26 @@ function ParentLinkDialog({
   adjustmentNote: string;
   onClose: () => void;
 }) {
-  const defaultMessage = useMemo(
-    () => buildParentNotice({ className, payUrl, month, year, rows, adjustmentNote }),
-    [adjustmentNote, className, month, payUrl, rows, year]
+  const buildMessage = useCallback(
+    (note: string) => buildParentNotice({ className, payUrl, month, year, rows, adjustmentNote: note }),
+    [className, month, payUrl, rows, year]
   );
-  const [draft, setDraft] = useState(defaultMessage);
+  // Lý do có ô riêng: sửa ô này thì dòng [lý do] trong tin đổi theo. Đã gõ tay vào tin thì chỉ
+  // thay đúng dòng đó, không ghi đè phần đã sửa.
+  const [reason, setReason] = useState(adjustmentNote);
+  const [edited, setEdited] = useState(false);
+  const [draft, setDraft] = useState(() => buildMessage(adjustmentNote));
+
+  function changeReason(next: string) {
+    setDraft((current) => (edited ? swapReasonLine(current, reason, next) : buildMessage(next)));
+    setReason(next);
+  }
+
+  function resetMessage() {
+    setReason(adjustmentNote);
+    setDraft(buildMessage(adjustmentNote));
+    setEdited(false);
+  }
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -193,15 +208,39 @@ function ParentLinkDialog({
         {exportError ? <p className="text-sm font-medium text-warning">{exportError}</p> : null}
 
         <div>
-          <label htmlFor="parent-link-message" className="text-sm font-semibold text-neutralText">
-            Nội dung gửi phụ huynh
+          <label htmlFor="parent-link-reason" className="text-sm font-semibold text-neutralText">
+            Lý do (hiện thành dòng trong ngoặc vuông)
           </label>
+          <p className="mt-1 text-xs text-stone-500">Ví dụ lớp nghỉ, học bù, trừ buổi. Để trống nếu không cần.</p>
+          <input
+            id="parent-link-reason"
+            type="text"
+            value={reason}
+            onChange={(event) => changeReason(event.target.value)}
+            className="focus-ring mt-2 h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm shadow-sm hover:border-stone-400 focus:border-primary"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="parent-link-message" className="text-sm font-semibold text-neutralText">
+              Nội dung gửi phụ huynh
+            </label>
+            {edited ? (
+              <button type="button" onClick={resetMessage} className="focus-ring rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-stone-100">
+                Đặt lại theo mẫu
+              </button>
+            ) : null}
+          </div>
           <p className="mt-1 text-xs text-stone-500">Có thể sửa nội dung trước khi chép sang Zalo.</p>
           <textarea
             id="parent-link-message"
             ref={(el) => fitToContent(el)}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setEdited(true);
+            }}
             rows={4}
             className="focus-ring mt-2 max-h-[50vh] w-full resize-none rounded-xl border border-stone-300 bg-white p-3 text-sm leading-relaxed shadow-sm hover:border-stone-400 focus:border-primary"
           />
