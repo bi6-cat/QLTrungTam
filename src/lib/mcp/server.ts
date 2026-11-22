@@ -6,6 +6,7 @@ import { enrollStudentInClass } from "@/lib/enrollments-core";
 import { getMonthlyFinance } from "@/lib/finance";
 import { MCP_ACTOR } from "@/lib/mcp/auth";
 import { prisma } from "@/lib/prisma";
+import { readBankEnv } from "@/lib/settings";
 import { matchesName, sortByGivenName } from "@/lib/student-search";
 import { createStudentRecord } from "@/lib/students-core";
 import { createStudentSchema } from "@/lib/validation";
@@ -190,7 +191,7 @@ export function createCenterMcpServer() {
       annotations: READ_ONLY
     },
     async ({ classId }) => {
-      const debts = await getOutstandingDebts({ classId, appUrl: process.env.NEXT_PUBLIC_APP_URL });
+      const debts = await getOutstandingDebts({ classId, appUrl: readBankEnv().appUrl });
       return ok({
         tongNo: debts.totalAmount,
         soHocSinh: debts.studentCount,

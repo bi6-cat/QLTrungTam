@@ -4,7 +4,7 @@ import { SettingsForm } from "@/components/SettingsForm";
 import { SheetSyncPanel } from "@/components/SheetSyncPanel";
 import { Panel, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
-import { getAppSettings, maskSecret } from "@/lib/settings";
+import { getAppSettings, maskSecret, readBankEnv } from "@/lib/settings";
 import { requireStaff } from "@/lib/auth";
 import { getSheetSyncConfig, NIGHTLY_SYNC_HOUR } from "@/lib/sheet-sync";
 
@@ -46,11 +46,8 @@ export default async function SettingsPage() {
       <Panel>
         {/* Không truyền secret thật xuống trình duyệt, chỉ gửi gợi ý đã che. */}
         <SettingsForm
+          bank={readBankEnv()}
           values={{
-            bankAccountNumber: settings.bankAccountNumber,
-            bankAccountName: settings.bankAccountName,
-            bankBin: settings.bankBin,
-            appUrl: settings.appUrl,
             debtReminderTemplate: settings.debtReminderTemplate,
             salaryCutoff: settings.salaryCutoff,
             sepayApiKeyHint: maskSecret(settings.sepayApiKey),

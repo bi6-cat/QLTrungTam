@@ -41,7 +41,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "expense.deleted": "Xóa khoản chi",
   "admin_user.created": "Tạo tài khoản quản lý",
   "admin_user.deleted": "Xóa tài khoản quản lý",
-  "admin_user.password_reset": "Đặt lại mật khẩu"
+  "admin_user.password_reset": "Đặt lại mật khẩu quản lý phụ",
+  "admin_user.password_changed": "Đổi mật khẩu (đăng xuất thiết bị khác)"
 };
 
 /** Nhóm thao tác cho bộ lọc trên trang Nhật ký. */
@@ -106,12 +107,19 @@ function isoDay(value: unknown) {
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-/** "Số buổi 8 → 7", "SĐT 0901… → 0902…" từ metadata.changes. */
-export function describeChanges(changes: unknown): string[] {
+export type AuditChange = { label: string; from: string; to: string };
+
+/** Thay đổi từng trường từ metadata.changes, đã dịch nhãn và định dạng giá trị. */
+export function listChanges(changes: unknown): AuditChange[] {
   return Object.entries(asMeta(changes)).map(([field, change]) => {
     const { from, to } = asMeta(change);
-    return `${FIELD_LABELS[field] ?? field}: ${show(field, from)} → ${show(field, to)}`;
+    return { label: FIELD_LABELS[field] ?? field, from: show(field, from), to: show(field, to) };
   });
+}
+
+/** "Số buổi: 8 → 7", "SĐT: 0901… → 0902…" từ metadata.changes. */
+export function describeChanges(changes: unknown): string[] {
+  return listChanges(changes).map((change) => `${change.label}: ${change.from} → ${change.to}`);
 }
 
 export type AuditLogLike = {
@@ -120,11 +128,22 @@ export type AuditLogLike = {
   metadata: unknown;
 };
 
-/** Tiêu đề + các dòng chi tiết của một log. */
-export function describeAudit(log: AuditLogLike): { title: string; details: string[] } {
+export type AuditDescription = {
+  title: string;
+  /** Thông tin ngắn (kỳ, số tiền, ngày…), không gồm thay đổi trước/sau và lý do. */
+  summary: string[];
+  changes: AuditChange[];
+  reason: string | null;
+  /** Tất cả gộp thành dòng chữ (summary, thay đổi, lý do). */
+  details: string[];
+};
+
+/** Tiêu đề, thông tin tóm tắt, thay đổi trước/sau và lý do của một log. */
+export function describeAudit(log: AuditLogLike): AuditDescription {
   const meta = asMeta(log.metadata);
   const title = AUDIT_ACTION_LABELS[log.action] ?? log.action;
   const details: string[] = [];
+  const changes: AuditChange[] = [];
   const period = typeof meta.month === "number" && typeof meta.year === "number" ? `T${meta.month}/${meta.year}` : "";
 
   switch (log.action) {
@@ -144,7 +163,7 @@ export function describeAudit(log: AuditLogLike): { title: string; details: stri
     case "month_plan.updated":
       if (period) details.push(period);
       if (typeof meta.amountFrom === "number" && typeof meta.amountTo === "number" && meta.amountFrom !== meta.amountTo) {
-        details.push(`Hóa đơn: ${money(meta.amountFrom)} → ${money(meta.amountTo)}`);
+        changes.push({ label: "Hóa đơn", from: money(meta.amountFrom), to: money(meta.amountTo) });
       }
       if (typeof meta.sessionsNote === "string" && meta.sessionsNote) details.push(`Diễn giải: ${meta.sessionsNote}`);
       break;
@@ -158,7 +177,7 @@ export function describeAudit(log: AuditLogLike): { title: string; details: stri
       if (period) details.push(typeof meta.amount === "number" ? `${period} · ${money(meta.amount)}` : period);
       break;
     case "invoice.memo_changed":
-      details.push(`${meta.from ?? ""} → ${meta.to ?? ""}`);
+      changes.push({ label: "Nội dung CK", from: String(meta.from ?? ""), to: String(meta.to ?? "") });
       break;
     case "class.created":
       details.push(
@@ -171,9 +190,11 @@ export function describeAudit(log: AuditLogLike): { title: string; details: stri
     case "schedule.updated": {
       const from = asMeta(meta.from);
       const to = asMeta(meta.to);
-      details.push(
-        `${WEEKDAYS[Number(from.weekday)] ?? ""} ${from.startTime ?? ""}–${from.endTime ?? ""} → ${WEEKDAYS[Number(to.weekday)] ?? ""} ${to.startTime ?? ""}–${to.endTime ?? ""}`
-      );
+      changes.push({
+        label: "Lịch",
+        from: `${WEEKDAYS[Number(from.weekday)] ?? ""} ${from.startTime ?? ""}–${from.endTime ?? ""}`,
+        to: `${WEEKDAYS[Number(to.weekday)] ?? ""} ${to.startTime ?? ""}–${to.endTime ?? ""}`
+      });
       break;
     }
     case "schedule.stopped":
@@ -204,9 +225,50 @@ export function describeAudit(log: AuditLogLike): { title: string; details: stri
       if (period) details.push(period);
   }
 
-  details.push(...describeChanges(meta.changes));
-  if (log.reason) details.push(`Lý do: ${log.reason}`);
-  return { title, details: details.filter(Boolean) };
+  changes.push(...listChanges(meta.changes));
+  const summary = details.filter((line) => line.trim() && line.trim() !== "·");
+  const reason = log.reason?.trim() || null;
+  return {
+    title,
+    summary,
+    changes,
+    reason,
+    details: [
+      ...summary,
+      ...changes.map((change) => `${change.label}: ${change.from} → ${change.to}`),
+      ...(reason ? [`Lý do: ${reason}`] : [])
+    ]
+  };
+}
+
+/** Nhóm (giá trị của AUDIT_ACTION_GROUPS) của một thao tác; "other" nếu không thuộc nhóm nào. */
+export function auditGroupOf(action: string) {
+  return AUDIT_ACTION_GROUPS.find((group) => group.prefixes.some((prefix) => action.startsWith(prefix)))?.value ?? "other";
+}
+
+/** Thao tác cần chú ý (mất tiền, mất dữ liệu): trang Nhật ký tô đỏ. */
+const DANGER_ACTIONS = new Set([
+  "invoice.voided",
+  "invoice.waived",
+  "enrollment.left",
+  "student.archived",
+  "class.archived",
+  "schedule.deleted",
+  "schedule.stopped",
+  "session.day_cancelled",
+  "transaction.unassigned",
+  "transaction.reversed",
+  "salary.paid",
+  "salary.written_off",
+  "expense.deleted",
+  "admin_user.created",
+  "admin_user.deleted",
+  "admin_user.password_reset",
+  "admin_user.password_changed"
+]);
+
+export function isDangerAction(action: string) {
+  return DANGER_ACTIONS.has(action);
 }
 
 /** Điều kiện lọc theo nhóm thao tác (giá trị của AUDIT_ACTION_GROUPS). */

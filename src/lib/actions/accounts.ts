@@ -51,7 +51,8 @@ export async function resetManagerPasswordAction(_prevState: ResultState, formDa
 
   const updated = await prisma.adminUser.updateMany({
     where: { id: data.userId, role: "manager" },
-    data: { passwordHash: hashPassword(data.password) }
+    // Đá mọi phiên đang đăng nhập của quản lý phụ này.
+    data: { passwordHash: hashPassword(data.password), sessionVersion: { increment: 1 } }
   });
   if (updated.count !== 1) return errorState("Không tìm thấy tài khoản quản lý phụ.");
 

@@ -153,11 +153,8 @@ async function main() {
 
   const settings = {
     SEPAY_API_KEY: process.env.SEPAY_API_KEY || "",
-    SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET || "",
-    BANK_ACCOUNT_NUMBER: process.env.BANK_ACCOUNT_NUMBER || "19000000000000",
-    BANK_ACCOUNT_NAME: process.env.BANK_ACCOUNT_NAME || "APLUS ACADEMY",
-    BANK_BIN: process.env.BANK_BIN || "970407",
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001"
+    SEPAY_WEBHOOK_SECRET: process.env.SEPAY_WEBHOOK_SECRET || ""
+    // STK, tên TK, BIN, địa chỉ app không lưu DB: app đọc thẳng từ .env (src/lib/settings.ts).
   };
   for (const [key, value] of Object.entries(settings)) {
     await prisma.appSetting.upsert({ where: { key }, update: {}, create: { key, value } });

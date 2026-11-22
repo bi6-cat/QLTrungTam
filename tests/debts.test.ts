@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  buildReminderMessage,
   filterDebtRowsByPeriod,
   parseDebtPeriod,
   parseDebtSort,
@@ -76,5 +77,38 @@ describe("debts by month", () => {
     assert.equal(parseDebtPeriod(undefined), null);
     assert.equal(parseDebtSort("amount"), "amount");
     assert.equal(parseDebtSort("drop table"), "name");
+  });
+});
+
+describe("debt reminder message", () => {
+  const invoice = (id: string, className: string, payUrl: string, month: number): DebtInvoice => ({
+    ...debt(id, month, 500_000, 0),
+    className,
+    payUrl
+  });
+
+  test("names the class on every line and gives one pay link per class", () => {
+    const message = buildReminderMessage(
+      row("s1", "Bình", [
+        invoice("i1", "Toán 9A", "https://x/pay/toan?hs=s1", 10),
+        invoice("i2", "Lý 8B", "https://x/pay/ly?hs=s1", 10),
+        invoice("i3", "Toán 9A", "https://x/pay/toan?hs=s1", 11)
+      ]),
+      "{{debtDetails}}\n{{paymentSection}}"
+    );
+    assert.match(message, /• Toán 9A – T10\/2026: /);
+    assert.match(message, /• Lý 8B – T10\/2026: /);
+    assert.match(message, /• Toán 9A – T11\/2026: /);
+    assert.match(message, /• Toán 9A: https:\/\/x\/pay\/toan\?hs=s1/);
+    assert.match(message, /• Lý 8B: https:\/\/x\/pay\/ly\?hs=s1/);
+    assert.equal(message.match(/pay\/toan/g)?.length, 1);
+  });
+
+  test("single class keeps a one-line pay link with the class name", () => {
+    const message = buildReminderMessage(
+      row("s2", "An", [invoice("i4", "Toán 9A", "https://x/pay/toan?hs=s2", 10)]),
+      "{{paymentSection}}"
+    );
+    assert.equal(message, "Thanh toán lớp Toán 9A (quét QR, không cần sửa nội dung): https://x/pay/toan?hs=s2");
   });
 });

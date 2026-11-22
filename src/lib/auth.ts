@@ -18,7 +18,12 @@ export async function login(username: string, password: string) {
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return false;
   }
+  await setSessionCookie(user);
+  return true;
+}
 
+/** Ghi cookie phiên cho tài khoản; gọi lại sau khi đổi mật khẩu để giữ thiết bị đang dùng. */
+export async function setSessionCookie(user: { id: string; username: string; role: AdminRole; sessionVersion: number }) {
   const cookieStore = await cookies();
   cookieStore.set(
     SESSION_COOKIE_NAME,
@@ -26,6 +31,7 @@ export async function login(username: string, password: string) {
       userId: user.id,
       username: user.username,
       role: user.role,
+      sv: user.sessionVersion,
       exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000
     }),
     {
@@ -36,7 +42,6 @@ export async function login(username: string, password: string) {
       path: "/"
     }
   );
-  return true;
 }
 
 export async function logout() {
@@ -50,17 +55,19 @@ export async function getSession() {
 }
 
 /**
- * Người đang đăng nhập, vai trò đọc từ DB (không tin vai trò trong cookie): tài khoản bị xóa
- * hoặc đổi vai trò mất quyền ngay ở request kế tiếp. `cache` gộp các lần gọi trong một request.
+ * Người đang đăng nhập, vai trò đọc từ DB (không tin vai trò trong cookie): tài khoản bị xóa,
+ * đổi vai trò hoặc đổi mật khẩu mất quyền ngay ở request kế tiếp. `cache` gộp các lần gọi trong một request.
  */
 export const getCurrentUser = cache(async (): Promise<StaffUser | null> => {
   const session = await getSession();
   if (!session) return null;
   const user = await prisma.adminUser.findUnique({
     where: { id: session.userId },
-    select: { id: true, username: true, role: true }
+    select: { id: true, username: true, role: true, sessionVersion: true }
   });
-  return user ? { userId: user.id, username: user.username, role: user.role } : null;
+  // Mật khẩu đã đổi sau lúc đăng nhập: phiên này hết hiệu lực.
+  if (!user || user.sessionVersion !== (session.sv ?? 0)) return null;
+  return { userId: user.id, username: user.username, role: user.role };
 });
 
 /**

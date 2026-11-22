@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { buildVietQrImageUrl } from "@/lib/payment";
 import { prisma } from "@/lib/prisma";
-import { getAppSettings } from "@/lib/settings";
+import { readBankEnv } from "@/lib/settings";
 import { normalizeName, sortByGivenName } from "@/lib/student-search";
 
 export type PayPortalInvoice = {
@@ -130,15 +130,18 @@ export async function getStudentPayInvoices(
     return null;
   }
 
-  const settings = await getAppSettings();
+  const bank = readBankEnv();
   return enrollment.invoices.map((invoice) => ({
     ...invoice,
-    qrImageUrl: buildVietQrImageUrl({
-      bankBin: settings.bankBin,
-      accountNumber: settings.bankAccountNumber,
-      accountName: settings.bankAccountName,
-      amount: invoice.amount,
-      memo: invoice.memoContent
-    })
+    // Thiếu STK trong .env thì không hiện QR (trang báo liên hệ trung tâm), không dùng STK mặc định.
+    qrImageUrl: bank.problems.some((name) => name.startsWith("BANK_"))
+      ? ""
+      : buildVietQrImageUrl({
+          bankBin: bank.bankBin,
+          accountNumber: bank.bankAccountNumber,
+          accountName: bank.bankAccountName,
+          amount: invoice.amount,
+          memo: invoice.memoContent
+        })
   }));
 }
