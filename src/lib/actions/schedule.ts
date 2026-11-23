@@ -70,29 +70,36 @@ export async function updateScheduleAction(_prevState: ResultState, formData: Fo
   const { data, error } = safeParseForm(updateScheduleSchema, formData);
   if (error || !data) return errorState(error ?? "Dữ liệu không hợp lệ.");
   try {
-    await runSerializableAction(async (tx) => {
+    const result = await runSerializableAction(async (tx) => {
       const before = await tx.classSchedule.findUnique({
         where: { id: data.id },
         select: { classId: true, weekday: true, startTime: true, endTime: true, room: true }
       });
-      await updateScheduleSlot(tx, data);
-      if (before) {
+      const outcome = await updateScheduleSlot(tx, data);
+      if (before && outcome.mode !== "unchanged") {
         await logAudit(tx, actor, {
           action: "schedule.updated",
           entityType: "ClassRoom",
           entityId: before.classId,
           metadata: {
             scheduleId: data.id,
+            applyFrom: data.applyFrom,
+            removedRecords: outcome.removed,
             from: { weekday: before.weekday, startTime: before.startTime, endTime: before.endTime, room: before.room },
             to: { weekday: data.weekday, startTime: data.startTime, endTime: data.endTime, room: data.room }
           }
         });
       }
+      return outcome;
     });
+    if (result.mode === "unchanged") return successState("Lịch không thay đổi.");
+    const removed = result.removed > 0 ? ` Đã bỏ ${result.removed} điểm danh/ghi nghỉ của giờ cũ.` : "";
+    return successState(
+      `Đã sửa lịch thành ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime} từ ${formatIsoDayMonth(data.applyFrom)}.${removed}`
+    );
   } catch (updateError) {
     return actionFailure(updateError, "Không thể sửa lịch học.");
   }
-  return successState(`Đã sửa lịch thành ${weekdayLabel(data.weekday)} ${data.startTime}–${data.endTime}.`);
 }
 
 export async function stopScheduleAction(scheduleId: string, fromDate: string): Promise<ResultState> {
@@ -108,15 +115,18 @@ export async function stopScheduleAction(scheduleId: string, fromDate: string): 
       const outcome = await stopScheduleSlot(tx, { id: String(scheduleId), fromDate: date });
       if (before) {
         await logAudit(tx, actor, {
-          action: outcome === "deleted" ? "schedule.deleted" : "schedule.stopped",
+          action: outcome.outcome === "deleted" ? "schedule.deleted" : "schedule.stopped",
           entityType: "ClassRoom",
           entityId: before.classId,
-          metadata: { scheduleId: String(scheduleId), ...before, fromDate: date }
+          metadata: { scheduleId: String(scheduleId), ...before, fromDate: date, removedRecords: outcome.removed }
         });
       }
       return outcome;
     });
-    return successState(result === "deleted" ? "Đã xóa buổi học khỏi lịch." : `Đã ngừng buổi học từ ${formatIsoDayMonth(date)}.`);
+    const removed = result.removed > 0 ? ` Đã bỏ ${result.removed} điểm danh/ghi nghỉ từ ngày đó.` : "";
+    return successState(
+      (result.outcome === "deleted" ? "Đã xóa buổi học khỏi lịch." : `Đã ngừng buổi học từ ${formatIsoDayMonth(date)}.`) + removed
+    );
   } catch (stopError) {
     return actionFailure(stopError, "Không thể ngừng buổi học.");
   }

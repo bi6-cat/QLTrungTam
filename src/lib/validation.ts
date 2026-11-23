@@ -204,7 +204,9 @@ export const updateScheduleSchema = z.object({
   weekday: z.coerce.number().int().min(1, "Chọn thứ").max(7, "Chọn thứ"),
   startTime: timeOfDay,
   endTime: timeOfDay,
-  room: looseText(60)
+  room: looseText(60),
+  /** Đổi lịch từ ngày này; các buổi trước đó giữ lịch cũ. */
+  applyFrom: isoDay
 });
 
 const sessionReason = optionalText(120);

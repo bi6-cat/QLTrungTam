@@ -6,6 +6,7 @@ import {
   formatIsoDayMonth,
   isoParts,
   isoToDbDate,
+  isoWeekdayOf,
   slotActiveOn,
   todayInVietnam,
   type IsoDate
@@ -65,38 +66,115 @@ export async function createScheduleSlot(
   return classRoom;
 }
 
-/** Sửa giờ/thứ/phòng của lịch cố định. Buổi đã điểm danh giữ nguyên giờ đã ghi. */
+/**
+ * Ghi nhận "đã học" / "lớp nghỉ" của một lịch (thứ + giờ bắt đầu) từ ngày fromDate trở đi mà không
+ * còn lịch nào khớp nữa (vì lịch vừa đổi giờ hoặc ngừng) thì xóa đi, nếu không chúng hiện thành
+ * buổi lẻ trên thời khóa biểu cạnh buổi của lịch mới. Buổi học bù không đụng tới.
+ */
+async function dropOrphanedRecords(
+  db: Db,
+  input: { classId: string; weekday: number; startTime: string; fromDate: IsoDate }
+) {
+  const [slots, records] = await Promise.all([
+    db.classSchedule.findMany({ where: { classId: input.classId, startTime: input.startTime }, select: scheduleSlotSelect }),
+    db.classSession.findMany({
+      where: {
+        classId: input.classId,
+        startTime: input.startTime,
+        status: { in: ["held", "cancelled"] },
+        date: { gte: isoToDbDate(input.fromDate) }
+      },
+      select: sessionRecordSelect
+    })
+  ]);
+  const activeSlots = slots.map(toScheduleSlot);
+  const orphanIds = records
+    .map(toSessionRecord)
+    .filter((record) => isoWeekdayOf(record.date) === input.weekday)
+    .filter((record) => !activeSlots.some((slot) => slotActiveOn(slot, record.date)))
+    .map((record) => record.id);
+  if (orphanIds.length === 0) return 0;
+  const deleted = await db.classSession.deleteMany({ where: { id: { in: orphanIds } } });
+  return deleted.count;
+}
+
+/**
+ * Sửa giờ/thứ/phòng của lịch cố định từ ngày applyFrom. Lịch đã chạy trước ngày đó thì tách đôi:
+ * lịch cũ kết thúc hôm trước applyFrom, lịch mới bắt đầu từ applyFrom; nhờ vậy các tuần đã qua giữ
+ * nguyên giờ cũ, không bị nhân đôi buổi.
+ */
 export async function updateScheduleSlot(
   db: Db,
-  input: { id: string; weekday: number; startTime: string; endTime: string; room: string }
+  input: { id: string; weekday: number; startTime: string; endTime: string; room: string; applyFrom: IsoDate }
 ) {
   if (input.endTime <= input.startTime) throw new Error("Giờ kết thúc phải sau giờ bắt đầu.");
-  const existing = await db.classSchedule.findUnique({ where: { id: input.id }, select: scheduleSlotSelect });
+  const existing = await db.classSchedule.findUnique({ where: { id: input.id }, select: { ...scheduleSlotSelect, note: true } });
   if (!existing) throw new Error("Lịch học không còn tồn tại. Vui lòng tải lại trang.");
   await requireActiveClass(db, existing.classId);
   const slot = toScheduleSlot(existing);
-  await assertNoOverlappingSlot(db, { ...slot, ...input });
-  await db.classSchedule.update({
-    where: { id: input.id },
-    data: { weekday: input.weekday, startTime: input.startTime, endTime: input.endTime, room: input.room }
-  });
+
+  const unchanged =
+    slot.weekday === input.weekday && slot.startTime === input.startTime && slot.endTime === input.endTime && slot.room === input.room;
+  if (unchanged) return { mode: "unchanged" as const, removed: 0 };
+  if (slot.effectiveTo && input.applyFrom > slot.effectiveTo) {
+    throw new Error(`Buổi này đã ngừng sau ngày ${formatIsoDayMonth(slot.effectiveTo)}, không sửa từ ngày sau đó được.`);
+  }
+
+  const startsFrom = slot.effectiveFrom && slot.effectiveFrom > input.applyFrom ? slot.effectiveFrom : input.applyFrom;
+  const next = { weekday: input.weekday, startTime: input.startTime, endTime: input.endTime, room: input.room };
+  // Lịch mới chiếm khoảng [startsFrom, effectiveTo cũ]; lịch cũ (bỏ qua bằng id) sẽ kết thúc trước đó.
+  await assertNoOverlappingSlot(db, { id: slot.id, classId: slot.classId, ...next, effectiveFrom: startsFrom, effectiveTo: slot.effectiveTo });
+
+  const ranBefore = !slot.effectiveFrom || slot.effectiveFrom < input.applyFrom;
+  if (ranBefore) {
+    await db.classSchedule.update({ where: { id: slot.id }, data: { effectiveTo: isoToDbDate(addDays(input.applyFrom, -1)) } });
+    await db.classSchedule.create({
+      data: {
+        classId: slot.classId,
+        ...next,
+        note: existing.note,
+        effectiveFrom: isoToDbDate(startsFrom),
+        effectiveTo: slot.effectiveTo ? isoToDbDate(slot.effectiveTo) : null
+      }
+    });
+  } else {
+    await db.classSchedule.update({ where: { id: slot.id }, data: next });
+  }
+
+  const keyChanged = slot.weekday !== input.weekday || slot.startTime !== input.startTime;
+  const removed = keyChanged
+    ? await dropOrphanedRecords(db, { classId: slot.classId, weekday: slot.weekday, startTime: slot.startTime, fromDate: startsFrom })
+    : 0;
+  return { mode: ranBefore ? ("split" as const) : ("updated" as const), removed };
 }
 
 /**
  * Ngừng lịch cố định từ một ngày: đóng khoảng hiệu lực để các buổi trước đó vẫn còn trên thời
- * khóa biểu. Lịch chưa từng có buổi nào trước ngày đó thì xóa hẳn.
+ * khóa biểu. Lịch chưa từng có buổi nào trước ngày đó thì xóa hẳn. Điểm danh / ghi nghỉ của lịch
+ * này từ ngày ngừng trở đi bị xóa theo (buổi đó không còn nữa).
  */
 export async function stopScheduleSlot(db: Db, input: { id: string; fromDate: IsoDate }) {
   const existing = await db.classSchedule.findUnique({ where: { id: input.id }, select: scheduleSlotSelect });
   if (!existing) throw new Error("Lịch học không còn tồn tại. Vui lòng tải lại trang.");
+  await requireActiveClass(db, existing.classId);
   const slot = toScheduleSlot(existing);
-  const effectiveTo = addDays(input.fromDate, -1);
-  if (slot.effectiveFrom && effectiveTo < slot.effectiveFrom) {
-    await db.classSchedule.delete({ where: { id: input.id } });
-    return "deleted" as const;
+  if (slot.effectiveTo && input.fromDate > slot.effectiveTo) {
+    throw new Error(`Buổi này đã ngừng sau ngày ${formatIsoDayMonth(slot.effectiveTo)} rồi.`);
   }
-  await db.classSchedule.update({ where: { id: input.id }, data: { effectiveTo: isoToDbDate(effectiveTo) } });
-  return "stopped" as const;
+  const effectiveTo = addDays(input.fromDate, -1);
+  const deleted = Boolean(slot.effectiveFrom && effectiveTo < slot.effectiveFrom);
+  if (deleted) {
+    await db.classSchedule.delete({ where: { id: input.id } });
+  } else {
+    await db.classSchedule.update({ where: { id: input.id }, data: { effectiveTo: isoToDbDate(effectiveTo) } });
+  }
+  const removed = await dropOrphanedRecords(db, {
+    classId: slot.classId,
+    weekday: slot.weekday,
+    startTime: slot.startTime,
+    fromDate: deleted ? slot.effectiveFrom! : input.fromDate
+  });
+  return { outcome: deleted ? ("deleted" as const) : ("stopped" as const), removed };
 }
 
 /** Buổi theo lịch (hoặc buổi đã điểm danh) của lớp tại ngày + giờ bắt đầu; không có thì báo lỗi. */

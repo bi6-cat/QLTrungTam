@@ -115,13 +115,13 @@ export function FixedScheduleManager({
         </div>
       ) : null}
 
-      {editing ? <EditSlotDialog slot={editing} onClose={() => setEditing(null)} /> : null}
+      {editing ? <EditSlotDialog slot={editing} today={today} onClose={() => setEditing(null)} /> : null}
       {stopping ? <StopSlotDialog slot={stopping} today={today} onClose={() => setStopping(null)} /> : null}
     </Panel>
   );
 }
 
-function EditSlotDialog({ slot, onClose }: { slot: ManagedSlot; onClose: () => void }) {
+function EditSlotDialog({ slot, today, onClose }: { slot: ManagedSlot; today: IsoDate; onClose: () => void }) {
   const [state, action, pending] = useActionState(updateScheduleAction, EMPTY_RESULT_STATE);
   const router = useRouter();
   useEffect(() => {
@@ -154,10 +154,13 @@ function EditSlotDialog({ slot, onClose }: { slot: ManagedSlot; onClose: () => v
           <Field label="Kết thúc">
             <Input name="endTime" type="time" defaultValue={slot.endTime} required />
           </Field>
+          <Field label="Áp dụng từ ngày">
+            <Input name="applyFrom" type="date" defaultValue={slot.effectiveFrom && slot.effectiveFrom > today ? slot.effectiveFrom : today} required />
+          </Field>
         </div>
         <p className="text-xs text-stone-500">
-          Áp dụng cho mọi buổi chưa điểm danh; buổi đã điểm danh giữ giờ cũ. Lớp đổi lịch từ một ngày nhất định thì nên
-          “Ngừng” buổi cũ rồi thêm buổi mới.
+          Các buổi trước ngày này giữ lịch cũ (kể cả điểm danh, lớp nghỉ đã ghi). Từ ngày này trở đi chỉ còn lịch mới;
+          điểm danh / ghi nghỉ đã ghi sẵn cho giờ cũ từ ngày này sẽ bị bỏ.
         </p>
         {state.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">{state.error}</p> : null}
         <div className="flex justify-end gap-2">
@@ -209,7 +212,8 @@ function StopSlotDialog({
       <div className="grid gap-3">
         <p className="text-sm text-stone-600">
           Ngừng buổi <strong>{weekdayLabel(slot.weekday)} {slot.startTime}–{slot.endTime}</strong> của lớp {slot.className}.
-          Các buổi trước ngày ngừng vẫn còn trên thời khóa biểu.
+          Các buổi trước ngày ngừng vẫn còn trên thời khóa biểu; điểm danh / ghi nghỉ của buổi này từ ngày ngừng trở đi
+          sẽ bị bỏ.
         </p>
         <Field label="Ngừng từ ngày">
           <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
