@@ -85,8 +85,8 @@ export default async function ClassesPage({
   const students = sortByGivenName(unsortedStudents);
   const defaultCutoffLabel = describeSalaryCutoff(parseSalaryCutoff(settings.salaryCutoff) ?? DEFAULT_SALARY_CUTOFF);
 
-  const selectedClass =
-    classes.find((classRoom) => classRoom.id === params.classId) ?? classes[0] ?? null;
+  // Không tự mở lớp đầu tiên: phải bấm chọn lớp mới hiện chi tiết, tránh sửa nhầm lớp.
+  const selectedClass = classes.find((classRoom) => classRoom.id === params.classId) ?? null;
   // Nợ các tháng trước của học sinh trong lớp, để sang tháng mới vẫn thấy ai còn nợ.
   const olderDebts = selectedClass
     ? await prisma.monthlyInvoice.findMany({
@@ -428,6 +428,10 @@ export default async function ClassesPage({
               )}
             </div>
           </section>
+        ) : classes.length > 0 ? (
+          <EmptyState title="Chọn một lớp" icon={<Layers3 className="h-6 w-6" />}>
+            Bấm vào tên lớp trong Danh sách lớp để xem học sinh và hóa đơn của lớp đó.
+          </EmptyState>
         ) : (
           <EmptyState title={showArchived ? "Chưa có lớp lưu trữ" : "Chưa có lớp học nào"}>
             {showArchived ? "Các lớp đã lưu trữ sẽ xuất hiện tại đây." : "Tạo lớp đầu tiên để bắt đầu quản lý học phí."}
