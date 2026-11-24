@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, FilePlus2, Lock, Minus, Pencil, Plus, X } from "lucide-react";
+import { Check, FilePlus2, Lock, Minus, Pencil, Plus, Search, X } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 import { updateClassDetailsAction } from "@/lib/actions/billing";
 import { EMPTY_RESULT_STATE, type ResultState } from "@/lib/action-states";
@@ -13,6 +13,7 @@ import { LeaveClassButton } from "@/components/LeaveClassButton";
 import { Badge, Button, Input, Select } from "@/components/ui";
 import { formatCurrency, formatMonth } from "@/lib/format";
 import { NOTE_MAX_LENGTH } from "@/lib/validation";
+import { matchesName } from "@/lib/student-search";
 
 type InvoiceRow = {
   enrollmentId: string;
@@ -53,6 +54,29 @@ type InvoiceRow = {
 };
 
 const PAGE_SIZE = 10;
+
+type RowFilter = "all" | "unpaid" | "paid" | "not_created" | "on_leave" | "older_debt";
+const ROW_FILTERS: Array<{ key: RowFilter; label: string; test: (row: InvoiceRow) => boolean }> = [
+  { key: "all", label: "Tất cả", test: () => true },
+  { key: "unpaid", label: "Chưa đóng", test: (row) => row.invoice?.status === "unpaid" },
+  { key: "paid", label: "Đã đóng", test: (row) => row.invoice?.status === "paid" },
+  {
+    key: "not_created",
+    label: "Chưa tạo HĐ",
+    test: (row) => !row.invoice && row.monthlyStatus === "active" && !row.studentArchived
+  },
+  { key: "on_leave", label: "Bảo lưu", test: (row) => row.monthlyStatus === "on_leave" },
+  { key: "older_debt", label: "Nợ tháng trước", test: (row) => row.olderDebts.length > 0 }
+];
+
+/** Tên gõ không dấu, hoặc một đoạn SĐT (bỏ dấu cách/chấm). */
+function matchesRow(row: InvoiceRow, query: string) {
+  const trimmed = query.trim();
+  if (!trimmed) return true;
+  const digits = trimmed.replace(/[\s.-]/g, "");
+  if (/^\d+$/.test(digits)) return row.phone.replace(/\D/g, "").includes(digits);
+  return matchesName(row.studentName, trimmed);
+}
 const INVOICE_STATUS = {
   unpaid: { label: "Chưa đóng", tone: "warning" },
   paid: { label: "Đã đóng", tone: "success" },
@@ -83,6 +107,8 @@ export function ClassInvoiceEditor({
   const hasMissingInvoice = canManage && missingInvoiceCount > 0;
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<RowFilter>("all");
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, number>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   // ±1 buổi cả lớp: tổng số buổi đã cộng/trừ (để hiện) và lý do gửi kèm khi lưu.
@@ -181,9 +207,17 @@ export function ClassInvoiceEditor({
     [billingLocked, rows, sessionDrafts]
   );
   const issuedAmount = summary.paid + summary.unpaid;
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Số thứ tự theo cả lớp, giữ nguyên khi tìm/lọc.
+  const orderByEnrollment = new Map(rows.map((row, index) => [row.enrollmentId, index + 1]));
+  const searchedRows = rows.filter((row) => matchesRow(row, query));
+  const filterCounts = new Map(
+    ROW_FILTERS.map((item) => [item.key, searchedRows.filter(item.test).length] as const)
+  );
+  const activeFilter = ROW_FILTERS.find((item) => item.key === filter) ?? ROW_FILTERS[0];
+  const filteredRows = searchedRows.filter(activeFilter.test);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const visibleRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const visibleRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const visibleIds = new Set(visibleRows.map((row) => row.enrollmentId));
   const formId = `class-details-${classId}-${month}-${year}`;
   const submitLabel = editing
@@ -253,6 +287,52 @@ export function ClassInvoiceEditor({
           ) : null}
         </div>
       </div>
+
+      {rows.length > 3 ? (
+        <div className="flex flex-col gap-2 border-b border-stone-200/80 px-4 py-3 sm:flex-row sm:items-center sm:px-6">
+          <label className="relative block w-full sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Tìm tên hoặc SĐT"
+              aria-label="Tìm học sinh theo tên hoặc số điện thoại"
+              autoComplete="off"
+              className="focus-ring h-9 w-full rounded-lg border border-stone-300 bg-white pl-9 pr-3 text-sm shadow-sm placeholder:text-stone-400 hover:border-stone-400 focus:border-primary"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc học sinh">
+            {ROW_FILTERS.map((item) => {
+              const count = filterCounts.get(item.key) ?? 0;
+              if (item.key !== "all" && count === 0 && filter !== item.key) return null;
+              const active = filter === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setFilter(item.key);
+                    setPage(1);
+                  }}
+                  className={`focus-ring inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ring-1 ring-inset transition-colors ${
+                    active
+                      ? "bg-primary text-white ring-primary"
+                      : "bg-white text-stone-600 ring-stone-300 hover:bg-stone-50"
+                  }`}
+                >
+                  {item.label}
+                  <span className={`tabular-nums ${active ? "text-white/80" : "text-stone-400"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <form id={formId} action={saveAction}>
         <input type="hidden" name="classId" value={classId} />
@@ -336,7 +416,7 @@ export function ClassInvoiceEditor({
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {visibleRows.map((row, index) => {
+              {visibleRows.map((row) => {
                 const invoice = row.invoice;
                 const isPaid = invoice?.status === "paid";
                 const isLocked = Boolean(invoice && invoice.status !== "unpaid");
@@ -355,7 +435,7 @@ export function ClassInvoiceEditor({
                     className={`transition-colors ${isPaid ? "bg-emerald-50/30" : editing && !row.studentArchived ? "bg-amber-50/30" : "hover:bg-stone-50"}`}
                   >
                     <td className="px-2 py-3 text-center tabular-nums text-stone-400">
-                      {(currentPage - 1) * PAGE_SIZE + index + 1}
+                      {orderByEnrollment.get(row.enrollmentId)}
                     </td>
                     <td className="whitespace-nowrap px-2 py-3">
                       <input type="hidden" name="enrollmentId" value={row.enrollmentId} />
@@ -533,12 +613,28 @@ export function ClassInvoiceEditor({
               })}
             </tbody>
           </table>
+          {visibleRows.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-stone-500">
+              Không có học sinh khớp tìm kiếm/bộ lọc.{" "}
+              <button
+                type="button"
+                className="font-semibold text-primary hover:underline"
+                onClick={() => {
+                  setQuery("");
+                  setFilter("all");
+                  setPage(1);
+                }}
+              >
+                Xóa lọc
+              </button>
+            </p>
+          ) : null}
         </div>
 
         <Pagination
           page={currentPage}
           totalPages={totalPages}
-          total={rows.length}
+          total={filteredRows.length}
           pageSize={PAGE_SIZE}
           itemLabel="học sinh"
           hideWhenSingle

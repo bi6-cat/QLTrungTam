@@ -40,6 +40,8 @@ type Student = {
   fullName: string;
   /** Chỉ có khi lớp có người trùng tên, vd "SĐT …123". */
   hint: string | null;
+  /** Đã đóng hết học phí: ẩn khỏi danh sách mặc định, vẫn tìm được để xem biên lai. */
+  settled: boolean;
 };
 
 function StudentButton({ student, order, onSelect }: { student: Student; order: number; onSelect: (id: string) => void }) {
@@ -49,7 +51,7 @@ function StudentButton({ student, order, onSelect }: { student: Student; order: 
       onClick={() => onSelect(student.id)}
       className="focus-ring flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-indigo-50 active:bg-indigo-100"
     >
-      {/* Số thứ tự trong danh sách lớp (giữ nguyên khi đang tìm). */}
+      {/* Số thứ tự trong danh sách đang hiện. */}
       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold tabular-nums text-primary">
         {order}
       </span>
@@ -57,6 +59,12 @@ function StudentButton({ student, order, onSelect }: { student: Student; order: 
         <span className="block break-words text-base font-semibold leading-snug text-neutralText">{student.fullName}</span>
         {student.hint ? <span className="block text-xs text-stone-500">{student.hint}</span> : null}
       </span>
+      {student.settled ? (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-success ring-1 ring-inset ring-emerald-600/15">
+          <Check className="h-3 w-3" />
+          Đã đóng
+        </span>
+      ) : null}
       <ChevronRight className="h-4 w-4 shrink-0 text-stone-400" />
     </button>
   );
@@ -159,12 +167,21 @@ function ScrollList({ children, rowCount }: { children: React.ReactNode; rowCoun
 
 /**
  * Chọn học sinh khi lớp đông: ô tìm (gõ không dấu cũng được), danh sách xếp theo tên trong khung
- * cuộn 5 dòng. Bấm vào tên là xem học phí luôn.
+ * cuộn 5 dòng. Bấm vào tên là xem học phí luôn. Em đã đóng xong bị ẩn khỏi danh sách mặc định để
+ * phụ huynh đến sau dễ tìm; gõ tên vẫn ra (kèm nhãn "Đã đóng") để xem lại biên lai.
  */
 function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: (id: string) => void }) {
   const [query, setQuery] = useState("");
-  const results = query.trim() ? students.filter((student) => matchesName(student.fullName, query)) : students;
-  const orderById = new Map(students.map((student, index) => [student.id, index + 1]));
+  const [showSettled, setShowSettled] = useState(false);
+  const searching = Boolean(query.trim());
+  const owing = students.filter((student) => !student.settled);
+  const settledCount = students.length - owing.length;
+  const results = searching
+    ? students.filter((student) => matchesName(student.fullName, query))
+    : showSettled
+      ? students
+      : owing;
+  const orderById = new Map(results.map((student, index) => [student.id, index + 1]));
 
   return (
     <div className="mt-3 grid min-w-0 gap-3">
@@ -192,7 +209,11 @@ function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: 
         ) : null}
       </label>
 
-      {results.length === 0 ? (
+      {results.length === 0 && !searching ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-center text-sm font-medium text-success">
+          Cả lớp đã đóng học phí. Gõ tên con để xem lại biên lai.
+        </p>
+      ) : results.length === 0 ? (
         <p className="rounded-xl border border-stone-200 p-4 text-center text-sm text-stone-500">
           Không thấy tên phù hợp. Thử gõ tên của con (vd &ldquo;khoa&rdquo;), không cần dấu.
         </p>
@@ -205,6 +226,16 @@ function StudentPicker({ students, onSelect }: { students: Student[]; onSelect: 
           ))}
         </ScrollList>
       )}
+
+      {!searching && settledCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setShowSettled((value) => !value)}
+          className="focus-ring justify-self-center rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-indigo-50"
+        >
+          {showSettled ? "Ẩn" : "Hiện"} {settledCount} học sinh đã đóng
+        </button>
+      ) : null}
     </div>
   );
 }

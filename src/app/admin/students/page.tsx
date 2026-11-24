@@ -1,28 +1,64 @@
 import Link from "next/link";
 import { Prisma } from "@prisma/client";
-import { Archive, Eye, Phone, Search, UserRound, Users, X } from "lucide-react";
-import { Badge, Button, EmptyState, Input, Panel, PageHeader, Select } from "@/components/ui";
+import { AlertCircle, Archive, Eye, Phone, Search, Sparkles, UserMinus, UserRound, Users, X } from "lucide-react";
+import { Badge, Button, EmptyState, Input, Panel, PageHeader, Select, StatCard } from "@/components/ui";
 import { AddStudentButton } from "@/components/AddStudentForm";
 import { ArchiveEntityButton } from "@/components/ArchiveEntityButton";
 import { EditStudentButton } from "@/components/EditStudentButton";
 import { StudentExcelImportButton } from "@/components/StudentExcelImportButton";
 import { Pagination } from "@/components/Pagination";
+import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { requireStaff } from "@/lib/auth";
-import { sortByGivenName } from "@/lib/student-search";
+import { matchesName, sortByGivenName } from "@/lib/student-search";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
 /** Giá trị bộ lọc lớp cho học sinh hiện không học lớp nào. */
 const NO_CLASS = "none";
+const NEW_DAYS = 30;
 
 // Ghi danh còn hiệu lực: chưa nghỉ và lớp chưa lưu trữ.
 const currentEnrollment = { leftAt: null, classRoom: { archivedAt: null } } satisfies Prisma.EnrollmentWhereInput;
+const hasDebt = {
+  enrollments: { some: { invoices: { some: { status: "unpaid" } } } }
+} satisfies Prisma.StudentWhereInput;
+
+const QUICK_FILTERS = [
+  { key: "", label: "Tất cả" },
+  { key: "debt", label: "Còn nợ" },
+  { key: "no_class", label: "Chưa vào lớp" },
+  { key: "on_leave", label: "Đang bảo lưu" },
+  { key: "new", label: `Mới ${NEW_DAYS} ngày` }
+] as const;
+type QuickFilter = (typeof QUICK_FILTERS)[number]["key"];
+
+function quickFilterWhere(filter: QuickFilter, newSince: Date): Prisma.StudentWhereInput | null {
+  switch (filter) {
+    case "debt":
+      return hasDebt;
+    case "no_class":
+      return { enrollments: { none: currentEnrollment } };
+    case "on_leave":
+      return { enrollments: { some: { ...currentEnrollment, status: "on_leave" } } };
+    case "new":
+      return { createdAt: { gte: newSince } };
+    default:
+      return null;
+  }
+}
+
+/** Tên học sinh/phụ huynh gõ không dấu, hoặc một đoạn SĐT. */
+function matchesQuery(student: { fullName: string; parentName: string | null; phone: string }, query: string) {
+  const digits = query.replace(/[\s.-]/g, "");
+  if (/^\d+$/.test(digits)) return student.phone.replace(/\D/g, "").includes(digits);
+  return matchesName(student.fullName, query) || Boolean(student.parentName && matchesName(student.parentName, query));
+}
 
 export default async function StudentsPage({
   searchParams
 }: {
-  searchParams: Promise<{ q?: string; page?: string; classId?: string; archived?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; classId?: string; archived?: string; status?: string }>;
 }) {
   // Quản lý phụ cũng thêm/sửa/lưu trữ được học sinh; nhập Excel (kèm xếp lớp) vẫn chỉ của chủ.
   const viewer = await requireStaff();
@@ -30,41 +66,54 @@ export default async function StudentsPage({
   const params = await searchParams;
   const q = (params.q || "").trim();
   const classId = (params.classId || "").trim();
+  const status: QuickFilter = QUICK_FILTERS.find((item) => item.key === params.status)?.key ?? "";
   const parsedPage = Number(params.page);
   const requestedPage = Number.isSafeInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
   const showArchived = params.archived === "1";
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const newSince = new Date(now.getTime() - NEW_DAYS * 24 * 60 * 60 * 1000);
 
-  const searchFilters: Prisma.StudentWhereInput[] = [];
-  if (q) {
-    searchFilters.push({
-      OR: [
-        { fullName: { contains: q, mode: "insensitive" as const } },
-        { phone: { contains: q } },
-        { parentName: { contains: q, mode: "insensitive" as const } }
-      ]
-    });
-  }
+  const filters: Prisma.StudentWhereInput[] = [];
   if (classId === NO_CLASS) {
-    searchFilters.push({ enrollments: { none: currentEnrollment } });
+    filters.push({ enrollments: { none: currentEnrollment } });
   } else if (classId) {
-    searchFilters.push({ enrollments: { some: { classId, leftAt: null } } });
+    filters.push({ enrollments: { some: { classId, leftAt: null } } });
   }
+  const quickWhere = quickFilterWhere(status, newSince);
+  if (quickWhere) filters.push(quickWhere);
   const where: Prisma.StudentWhereInput = {
-    AND: [{ archivedAt: showArchived ? { not: null } : null }, ...searchFilters]
+    AND: [{ archivedAt: showArchived ? { not: null } : null }, ...filters]
   };
 
-  // Xếp theo tên (chữ cuối) như danh sách lớp: Postgres không xếp được kiểu này nên lấy id + tên của
-  // mọi học sinh khớp bộ lọc, xếp trong app rồi mới cắt trang.
-  const [matching, activeCount, archivedCount, classes] = await Promise.all([
-    prisma.student.findMany({ where, select: { id: true, fullName: true } }),
+  // Tìm không dấu và xếp theo tên (chữ cuối) đều làm trong app: lấy thông tin gọn của mọi học sinh
+  // khớp bộ lọc, lọc theo từ khóa, xếp rồi mới cắt trang.
+  const [candidates, activeCount, archivedCount, classes, stats] = await Promise.all([
+    prisma.student.findMany({ where, select: { id: true, fullName: true, phone: true, parentName: true } }),
     prisma.student.count({ where: { archivedAt: null } }),
     prisma.student.count({ where: { archivedAt: { not: null } } }),
     prisma.classRoom.findMany({
       where: { archivedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, shortCode: true }
-    })
+    }),
+    showArchived
+      ? null
+      : Promise.all([
+          prisma.student.count({
+            where: { archivedAt: null, enrollments: { some: { ...currentEnrollment, status: "active" } } }
+          }),
+          prisma.student.count({ where: { archivedAt: null, enrollments: { none: currentEnrollment } } }),
+          prisma.student.count({ where: { archivedAt: null, ...hasDebt } }),
+          prisma.monthlyInvoice.aggregate({
+            where: { status: "unpaid", enrollment: { student: { archivedAt: null } } },
+            _sum: { amount: true }
+          }),
+          prisma.student.count({ where: { archivedAt: null, createdAt: { gte: newSince } } })
+        ])
   ]);
+  const matching = q ? candidates.filter((student) => matchesQuery(student, q)) : candidates;
   const total = matching.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
@@ -80,7 +129,11 @@ export default async function StudentsPage({
           id: true,
           status: true,
           leftAt: true,
-          classRoom: { select: { id: true, name: true, shortCode: true, archivedAt: true } }
+          classRoom: { select: { id: true, name: true, shortCode: true, archivedAt: true } },
+          invoices: {
+            where: { OR: [{ status: "unpaid" }, { month, year }] },
+            select: { month: true, year: true, status: true, amount: true }
+          }
         }
       }
     }
@@ -90,15 +143,17 @@ export default async function StudentsPage({
     const student = byId.get(id);
     return student ? [student] : [];
   });
-  const hasFilter = Boolean(q || classId);
+  const hasFilter = Boolean(q || classId || status);
   const selectedClass = classes.find((classRoom) => classRoom.id === classId) ?? null;
 
-  function listHref(changes: { page?: number; archived?: boolean; keepFilters?: boolean }) {
+  function listHref(changes: { page?: number; archived?: boolean; keepFilters?: boolean; status?: QuickFilter }) {
     const search = new URLSearchParams();
     const archived = changes.archived ?? showArchived;
     if (changes.keepFilters !== false) {
       if (q) search.set("q", q);
       if (classId) search.set("classId", classId);
+      const nextStatus = changes.status ?? status;
+      if (nextStatus) search.set("status", nextStatus);
     }
     if (archived) search.set("archived", "1");
     if (changes.page && changes.page > 1) search.set("page", String(changes.page));
@@ -107,11 +162,24 @@ export default async function StudentsPage({
   }
 
   const rows = students.map((student) => {
-    const current = student.enrollments.filter((enrollment) => !enrollment.leftAt && !enrollment.classRoom.archivedAt);
+    const current: CurrentEnrollment[] = student.enrollments
+      .filter((enrollment) => !enrollment.leftAt && !enrollment.classRoom.archivedAt)
+      .map((enrollment) => ({
+        id: enrollment.id,
+        status: enrollment.status,
+        classRoom: enrollment.classRoom,
+        thisMonth:
+          enrollment.invoices.find((invoice) => invoice.month === month && invoice.year === year)?.status ?? null
+      }));
+    const unpaid = student.enrollments.flatMap((enrollment) =>
+      enrollment.invoices.filter((invoice) => invoice.status === "unpaid")
+    );
     return {
       student,
       current,
       pastCount: student.enrollments.length - current.length,
+      debt: { amount: unpaid.reduce((sum, invoice) => sum + invoice.amount, 0), count: unpaid.length },
+      isNew: student.createdAt >= newSince,
       editable: {
         id: student.id,
         fullName: student.fullName,
@@ -124,15 +192,16 @@ export default async function StudentsPage({
   });
 
   const tabs = [
-    { label: "Đang học", count: activeCount, archived: false, icon: Users },
+    { label: "Hồ sơ", count: activeCount, archived: false, icon: Users },
     { label: "Đã lưu trữ", count: archivedCount, archived: true, icon: Archive }
   ];
+  const [studyingCount, noClassCount, debtorCount, debtSum, newCount] = stats ?? [0, 0, 0, null, 0];
 
   return (
     <div className="grid gap-6">
       <PageHeader
         title="Học sinh"
-        description="Hồ sơ học sinh và phụ huynh. Xếp lớp cho học sinh tại mục Lớp học."
+        description="Hồ sơ học sinh, phụ huynh, lớp đang học và tình hình học phí. Xếp lớp tại mục Lớp học."
         actions={
           <>
             {isOwner ? <StudentExcelImportButton /> : null}
@@ -141,8 +210,49 @@ export default async function StudentsPage({
         }
       />
 
+      {!showArchived ? (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+          <Link href="/admin/students" className="focus-ring rounded-2xl">
+            <StatCard
+              label="Đang đi học"
+              tone="primary"
+              value={studyingCount}
+              hint={`Trên ${activeCount} hồ sơ`}
+              icon={<Users className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/admin/students?status=debt" className="focus-ring rounded-2xl">
+            <StatCard
+              label="Còn nợ học phí"
+              tone={debtorCount > 0 ? "warning" : "success"}
+              value={debtorCount}
+              hint={debtorCount > 0 ? `Tổng ${formatCurrency(debtSum?._sum.amount ?? 0)}` : "Không ai còn nợ"}
+              icon={<AlertCircle className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/admin/students?status=no_class" className="focus-ring rounded-2xl">
+            <StatCard
+              label="Chưa vào lớp"
+              tone="neutral"
+              value={noClassCount}
+              hint="Chưa học lớp nào đang mở"
+              icon={<UserMinus className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/admin/students?status=new" className="focus-ring rounded-2xl">
+            <StatCard
+              label={`Mới ${NEW_DAYS} ngày`}
+              tone="success"
+              value={newCount}
+              hint="Hồ sơ vừa thêm"
+              icon={<Sparkles className="h-5 w-5" />}
+            />
+          </Link>
+        </div>
+      ) : null}
+
       <Panel className="overflow-hidden p-0">
-        <div className="grid gap-4 border-b border-stone-100 p-4 sm:p-5">
+        <div className="grid gap-3 border-b border-stone-100 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-1 rounded-xl bg-stone-100 p-1 sm:w-fit">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -169,9 +279,16 @@ export default async function StudentsPage({
 
           <form action="/admin/students" method="GET" className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
             {showArchived ? <input type="hidden" name="archived" value="1" /> : null}
+            {status ? <input type="hidden" name="status" value={status} /> : null}
             <div className="relative">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-              <Input name="q" defaultValue={q} placeholder="Tìm theo tên học sinh, SĐT, phụ huynh" className="pl-10" />
+              <Input
+                name="q"
+                type="search"
+                defaultValue={q}
+                placeholder="Tên học sinh, phụ huynh hoặc SĐT (gõ không dấu được)"
+                className="pl-10"
+              />
             </div>
             <Select name="classId" defaultValue={classId} aria-label="Lọc theo lớp">
               <option value="">Tất cả lớp</option>
@@ -184,7 +301,7 @@ export default async function StudentsPage({
             </Select>
             <Button type="submit" variant="secondary">
               <Search className="h-4 w-4" />
-              Lọc
+              Tìm
             </Button>
             {hasFilter ? (
               <Link
@@ -196,6 +313,30 @@ export default async function StudentsPage({
               </Link>
             ) : null}
           </form>
+
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc nhanh">
+            {QUICK_FILTERS.map((item) => {
+              const active = item.key === status;
+              return (
+                <Link
+                  key={item.key || "all"}
+                  href={listHref({ status: item.key })}
+                  aria-current={active ? "true" : undefined}
+                  className={`focus-ring inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold ring-1 ring-inset transition-colors ${
+                    active ? "bg-primary text-white ring-primary" : "bg-white text-stone-600 ring-stone-300 hover:bg-stone-50"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+            <span className="ml-auto hidden items-center gap-3 text-[11px] text-stone-500 lg:inline-flex">
+              <span className="font-semibold">Học phí T{month}:</span>
+              <LegendDot className="bg-success" label="Đã đóng" />
+              <LegendDot className="bg-warning" label="Chưa đóng" />
+              <LegendDot className="bg-stone-300" label="Chưa tạo HĐ" />
+            </span>
+          </div>
         </div>
 
         {rows.length === 0 ? (
@@ -219,8 +360,8 @@ export default async function StudentsPage({
           <>
             {/* Màn hình nhỏ: dạng thẻ. */}
             <ul className="divide-y divide-stone-100 md:hidden">
-              {rows.map(({ student, current, pastCount, editable }, index) => (
-                <li key={student.id} className="grid gap-1.5 px-4 py-3">
+              {rows.map(({ student, current, pastCount, debt, isNew, editable }, index) => (
+                <li key={student.id} className="grid gap-2 px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className="mr-1.5 text-xs font-semibold tabular-nums text-stone-400">
@@ -229,6 +370,7 @@ export default async function StudentsPage({
                       <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
                         {student.fullName}
                       </Link>
+                      {isNew ? <NewTag /> : null}
                       <p className="mt-0.5 text-sm text-stone-600">
                         {student.parentName ? `${student.parentName} · ` : ""}
                         <a href={`tel:${student.phone}`} className="font-mono">{student.phone}</a>
@@ -236,7 +378,10 @@ export default async function StudentsPage({
                     </div>
                     <RowActions studentId={student.id} archived={Boolean(student.archivedAt)} editable={editable} />
                   </div>
-                  <ClassBadges current={current} pastCount={pastCount} />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <ClassBadges current={current} pastCount={pastCount} month={month} />
+                    <DebtCell debt={debt} studentId={student.id} />
+                  </div>
                   {student.note ? <p className="line-clamp-2 text-xs text-stone-500">{student.note}</p> : null}
                 </li>
               ))}
@@ -250,19 +395,21 @@ export default async function StudentsPage({
                     <th className="w-12 px-4 py-2.5 text-center">#</th>
                     <th className="px-4 py-3">Học sinh</th>
                     <th className="px-4 py-3">Phụ huynh · SĐT</th>
-                    <th className="px-4 py-3">Lớp đang học</th>
+                    <th className="px-4 py-3">Lớp · học phí T{month}</th>
+                    <th className="px-4 py-3 text-right">Còn nợ</th>
                     <th className="px-4 py-3">Ghi chú</th>
                     <th className="px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 [&_tr]:transition-colors [&_tr:hover]:bg-indigo-50/40">
-                  {rows.map(({ student, current, pastCount, editable }, index) => (
+                  {rows.map(({ student, current, pastCount, debt, isNew, editable }, index) => (
                     <tr key={student.id} className={student.archivedAt ? "bg-stone-50/70" : undefined}>
                       <td className="px-4 py-2 text-center text-stone-400">{(page - 1) * PAGE_SIZE + index + 1}</td>
                       <td className="px-4 py-2">
                         <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
                           {student.fullName}
                         </Link>
+                        {isNew ? <NewTag /> : null}
                         {student.address ? <div className="max-w-56 truncate text-xs text-stone-500">{student.address}</div> : null}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2">
@@ -276,11 +423,14 @@ export default async function StudentsPage({
                         </a>
                       </td>
                       <td className="px-4 py-2">
-                        <ClassBadges current={current} pastCount={pastCount} />
+                        <ClassBadges current={current} pastCount={pastCount} month={month} />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2 text-right">
+                        <DebtCell debt={debt} studentId={student.id} />
                       </td>
                       <td className="px-4 py-2">
                         {student.note ? (
-                          <p className="line-clamp-2 max-w-64 text-stone-600" title={student.note}>{student.note}</p>
+                          <p className="line-clamp-2 max-w-56 text-stone-600" title={student.note}>{student.note}</p>
                         ) : (
                           <span className="text-stone-300">—</span>
                         )}
@@ -309,31 +459,78 @@ export default async function StudentsPage({
   );
 }
 
+function LegendDot({ className, label }: { className: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`h-2 w-2 rounded-full ${className}`} />
+      {label}
+    </span>
+  );
+}
+
+function NewTag() {
+  return (
+    <span className="ml-1.5 rounded-full bg-emerald-50 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase text-success ring-1 ring-inset ring-emerald-600/15">
+      Mới
+    </span>
+  );
+}
+
+function DebtCell({ debt, studentId }: { debt: { amount: number; count: number }; studentId: string }) {
+  if (debt.count === 0) return <span className="text-xs text-stone-300">—</span>;
+  return (
+    <Link href={`/admin/students/${studentId}`} className="inline-block text-right hover:underline">
+      <span className="block font-bold text-warning">{formatCurrency(debt.amount)}</span>
+      <span className="block text-[11px] text-stone-500">{debt.count} hóa đơn</span>
+    </Link>
+  );
+}
+
 type CurrentEnrollment = {
   id: string;
   status: "active" | "on_leave";
   classRoom: { id: string; name: string; shortCode: string };
+  /** Trạng thái hóa đơn tháng hiện tại của lớp này; null = chưa tạo. */
+  thisMonth: "paid" | "unpaid" | "void" | "waived" | null;
 };
 
-function ClassBadges({ current, pastCount }: { current: CurrentEnrollment[]; pastCount: number }) {
+const THIS_MONTH_DOT: Record<"paid" | "unpaid" | "void" | "waived", { className: string; label: string }> = {
+  paid: { className: "bg-success", label: "đã đóng" },
+  unpaid: { className: "bg-warning", label: "chưa đóng" },
+  waived: { className: "bg-primary", label: "được miễn" },
+  void: { className: "bg-stone-300", label: "hóa đơn đã hủy" }
+};
+
+function ClassBadges({ current, pastCount, month }: { current: CurrentEnrollment[]; pastCount: number; month: number }) {
   return (
     <div className="flex flex-wrap items-center gap-1">
       {current.length === 0 ? (
         <Badge>Chưa vào lớp</Badge>
       ) : (
-        current.map((enrollment) => (
-          <Link
-            key={enrollment.id}
-            href={`/admin/classes?classId=${enrollment.classRoom.id}`}
-            title={`${enrollment.classRoom.name}${enrollment.status === "on_leave" ? " · bảo lưu" : ""}`}
-            className="focus-ring rounded-full"
-          >
-            <Badge tone={enrollment.status === "active" ? "primary" : "neutral"}>
-              {enrollment.classRoom.shortCode}
-              {enrollment.status === "on_leave" ? " · bảo lưu" : ""}
-            </Badge>
-          </Link>
-        ))
+        current.map((enrollment) => {
+          const dot =
+            enrollment.status === "on_leave"
+              ? null
+              : enrollment.thisMonth
+                ? THIS_MONTH_DOT[enrollment.thisMonth]
+                : { className: "bg-stone-300", label: "chưa tạo hóa đơn" };
+          return (
+            <Link
+              key={enrollment.id}
+              href={`/admin/classes?classId=${enrollment.classRoom.id}`}
+              title={`${enrollment.classRoom.name}${
+                enrollment.status === "on_leave" ? " · bảo lưu" : dot ? ` · T${month} ${dot.label}` : ""
+              }`}
+              className="focus-ring rounded-full"
+            >
+              <Badge tone={enrollment.status === "active" ? "primary" : "neutral"}>
+                {dot ? <span className={`h-2 w-2 rounded-full ${dot.className}`} /> : null}
+                {enrollment.classRoom.shortCode}
+                {enrollment.status === "on_leave" ? " · bảo lưu" : ""}
+              </Badge>
+            </Link>
+          );
+        })
       )}
       {pastCount > 0 ? <span className="text-xs text-stone-400">+{pastCount} lớp cũ</span> : null}
     </div>

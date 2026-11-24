@@ -31,7 +31,8 @@ export default async function SchedulePage({
   await requireStaff();
   const params = await searchParams;
   const today = todayInVietnam();
-  const view = params.view === "month" ? "month" : "week";
+  // Mặc định xem theo tháng (để chốt số buổi thu tiền); ?view=week mới xem theo tuần.
+  const view = params.view === "week" ? "week" : "month";
 
   const anchor = parseIsoDate(params.date) ?? today;
   const parsedMonth = Number(params.month);

@@ -74,13 +74,13 @@ export function ScheduleBoard(props: {
 
   const prevHref =
     view === "week"
-      ? scheduleHref({ date: addDays(props.from, -7), classId })
+      ? scheduleHref({ view: "week", date: addDays(props.from, -7), classId })
       : scheduleHref({ view, month: props.month === 1 ? 12 : props.month - 1, year: props.month === 1 ? props.year - 1 : props.year, classId });
   const nextHref =
     view === "week"
-      ? scheduleHref({ date: addDays(props.from, 7), classId })
+      ? scheduleHref({ view: "week", date: addDays(props.from, 7), classId })
       : scheduleHref({ view, month: props.month === 12 ? 1 : props.month + 1, year: props.month === 12 ? props.year + 1 : props.year, classId });
-  const todayHref = scheduleHref({ view: view === "month" ? "month" : undefined, classId });
+  const todayHref = scheduleHref({ view: view === "week" ? "week" : undefined, classId });
   const anchorParts = isoParts(props.anchor);
   const rangeLabel =
     view === "week"
@@ -111,13 +111,13 @@ export function ScheduleBoard(props: {
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-xl border border-stone-300 bg-stone-50 p-1 text-sm font-semibold shadow-sm">
             <Link
-              href={scheduleHref({ date: view === "month" ? (includesToday ? today : props.from) : props.anchor, classId })}
+              href={scheduleHref({ view: "week", date: view === "month" ? (includesToday ? today : props.from) : props.anchor, classId })}
               className={clsx("inline-flex h-9 items-center rounded-lg px-3", view === "week" ? "bg-white text-primary shadow-sm" : "text-stone-600 hover:text-neutralText")}
             >
               Tuần
             </Link>
             <Link
-              href={scheduleHref({ view: "month", month: anchorParts.month, year: anchorParts.year, classId })}
+              href={scheduleHref({ month: anchorParts.month, year: anchorParts.year, classId })}
               className={clsx("inline-flex h-9 items-center rounded-lg px-3", view === "month" ? "bg-white text-primary shadow-sm" : "text-stone-600 hover:text-neutralText")}
             >
               Tháng
@@ -150,7 +150,7 @@ export function ScheduleBoard(props: {
             onChange={(event) =>
               router.push(
                 view === "week"
-                  ? scheduleHref({ date: props.anchor, classId: event.target.value })
+                  ? scheduleHref({ view: "week", date: props.anchor, classId: event.target.value })
                   : scheduleHref({ view, month: props.month, year: props.year, classId: event.target.value })
               )
             }

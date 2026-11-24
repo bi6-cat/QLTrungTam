@@ -56,7 +56,8 @@ export async function getPayableStudents(classId: string) {
         select: {
           leftAt: true,
           student: { select: { id: true, fullName: true, phone: true, archivedAt: true } },
-          invoices: { where: { status: "unpaid" }, select: { id: true }, take: 1 }
+          invoices: { where: { status: "unpaid" }, select: { id: true }, take: 1 },
+          _count: { select: { invoices: { where: { status: { in: ["paid", "waived"] } } } } }
         }
       }
     }
@@ -75,7 +76,12 @@ export async function getPayableStudents(classId: string) {
         now
       )
     )
-    .map((enrollment) => enrollment.student);
+    .map((enrollment) => ({
+      ...enrollment.student,
+      // Đã đóng xong: không còn hóa đơn chưa đóng và đã có ít nhất một hóa đơn đóng/miễn. Trang nộp
+      // tiền ẩn các em này khỏi danh sách mặc định để phụ huynh còn nợ tìm tên con nhanh hơn.
+      settled: enrollment.invoices.length === 0 && enrollment._count.invoices > 0
+    }));
 
   // Trùng tên thì kèm 3 số cuối SĐT để phụ huynh phân biệt (không lộ cả số).
   const nameCount = new Map<string, number>();
@@ -88,6 +94,7 @@ export async function getPayableStudents(classId: string) {
     students: sortByGivenName(students).map((student) => ({
       id: student.id,
       fullName: student.fullName,
+      settled: student.settled,
       hint:
         (nameCount.get(normalizeName(student.fullName)) ?? 0) > 1
           ? `SĐT …${student.phone.replace(/\D/g, "").slice(-3)}`
