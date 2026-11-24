@@ -163,7 +163,7 @@ function EditSlotDialog({ slot, today, onClose }: { slot: ManagedSlot; today: Is
           điểm danh / ghi nghỉ đã ghi sẵn cho giờ cũ từ ngày này sẽ bị bỏ.
         </p>
         {state.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">{state.error}</p> : null}
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>
@@ -219,7 +219,7 @@ function StopSlotDialog({
           <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
         </Field>
         {error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">{error}</p> : null}
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>

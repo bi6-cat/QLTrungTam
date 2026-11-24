@@ -228,7 +228,7 @@ function QuestionDialog({
             <span>{state.error}</span>
           </div>
         ) : null}
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>

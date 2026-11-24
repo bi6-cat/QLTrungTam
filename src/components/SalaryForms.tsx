@@ -216,7 +216,7 @@ function PayoutDialog({
               required
             />
           </Field>
-          <Field label="Ghi chú" hint="Không bắt buộc">
+          <Field label="Ghi chú" optional>
             <Input name="note" maxLength={300} placeholder="VD: 2 bạn nộp muộn, chuyển bù tháng sau" />
           </Field>
         </div>
@@ -335,7 +335,7 @@ export function PayslipButton({
             <pre className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-stone-200 bg-stone-50 p-4 font-sans text-sm leading-relaxed text-stone-800">
               {selected.text}
             </pre>
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Đóng
               </Button>
@@ -423,7 +423,7 @@ export function SalaryWriteOffButton({
                   Phần chưa trả coi như xong, các khoản nộp muộn đã nộp của tháng này không cộng sang lương tháng sau.
                   Khoản nộp sau thời điểm này vẫn tính lương bình thường.
                 </p>
-                <Field label="Lý do" hint="Không bắt buộc">
+                <Field label="Lý do" optional>
                   <Input
                     value={note}
                     maxLength={300}
@@ -433,7 +433,7 @@ export function SalaryWriteOffButton({
                 </Field>
               </>
             )}
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
                 Đóng
               </Button>

@@ -112,7 +112,7 @@ function CutoffDialog({
           />
         </Field>
         {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="modal-actions flex flex-wrap justify-end gap-2">
           {classOverridden ? (
             <Button
               type="submit"

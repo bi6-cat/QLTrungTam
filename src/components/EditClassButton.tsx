@@ -110,7 +110,7 @@ function EditClassDialog({
           />
         </Field>
         {state.error ? <p className="text-sm font-medium text-warning">{state.error}</p> : null}
-        <div className="mt-1 flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Hủy
           </Button>

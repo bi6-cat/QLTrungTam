@@ -33,7 +33,10 @@ import { cutoffResolver, describeSalaryCutoff, salaryCutoffDate } from "@/lib/sa
 
 export const dynamic = "force-dynamic";
 
-const RANGES = [3, 6, 12] as const;
+const RANGES = [2, 3, 6, 12] as const;
+const DEFAULT_RANGE = 2;
+/** Giá trị ?teacher= để xem tất cả giáo viên (mặc định chỉ mở một giáo viên cho gọn). */
+const ALL_TEACHERS = "all";
 const NO_TEACHER = "__none";
 
 function periodKey(classId: string, period: Pick<SalaryLine, "month" | "year">) {
@@ -97,8 +100,7 @@ export default async function SalaryPage({
 }) {
   await requireAdmin();
   const params = await searchParams;
-  const range = RANGES.find((value) => String(value) === params.range) ?? 6;
-  const selectedTeacher = params.teacher ?? "";
+  const range = RANGES.find((value) => String(value) === params.range) ?? DEFAULT_RANGE;
 
   const now = new Date();
   const currentIndex = periodIndex(now.getMonth() + 1, now.getFullYear());
@@ -143,14 +145,23 @@ export default async function SalaryPage({
 
   // Lớp đã lưu trữ tách xuống mục riêng cuối trang cho đỡ rối; mỗi phần tự cộng lại theo giáo viên.
   const lines = ledger.flatMap((teacher) => teacher.classes.flatMap((classRoom) => classRoom.periods));
-  const byTeacher = (list: TeacherLedger[]) =>
-    selectedTeacher ? list.filter((teacher) => teacherParam(teacher) === selectedTeacher) : list;
-  const shown = byTeacher(buildSalaryLedger(lines.filter((line) => !line.archived)));
-  const shownArchived = byTeacher(buildSalaryLedger(lines.filter((line) => line.archived)));
   // Chip lọc chỉ cho giáo viên còn lớp đang học, hoặc vẫn còn nợ lương (kể cả lớp đã lưu trữ).
   const chipTeachers = ledger.filter(
     (teacher) => teacher.classes.some((classRoom) => !classRoom.archived) || teacher.owed > 0
   );
+  // Mặc định mở một giáo viên: ưu tiên người còn bị nợ lương, không thì người đầu danh sách.
+  const requestedTeacher = params.teacher ?? "";
+  const selectedTeacher =
+    requestedTeacher === ALL_TEACHERS
+      ? ""
+      : chipTeachers.some((teacher) => teacherParam(teacher) === requestedTeacher)
+        ? requestedTeacher
+        : teacherParam(chipTeachers.find((teacher) => teacher.owed > 0) ?? chipTeachers[0] ?? { teacherName: "" } as TeacherLedger);
+  const showingAll = selectedTeacher === "";
+  const byTeacher = (list: TeacherLedger[]) =>
+    showingAll ? list : list.filter((teacher) => teacherParam(teacher) === selectedTeacher);
+  const shown = byTeacher(buildSalaryLedger(lines.filter((line) => !line.archived)));
+  const shownArchived = byTeacher(buildSalaryLedger(lines.filter((line) => line.archived)));
   // Phiếu lương lấy mọi lớp của giáo viên trong tháng, kể cả lớp vừa lưu trữ.
   const fullLedger = new Map(ledger.map((teacher) => [teacherParam(teacher), teacher]));
   const owedTotal = ledger.reduce((sum, teacher) => sum + teacher.owed, 0);
@@ -163,8 +174,8 @@ export default async function SalaryPage({
 
   const chipHref = (teacher: string, nextRange = range) => {
     const search = new URLSearchParams();
-    if (teacher) search.set("teacher", teacher);
-    if (nextRange !== 6) search.set("range", String(nextRange));
+    search.set("teacher", teacher || ALL_TEACHERS);
+    if (nextRange !== DEFAULT_RANGE) search.set("range", String(nextRange));
     const query = search.toString();
     return query ? `/admin/salary?${query}` : "/admin/salary";
   };
@@ -220,7 +231,7 @@ export default async function SalaryPage({
           <Link
             href={chipHref("")}
             className={`focus-ring inline-flex h-9 items-center rounded-full px-3.5 text-sm font-semibold ring-1 ring-inset transition-colors ${
-              !selectedTeacher
+              showingAll
                 ? "bg-primary text-white ring-primary"
                 : "bg-white text-stone-700 ring-stone-300 hover:bg-stone-50"
             }`}

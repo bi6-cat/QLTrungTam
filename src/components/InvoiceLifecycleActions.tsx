@@ -153,7 +153,7 @@ export function InvoiceLifecycleActions({
         >
           <form onSubmit={submit} className="grid gap-4">
             <p className="text-sm text-stone-600">{COPY[target].description}</p>
-            <Field label="Lý do" hint="Không bắt buộc">
+            <Field label="Lý do" optional>
               <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
@@ -164,7 +164,7 @@ export function InvoiceLifecycleActions({
               />
             </Field>
             {error ? <p className="text-sm font-medium text-warning" role="alert">{error}</p> : null}
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setTarget(null)}>
                 Đóng
               </Button>

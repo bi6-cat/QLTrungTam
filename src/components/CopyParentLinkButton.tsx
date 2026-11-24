@@ -217,7 +217,7 @@ function ParentLinkDialog({
             type="text"
             value={reason}
             onChange={(event) => changeReason(event.target.value)}
-            className="focus-ring mt-2 h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm shadow-sm hover:border-stone-400 focus:border-primary"
+            className="mt-2 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm outline-none transition-[border-color,box-shadow] hover:border-stone-400 focus:border-primary focus:ring-[3px] focus:ring-primary/15"
           />
         </div>
 
@@ -246,7 +246,7 @@ function ParentLinkDialog({
           />
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="modal-actions flex flex-wrap justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Đóng</Button>
           <a href={payUrl} target="_blank" rel="noopener noreferrer">
             <Button type="button" variant="secondary">

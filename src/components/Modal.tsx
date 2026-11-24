@@ -7,12 +7,15 @@ import { Button } from "@/components/ui";
 
 export function Modal({
   title,
+  description,
   onClose,
   children,
   maxWidthClassName = "max-w-lg",
   closeDisabled = false
 }: {
   title: string;
+  /** Một dòng giải thích nhỏ dưới tiêu đề. */
+  description?: React.ReactNode;
   onClose: () => void;
   children: React.ReactNode;
   maxWidthClassName?: string;
@@ -24,6 +27,11 @@ export function Modal({
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  // Bấm chuột phải bắt đầu ngay trên nền mờ mới tính là "bấm ra ngoài": bôi đen chữ trong ô nhập
+  // rồi thả chuột ra ngoài khung không được đóng modal.
+  const pressStartedOnBackdropRef = useRef(false);
+  // Đã gõ vào form thì bấm ra ngoài không đóng (tránh mất dữ liệu); vẫn đóng bằng nút X, Hủy hoặc Esc.
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -93,9 +101,16 @@ export function Modal({
   // (nếu không, position: fixed sẽ neo theo phần tử cha đã transform).
   return createPortal(
     <div
-      className="fixed inset-0 z-50 grid animate-fade-in place-items-center bg-neutralText/40 p-4 backdrop-blur-sm"
-      onClick={() => {
-        if (!closeDisabled) onClose();
+      className="fixed inset-0 z-50 grid animate-fade-in place-items-center bg-stone-900/45 p-4"
+      onPointerDown={(event) => {
+        pressStartedOnBackdropRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        const startedOnBackdrop = pressStartedOnBackdropRef.current;
+        pressStartedOnBackdropRef.current = false;
+        if (event.target !== event.currentTarget || !startedOnBackdrop) return;
+        if (closeDisabled || dirtyRef.current) return;
+        onClose();
       }}
     >
       <div
@@ -104,15 +119,20 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`max-h-[90vh] w-full ${maxWidthClassName} animate-scale-in overflow-y-auto rounded-2xl border border-stone-200/80 bg-white p-6 shadow-lift`}
-        onClick={(event) => event.stopPropagation()}
+        className={`modal-panel flex max-h-[90vh] w-full ${maxWidthClassName} animate-scale-in flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl outline-none`}
+        onInput={() => {
+          dirtyRef.current = true;
+        }}
       >
-        <div className="flex items-start justify-between gap-4">
-          <h3 id={titleId} className="text-lg font-bold tracking-tight text-neutralText">{title}</h3>
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-6 py-4">
+          <div className="min-w-0">
+            <h3 id={titleId} className="text-base font-bold text-neutralText">{title}</h3>
+            {description ? <p className="mt-0.5 text-[13px] leading-snug text-stone-500">{description}</p> : null}
+          </div>
           <Button
             type="button"
             variant="ghost"
-            className="h-8 w-8 shrink-0 px-0"
+            className="-mr-2 h-8 w-8 shrink-0 px-0 text-stone-500"
             onClick={onClose}
             disabled={closeDisabled}
             title="Đóng"
@@ -121,7 +141,7 @@ export function Modal({
             <X className="h-5 w-5" aria-hidden="true" />
           </Button>
         </div>
-        <div className="mt-4">{children}</div>
+        <div className="modal-body min-h-0 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>,
     document.body

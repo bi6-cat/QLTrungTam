@@ -102,7 +102,7 @@ export function ArchiveEntityButton({
               )}
             </p>
             <input type="hidden" name="id" value={entityId} />
-            <Field label="Lý do" hint="Không bắt buộc">
+            <Field label="Lý do" optional>
               <Textarea
                 name="reason"
                 maxLength={500}
@@ -112,7 +112,7 @@ export function ArchiveEntityButton({
               />
             </Field>
             {error ? <p className="text-sm font-medium text-warning" role="alert">{error}</p> : null}
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
                 Đóng
               </Button>

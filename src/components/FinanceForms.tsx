@@ -65,7 +65,7 @@ export function AddExpenseForm({
             . Ở đây chỉ nhập khoản lương chung không gắn lớp (vd lương cố định).
           </p>
         ) : (
-          <Field label="Gắn với lớp" hint="Không bắt buộc">
+          <Field label="Gắn với lớp" optional>
             <Select name="classId" defaultValue="">
               <option value="">Chi phí chung</option>
               {classes.map((classRoom) => (
@@ -78,7 +78,7 @@ export function AddExpenseForm({
         )}
       </div>
       <div className="lg:col-span-6">
-        <Field label="Ghi chú" hint="Không bắt buộc">
+        <Field label="Ghi chú" optional>
           <Textarea name="note" className="min-h-16" />
         </Field>
       </div>

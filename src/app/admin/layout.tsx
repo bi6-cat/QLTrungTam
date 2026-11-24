@@ -40,7 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </Link>
           <form action={logoutAction}>
-            <Button type="submit" variant="secondary" className="h-10 px-3 lg:h-11 lg:px-4">
+            <Button type="submit" variant="secondary" className="h-10 px-3 lg:px-4">
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Đăng xuất</span>
             </Button>

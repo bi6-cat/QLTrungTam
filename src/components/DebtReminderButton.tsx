@@ -79,7 +79,7 @@ function ReminderDialog({
           rows={14}
           className="focus-ring w-full rounded-xl border border-stone-300 bg-white p-3 font-mono text-xs leading-relaxed shadow-sm transition-colors hover:border-stone-400 focus:border-primary"
         />
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="modal-actions flex flex-wrap justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Đóng
           </Button>

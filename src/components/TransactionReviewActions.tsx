@@ -60,7 +60,7 @@ function UnassignDialog({ transactionId, onClose }: { transactionId: string; onC
         <p className="text-sm text-stone-600">
           Hóa đơn sẽ trở lại trạng thái chưa đóng và giao dịch sẽ được đưa về danh sách chờ xử lý.
         </p>
-        <Field label="Lý do bỏ gán" hint="Không bắt buộc">
+        <Field label="Lý do bỏ gán" optional>
           <Textarea
             name="reason"
             disabled={pending}
@@ -80,7 +80,7 @@ function UnassignDialog({ transactionId, onClose }: { transactionId: string; onC
           </p>
         ) : null}
 
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>
             Đóng
           </Button>
@@ -106,7 +106,7 @@ function ReverseDialog({ transactionId, onClose }: { transactionId: string; onCl
           Giao dịch sẽ được đánh dấu đã hoàn tác và không còn được tính là khoản thanh toán hợp lệ. Lịch sử vẫn
           được giữ lại để đối soát.
         </p>
-        <Field label="Lý do hoàn tác" hint="Không bắt buộc">
+        <Field label="Lý do hoàn tác" optional>
           <Textarea
             name="reason"
             disabled={pending}
@@ -126,7 +126,7 @@ function ReverseDialog({ transactionId, onClose }: { transactionId: string; onCl
           </p>
         ) : null}
 
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>
             Đóng
           </Button>

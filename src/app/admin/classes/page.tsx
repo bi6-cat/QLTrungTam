@@ -201,7 +201,7 @@ export default async function ClassesPage({
               ) : null}
               <Link
                 href={`/admin/logs?classId=${selectedClass.id}`}
-                className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
+                className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-50"
               >
                 Nhật ký
               </Link>
@@ -229,7 +229,7 @@ export default async function ClassesPage({
             {canManage ? (
               <Link
                 href={showArchived ? "/admin/classes" : "/admin/classes?archived=1"}
-                className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
+                className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-50"
               >
                 {showArchived ? <Layers3 className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
                 {showArchived ? "Đang hoạt động" : "Đã lưu trữ"}

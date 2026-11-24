@@ -124,7 +124,7 @@ function EditSurveyDialog({ survey, onClose }: { survey: SurveyInfo; onClose: ()
             <span>{state.error}</span>
           </div>
         ) : null}
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>
@@ -168,7 +168,7 @@ function DeleteSurveyDialog({ survey, onClose }: { survey: SurveyInfo; onClose: 
           {survey.responseCount > 0 ? <> cùng <strong>{survey.responseCount} phiếu trả lời</strong></> : null}. Các link
           đã gửi cho lớp sẽ ngừng hoạt động. Không thể hoàn tác.
         </p>
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>

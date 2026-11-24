@@ -162,7 +162,7 @@ export function SessionDialog({
             <p className="text-xs text-stone-500">
               Buổi nghỉ chưa bù sẽ được trừ vào số buổi thu tháng sau. Nếu có học bù, dùng “Dời sang ngày khác” thay vì ghi nghỉ.
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setMode("menu")}>
                 <X className="h-4 w-4" />
                 Quay lại
@@ -193,7 +193,7 @@ export function SessionDialog({
             <p className="text-xs text-stone-500">
               Buổi {formatIsoDayMonth(session.date)} ghi là lớp nghỉ và thêm buổi học bù; hai buổi bù trừ nhau nên số buổi thu không đổi.
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setMode("menu")}>
                 <X className="h-4 w-4" />
                 Quay lại
@@ -257,7 +257,7 @@ export function CancelDayDialog({
           <ReasonPicker value={reason} onChange={setReason} placeholder="VD: Nghỉ Quốc khánh" />
         </Field>
         <ErrorBox message={error} />
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>
@@ -323,7 +323,7 @@ export function MakeupDialog({
           Mỗi buổi học bù bù lại một buổi lớp nghỉ cùng tháng. Muốn dời một buổi cụ thể thì bấm vào buổi đó → “Dời sang ngày khác”.
         </p>
         <ErrorBox message={error} />
-        <div className="flex justify-end gap-2">
+        <div className="modal-actions flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
             Hủy
           </Button>

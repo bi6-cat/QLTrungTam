@@ -65,7 +65,7 @@ export function ConfirmDeleteButton({
         <Modal title={title} onClose={() => !pending && setOpen(false)} closeDisabled={pending}>
           <div className="grid gap-4">
             <div className="text-sm text-stone-600">{description}</div>
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
                 Đóng
               </Button>

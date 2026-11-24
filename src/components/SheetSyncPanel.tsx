@@ -59,7 +59,7 @@ export function SheetSyncPanel({
               href={sheetUrl}
               target="_blank"
               rel="noreferrer"
-              className="focus-ring inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary hover:bg-indigo-50"
+              className="focus-ring inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-primary hover:bg-indigo-50"
             >
               <ExternalLink className="h-4 w-4" />
               Mở Google Sheet

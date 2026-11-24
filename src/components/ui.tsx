@@ -16,15 +16,11 @@ export function Button({
   return (
     <button
       className={cn(
-        "focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
-        variant === "primary" &&
-          "bg-gradient-to-b from-indigo-600 to-primary text-white shadow-sm ring-1 ring-inset ring-white/10 hover:from-indigo-700 hover:to-indigo-900 hover:shadow-md",
-        variant === "secondary" &&
-          "border border-stone-300 bg-white text-neutralText shadow-sm hover:border-stone-400 hover:bg-stone-50",
-        variant === "accent" &&
-          "bg-gradient-to-b from-amber-400 to-accent text-white shadow-sm ring-1 ring-inset ring-white/20 hover:from-amber-500 hover:to-amber-600 hover:shadow-md",
-        variant === "danger" &&
-          "bg-gradient-to-b from-rose-500 to-warning text-white shadow-sm ring-1 ring-inset ring-white/10 hover:from-rose-600 hover:to-rose-700 hover:shadow-md",
+        "focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60",
+        variant === "primary" && "bg-primary text-white hover:bg-indigo-900",
+        variant === "secondary" && "border border-stone-300 bg-white text-neutralText hover:bg-stone-50",
+        variant === "accent" && "bg-amber-500 text-white hover:bg-amber-600",
+        variant === "danger" && "bg-rose-600 text-white hover:bg-rose-700",
         variant === "ghost" && "text-neutralText hover:bg-stone-100",
         className
       )}
@@ -33,8 +29,9 @@ export function Button({
   );
 }
 
+// Ô nhập phẳng, viền mảnh; khi gõ thì viền màu chủ đạo + quầng nhạt (không đổ bóng, không bo quá tròn).
 const controlBase =
-  "focus-ring h-11 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-sm shadow-sm transition-colors placeholder:text-stone-400 hover:border-stone-400 focus:border-primary";
+  "h-10 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm text-neutralText outline-none transition-[border-color,box-shadow] placeholder:text-stone-400 hover:border-stone-400 focus:border-primary focus:ring-[3px] focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-500";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(controlBase, props.className)} />;
@@ -49,7 +46,8 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
     <textarea
       {...props}
       className={cn(
-        "focus-ring min-h-24 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm shadow-sm transition-colors placeholder:text-stone-400 hover:border-stone-400 focus:border-primary",
+        controlBase,
+        "h-auto min-h-24 py-2 leading-relaxed",
         props.className
       )}
     />
@@ -91,23 +89,57 @@ export function Badge({
   );
 }
 
+/**
+ * Một ô trong form: nhãn ở trên, "không bắt buộc" ghi nhỏ cạnh nhãn, gợi ý nằm dưới ô (không chen
+ * vào dòng nhãn nên nhãn không bị xuống dòng).
+ */
 export function Field({
   label,
   children,
-  hint
+  hint,
+  optional = false,
+  required = false,
+  className
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
+  optional?: boolean;
+  /** Chỉ để hiện dấu * cạnh nhãn; ràng buộc thật vẫn đặt ở ô nhập. */
+  required?: boolean;
+  className?: string;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-      <span className="flex items-center justify-between gap-2">
+    <label className={cn("grid content-start gap-1.5", className)}>
+      <span className="text-[13px] font-semibold text-stone-800">
         {label}
-        {hint ? <span className="text-xs font-normal text-stone-400">{hint}</span> : null}
+        {required ? <span className="ml-0.5 text-rose-600">*</span> : null}
+        {optional ? <span className="ml-1.5 text-xs font-normal text-stone-400">không bắt buộc</span> : null}
       </span>
       {children}
+      {hint ? <span className="text-xs leading-snug text-stone-500">{hint}</span> : null}
     </label>
+  );
+}
+
+/** Nhóm ô trong form có tiêu đề nhỏ, vd "Học sinh", "Phụ huynh". */
+export function FormSection({
+  title,
+  children,
+  className
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <fieldset className={cn("grid gap-3 sm:grid-cols-2", className)}>
+      <legend className="mb-2.5 flex w-full items-center gap-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
+        {title}
+        <span className="h-px flex-1 bg-stone-200" />
+      </legend>
+      {children}
+    </fieldset>
   );
 }
 

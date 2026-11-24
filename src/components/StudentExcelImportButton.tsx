@@ -271,7 +271,7 @@ export function StudentExcelImportButton() {
                   </Button>
                   <a
                     href="/api/admin/student-import/template"
-                    className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-stone-50"
+                    className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-50"
                   >
                     <Download className="h-4 w-4" />
                     Tải tệp mẫu

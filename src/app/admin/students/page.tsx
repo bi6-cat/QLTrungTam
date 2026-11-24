@@ -307,7 +307,7 @@ export default async function StudentsPage({
             {hasFilter ? (
               <Link
                 href={listHref({ keepFilters: false })}
-                className="focus-ring inline-flex h-11 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-stone-600 hover:bg-stone-100"
+                className="focus-ring inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-stone-600 hover:bg-stone-100"
               >
                 <X className="h-4 w-4" />
                 Bỏ lọc

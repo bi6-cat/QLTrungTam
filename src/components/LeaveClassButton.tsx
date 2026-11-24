@@ -134,7 +134,7 @@ export function LeaveClassButton({
                 </span>
               </label>
             </div>
-            <Field label="Lý do" hint="Không bắt buộc">
+            <Field label="Lý do" optional>
               <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
@@ -144,7 +144,7 @@ export function LeaveClassButton({
               />
             </Field>
             {error ? <p className="text-sm font-medium text-warning" role="alert">{error}</p> : null}
-            <div className="flex justify-end gap-2">
+            <div className="modal-actions flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={pending} onClick={() => setOpen(false)}>
                 Đóng
               </Button>
