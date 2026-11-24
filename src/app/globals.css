@@ -29,8 +29,72 @@
   color-scheme: light;
 }
 
-/* Bản staging: toàn bộ giao diện tông cam để không nhầm với production. */
-:root[data-env="staging"] {
+/* Bộ màu người dùng tự chọn (nút bảng màu trên header, xem src/lib/themes.ts).
+   "cham" là mặc định nên không cần khối riêng. Chủ đạo = sắc độ 800 như bộ gốc. */
+/* Xanh biển */
+:root[data-theme="bien"] {
+  --c-primary: 30 64 175;
+  --c-indigo-50: 239 246 255;
+  --c-indigo-100: 219 234 254;
+  --c-indigo-200: 191 219 254;
+  --c-indigo-300: 147 197 253;
+  --c-indigo-400: 96 165 250;
+  --c-indigo-500: 59 130 246;
+  --c-indigo-600: 37 99 235;
+  --c-indigo-700: 29 78 216;
+  --c-indigo-800: 30 64 175;
+  --c-indigo-900: 30 58 138;
+  --c-indigo-950: 23 37 84;
+}
+/* Ngọc lam */
+:root[data-theme="ngoc"] {
+  --c-primary: 17 94 89;
+  --c-indigo-50: 240 253 250;
+  --c-indigo-100: 204 251 241;
+  --c-indigo-200: 153 246 228;
+  --c-indigo-300: 94 234 212;
+  --c-indigo-400: 45 212 191;
+  --c-indigo-500: 20 184 166;
+  --c-indigo-600: 13 148 136;
+  --c-indigo-700: 15 118 110;
+  --c-indigo-800: 17 94 89;
+  --c-indigo-900: 19 78 74;
+  --c-indigo-950: 4 47 46;
+}
+/* Tím mận */
+:root[data-theme="tim"] {
+  --c-primary: 107 33 168;
+  --c-indigo-50: 250 245 255;
+  --c-indigo-100: 243 232 255;
+  --c-indigo-200: 233 213 255;
+  --c-indigo-300: 216 180 254;
+  --c-indigo-400: 192 132 252;
+  --c-indigo-500: 168 85 247;
+  --c-indigo-600: 147 51 234;
+  --c-indigo-700: 126 34 206;
+  --c-indigo-800: 107 33 168;
+  --c-indigo-900: 88 28 135;
+  --c-indigo-950: 59 7 100;
+}
+/* Than chì */
+:root[data-theme="than"] {
+  --c-primary: 30 41 59;
+  --c-indigo-50: 248 250 252;
+  --c-indigo-100: 241 245 249;
+  --c-indigo-200: 226 232 240;
+  --c-indigo-300: 203 213 225;
+  --c-indigo-400: 148 163 184;
+  --c-indigo-500: 100 116 139;
+  --c-indigo-600: 71 85 105;
+  --c-indigo-700: 51 65 85;
+  --c-indigo-800: 30 41 59;
+  --c-indigo-900: 15 23 42;
+  --c-indigo-950: 2 6 23;
+}
+
+/* Bản staging: mặc định tông cam để không nhầm với production. Nếu đã tự chọn bộ màu
+   thì dùng bộ đó (để thử), còn dải cam trên header + nhãn STG vẫn luôn hiện. */
+:root[data-env="staging"]:not([data-theme]) {
   --c-primary: 194 65 12;
   --c-indigo-50: 255 247 237;
   --c-indigo-100: 255 237 213;

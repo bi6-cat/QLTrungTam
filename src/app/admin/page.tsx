@@ -438,7 +438,7 @@ export default async function AdminHomePage({
     { key: "paid", label: "Đã đóng", count: totals.paidCount, amount: totals.paid, color: "#10b981", dot: "bg-emerald-500" },
     { key: "unpaid", label: "Chưa đóng", count: totals.unpaidCount, amount: totals.remaining, color: "#f59e0b", dot: "bg-amber-500" },
     { key: "unissued", label: "Chưa phát hành", count: totals.unissued, amount: null, color: "#d6d3d1", dot: "bg-stone-300" },
-    { key: "waived", label: "Miễn học phí", count: waivedCount, amount: waivedAmount, color: "#818cf8", dot: "bg-indigo-400" }
+    { key: "waived", label: "Miễn học phí", count: waivedCount, amount: waivedAmount, color: "rgb(var(--c-indigo-400))", dot: "bg-indigo-400" }
   ];
   const mixTotal = mix.reduce((sum, item) => sum + item.count, 0);
   let mixCursor = 0;

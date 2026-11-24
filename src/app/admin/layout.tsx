@@ -7,16 +7,20 @@ import { ROLE_LABEL } from "@/lib/roles";
 import { Button } from "@/components/ui";
 import { AdminNav } from "@/components/AdminNav";
 import { Toaster } from "@/components/Toaster";
+import { ThemePicker } from "@/components/ThemePicker";
+import { cookies } from "next/headers";
+import { THEME_COOKIE, isThemeId } from "@/lib/themes";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireStaff();
   const staging = await isStaging();
+  const savedTheme = (await cookies()).get(THEME_COOKIE)?.value;
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/80 backdrop-blur-xl">
-        {/* Dải màu chủ đạo mảnh trên cùng. */}
-        <div className="h-1 bg-primary" />
+        {/* Dải màu chủ đạo mảnh trên cùng; bản staging luôn là dải cam dày hơn dù đã đổi bộ màu. */}
+        <div className={staging ? "h-1.5 bg-orange-500" : "h-1 bg-primary"} />
         <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-3 px-4 py-2.5 lg:px-8 lg:py-3">
           <Link href="/" className="focus-ring flex items-center gap-3 rounded-xl">
             <img
@@ -39,12 +43,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </p>
             </div>
           </Link>
-          <form action={logoutAction}>
-            <Button type="submit" variant="secondary" className="h-10 px-3 lg:px-4">
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Đăng xuất</span>
-            </Button>
-          </form>
+          <div className="flex items-center gap-2">
+            <ThemePicker initial={isThemeId(savedTheme) ? savedTheme : null} />
+            <form action={logoutAction}>
+              <Button type="submit" variant="secondary" className="h-10 px-3 lg:px-4">
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Đăng xuất</span>
+              </Button>
+            </form>
+          </div>
         </div>
       </header>
 
