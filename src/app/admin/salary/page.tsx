@@ -35,8 +35,7 @@ export const dynamic = "force-dynamic";
 
 const RANGES = [2, 3, 6, 12] as const;
 const DEFAULT_RANGE = 2;
-/** Giá trị ?teacher= để xem tất cả giáo viên (mặc định chỉ mở một giáo viên cho gọn). */
-const ALL_TEACHERS = "all";
+
 const NO_TEACHER = "__none";
 
 function periodKey(classId: string, period: Pick<SalaryLine, "month" | "year">) {
@@ -149,14 +148,11 @@ export default async function SalaryPage({
   const chipTeachers = ledger.filter(
     (teacher) => teacher.classes.some((classRoom) => !classRoom.archived) || teacher.owed > 0
   );
-  // Mặc định mở một giáo viên: ưu tiên người còn bị nợ lương, không thì người đầu danh sách.
+  // Mặc định xem tất cả giáo viên; ?teacher=<tên> để lọc một người.
   const requestedTeacher = params.teacher ?? "";
-  const selectedTeacher =
-    requestedTeacher === ALL_TEACHERS
-      ? ""
-      : chipTeachers.some((teacher) => teacherParam(teacher) === requestedTeacher)
-        ? requestedTeacher
-        : teacherParam(chipTeachers.find((teacher) => teacher.owed > 0) ?? chipTeachers[0] ?? { teacherName: "" } as TeacherLedger);
+  const selectedTeacher = chipTeachers.some((teacher) => teacherParam(teacher) === requestedTeacher)
+    ? requestedTeacher
+    : "";
   const showingAll = selectedTeacher === "";
   const byTeacher = (list: TeacherLedger[]) =>
     showingAll ? list : list.filter((teacher) => teacherParam(teacher) === selectedTeacher);
@@ -174,7 +170,7 @@ export default async function SalaryPage({
 
   const chipHref = (teacher: string, nextRange = range) => {
     const search = new URLSearchParams();
-    search.set("teacher", teacher || ALL_TEACHERS);
+    if (teacher) search.set("teacher", teacher);
     if (nextRange !== DEFAULT_RANGE) search.set("range", String(nextRange));
     const query = search.toString();
     return query ? `/admin/salary?${query}` : "/admin/salary";
@@ -560,8 +556,8 @@ function ClassLedger({
         </Link>
         {classRoom.archived ? <Badge tone="neutral">Đã lưu trữ</Badge> : null}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+      <div className="mx-4 mb-4 overflow-x-auto rounded-lg border border-stone-300 sm:mx-5">
+        <table className="ledger-table w-full min-w-[980px] table-fixed text-left text-sm">
           <colgroup>
             <col className="w-[200px]" />
             <col className="w-[120px]" />
@@ -570,7 +566,7 @@ function ClassLedger({
             <col />
             <col className="w-[200px]" />
           </colgroup>
-          <thead className="border-b border-stone-200 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          <thead className="bg-stone-100 text-xs font-semibold uppercase tracking-wide text-stone-600">
             <tr>
               <th className="px-4 py-2.5">Tháng lương</th>
               <th className="px-4 py-2.5 text-right">Phải trả</th>
@@ -582,7 +578,7 @@ function ClassLedger({
               <th className="px-4 py-2.5">Tình trạng</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-stone-100">
+          <tbody>
             {classRoom.periods.map((period) => {
               const index = periodIndex(period.month, period.year);
               const isCurrent = index === currentIndex;
@@ -721,7 +717,7 @@ function ClassLedger({
               );
             })}
           </tbody>
-          <tfoot className="border-t border-stone-200 bg-stone-50/60 text-sm">
+          <tfoot className="bg-stone-50 text-sm">
             <tr className="align-top">
               <td className="px-4 py-2.5 font-semibold text-stone-600">Cộng</td>
               <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold tabular-nums">

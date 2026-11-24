@@ -127,6 +127,27 @@ textarea {
   grid-column: 1 / -1;
 }
 
+/* Bảng sổ lương: kẻ ô rõ ràng giữa các cột và các dòng để số không lẫn vào nhau. */
+.ledger-table {
+  border-collapse: collapse;
+}
+.ledger-table th,
+.ledger-table td {
+  border-right: 1px solid rgb(214 211 209);
+  border-bottom: 1px solid rgb(214 211 209);
+}
+.ledger-table th:last-child,
+.ledger-table td:last-child {
+  border-right: 0;
+}
+.ledger-table tfoot td {
+  border-bottom: 0;
+  border-top: 2px solid rgb(168 162 158);
+}
+.ledger-table td {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Nền lưới mờ tinh tế cho các khối hero */
 .bg-grid {
   background-image:
