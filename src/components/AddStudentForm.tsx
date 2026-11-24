@@ -51,6 +51,9 @@ export function AddStudentForm({ onCancel }: { onCancel?: () => void }) {
       <Field label="Phụ huynh">
         <Input name="parentName" />
       </Field>
+      <Field label="Năm sinh" hint="Để trống: tự tính theo lớp khi xếp lớp">
+        <Input name="birthYear" type="number" inputMode="numeric" min={1950} max={new Date().getFullYear()} placeholder="vd 2011" />
+      </Field>
       <Field label="Địa chỉ">
         <Input name="address" />
       </Field>

@@ -1,18 +1,30 @@
 import type { Config } from "tailwindcss";
 
+// Màu chủ đạo và dải indigo đọc từ biến CSS (globals.css) để bản staging đổi sang tông cam,
+// tránh nhầm với production. Giá trị mặc định đúng bằng màu cũ.
+const themed = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`;
+const SHADES = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        primary: "#3730A3",
+        primary: themed("primary"),
+        indigo: Object.fromEntries(SHADES.map((shade) => [shade, themed(`indigo-${shade}`)])),
         accent: "#F59E0B",
         success: "#10B981",
         warning: "#F43F5E",
         neutralBg: "#FAFAF9",
         neutralText: "#1F2933",
         // Bảng màu trang công khai: xanh chàm thương hiệu, vàng nắng làm điểm nhấn, chữ xanh than.
-        brand: { DEFAULT: "#4338CA", dark: "#3730A3", deep: "#1E1B4B", light: "#C7D2FE", soft: "#EEF2FF" },
+        brand: {
+          DEFAULT: themed("indigo-700"),
+          dark: themed("primary"),
+          deep: themed("indigo-950"),
+          light: themed("indigo-200"),
+          soft: themed("indigo-50")
+        },
         sun: { DEFAULT: "#FBBF24", dark: "#B45309", soft: "#FEF3C7" },
         ink: { DEFAULT: "#0F172A", muted: "#475569" },
         canvas: "#F8FAFF"

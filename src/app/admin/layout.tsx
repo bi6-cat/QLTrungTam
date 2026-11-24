@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import { requireStaff } from "@/lib/auth";
+import { isStaging } from "@/lib/environment";
 import { ROLE_LABEL } from "@/lib/roles";
 import { Button } from "@/components/ui";
 import { AdminNav } from "@/components/AdminNav";
@@ -9,6 +10,7 @@ import { Toaster } from "@/components/Toaster";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireStaff();
+  const staging = await isStaging();
 
   return (
     <div className="min-h-screen">
@@ -23,7 +25,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               className="h-9 w-9 rounded-xl border border-stone-200 bg-white object-cover shadow-sm lg:h-10 lg:w-10"
             />
             <div className="min-w-0">
-              <p className="text-sm font-extrabold tracking-tight text-primary">APLUS ACADEMY</p>
+              <p className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-primary">
+                APLUS ACADEMY
+                {staging ? (
+                  <span className="rounded-md bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                    Bản thử · STG
+                  </span>
+                ) : null}
+              </p>
               <p className="truncate text-xs text-stone-500">
                 Xin chào, {session.username}
                 {session.role === "manager" ? ` · ${ROLE_LABEL.manager}` : ""}

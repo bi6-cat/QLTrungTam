@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { isStaging } from "@/lib/environment";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -21,9 +22,10 @@ export const viewport: Viewport = {
   colorScheme: "light"
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const staging = await isStaging();
   return (
-    <html lang="vi" suppressHydrationWarning>
+    <html lang="vi" data-env={staging ? "staging" : undefined} suppressHydrationWarning>
       <body className={inter.className} suppressHydrationWarning>
         {children}
       </body>

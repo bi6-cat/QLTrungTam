@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fillMissingBirthYears } from "@/lib/birth-year";
 import {
   coerceStudentImportRows,
   getImportEnrollmentValues,
@@ -152,6 +153,7 @@ export async function POST(request: Request) {
             }
             if (enrollmentsToCreate.length > 0) {
               await tx.enrollment.createMany({ data: enrollmentsToCreate });
+              await fillMissingBirthYears(tx, [...new Set(enrollmentsToCreate.map((item) => item.studentId))]);
             }
             const createdEnrollments = enrollmentsToCreate.length;
 

@@ -45,6 +45,7 @@ export async function createStudentRecord(
         phone: data.phone,
         address: data.address,
         parentName: data.parentName,
+        birthYear: data.birthYear ?? null,
         note: data.note
       },
       select: { id: true, fullName: true }

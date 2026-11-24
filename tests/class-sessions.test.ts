@@ -121,7 +121,7 @@ describe("suggestSessions", () => {
     });
     assert.equal(suggestion.sessions, 8);
     assert.equal(suggestion.hint, "9 theo lịch − 1 nghỉ");
-    assert.equal(suggestion.note, "đã trừ 1 buổi lớp nghỉ: 15/11 (GV ốm)");
+    assert.equal(suggestion.note, "đã trừ 1 buổi nghỉ: 15/11 GV ốm");
   });
 
   test("buổi dời (nghỉ + bù trong tháng) không đổi số buổi", () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SALARY_CUTOFF_PATTERN } from "@/lib/salary-cutoff";
+import { BIRTH_YEAR_MIN, birthYearMax } from "@/lib/birth-year";
 import { QUESTION_TYPES, SURVEY_AUDIENCES, SURVEY_CATEGORIES } from "@/lib/survey-core";
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,18 @@ const enrollmentStatus = z
   .string()
   .optional()
   .transform((v) => (v === "on_leave" ? "on_leave" : "active"));
+
+/** Năm sinh không bắt buộc: ô trống = null (tự đoán theo lớp), không gửi trường = giữ nguyên. */
+const optionalBirthYear = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+  z.coerce
+    .number({ invalid_type_error: "Năm sinh không hợp lệ" })
+    .int("Năm sinh không hợp lệ")
+    .min(BIRTH_YEAR_MIN, "Năm sinh không hợp lệ")
+    .refine((value) => value <= birthYearMax(), "Năm sinh không hợp lệ")
+    .nullable()
+    .optional()
+);
 
 const optionalText = (max: number) =>
   z
@@ -161,6 +174,7 @@ export const createStudentSchema = z.object({
   phone,
   address: looseText(300),
   parentName: optionalText(120),
+  birthYear: optionalBirthYear,
   note: optionalText(1000)
 });
 
@@ -170,6 +184,7 @@ export const updateStudentSchema = z.object({
   phone,
   address: looseText(300),
   parentName: optionalText(120),
+  birthYear: optionalBirthYear,
   note: optionalText(1000)
 });
 

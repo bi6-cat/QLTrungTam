@@ -10,6 +10,7 @@ type StudentOption = {
   id: string;
   fullName: string;
   phone: string;
+  birthYear: number | null;
 };
 
 export function AddStudentToClassButton({

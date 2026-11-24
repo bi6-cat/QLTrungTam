@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { syncUnpaidInvoicesWithStudent } from "@/lib/student-invoice-sync";
 import { diffFields, logAudit } from "@/lib/audit";
 import { createStudentRecord } from "@/lib/students-core";
+import { fillMissingBirthYears } from "@/lib/birth-year";
 import { createStudentSchema, safeParseForm, updateStudentSchema } from "@/lib/validation";
 
 /** Thêm học sinh thủ công, chặn trùng hồ sơ (quy tắc trong createStudentRecord). */
@@ -39,7 +40,7 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
     changedMemos = await prisma.$transaction(async (tx) => {
       const before = await tx.student.findUnique({
         where: { id: data.id },
-        select: { fullName: true, phone: true, address: true, parentName: true, note: true }
+        select: { fullName: true, phone: true, address: true, parentName: true, birthYear: true, note: true }
       });
       const updated = await tx.student.updateMany({
         where: { id: data.id, archivedAt: null },
@@ -48,6 +49,7 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
           phone: data.phone,
           address: data.address,
           parentName: data.parentName,
+          birthYear: data.birthYear,
           note: data.note
         }
       });
@@ -60,6 +62,7 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
             phone: data.phone,
             address: data.address,
             parentName: data.parentName ?? null,
+            ...(data.birthYear !== undefined ? { birthYear: data.birthYear } : {}),
             note: data.note ?? null
           })
         : {};
@@ -71,6 +74,8 @@ export async function updateStudentAction(_prevState: ResultState, formData: For
           metadata: { fullName: data.fullName, changes }
         });
       }
+      // Xóa trống năm sinh thì đoán lại theo lớp đang học.
+      if (data.birthYear === null) await fillMissingBirthYears(tx, [data.id]);
       // Trang lớp hiển thị tên/SĐT/memo theo bản chụp trên hóa đơn, nên phải đồng bộ hóa đơn chưa đóng.
       return syncUnpaidInvoicesWithStudent(tx, { id: data.id, fullName: data.fullName, phone: data.phone }, actor);
     });

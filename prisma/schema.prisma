@@ -153,6 +153,8 @@ model Student {
   phone       String
   address     String
   parentName  String?
+  /// Năm sinh (không bắt buộc); để trống thì tự đoán theo khối của lớp đang học.
+  birthYear   Int?
   note        String?
   archivedAt  DateTime?
   createdAt   DateTime     @default(now())

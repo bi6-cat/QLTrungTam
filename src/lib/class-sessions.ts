@@ -265,7 +265,7 @@ export type SessionSuggestion = {
 
 function describeDates(items: AdjustmentItem[]) {
   return items
-    .map((item) => (item.reason ? `${formatIsoDayMonth(item.date)} (${item.reason})` : formatIsoDayMonth(item.date)))
+    .map((item) => (item.reason ? `${formatIsoDayMonth(item.date)} ${item.reason}` : formatIsoDayMonth(item.date)))
     .join(", ");
 }
 
@@ -284,7 +284,7 @@ export function describeAdjustment(input: { cancelled: AdjustmentItem[]; makeups
   if (net > 0) {
     // Còn buổi bù chung (không gắn buổi cụ thể): kể hết buổi nghỉ kèm số buổi đã bù để tự đối chiếu.
     const madeUp = openMakeups.length > 0 ? `, đã bù ${openMakeups.length}` : "";
-    return `đã trừ ${net} buổi lớp nghỉ: ${describeDates(openCancelled)}${madeUp}`;
+    return `đã trừ ${net} buổi nghỉ: ${describeDates(openCancelled)}${madeUp}`;
   }
   if (net < 0) {
     return `cộng ${-net} buổi học bù: ${describeDates(openMakeups)}`;

@@ -14,6 +14,7 @@ type Student = {
   phone: string;
   address: string;
   parentName: string | null;
+  birthYear: number | null;
   note: string | null;
 };
 
@@ -66,9 +67,21 @@ function EditStudentDialog({ student, onClose }: { student: Student; onClose: ()
             <Input name="parentName" defaultValue={student.parentName ?? ""} />
           </Field>
         </div>
-        <Field label="Địa chỉ">
-          <Input name="address" defaultValue={student.address} />
-        </Field>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+          <Field label="Địa chỉ">
+            <Input name="address" defaultValue={student.address} />
+          </Field>
+          <Field label="Năm sinh" hint="Trống = tự tính theo lớp">
+            <Input
+              name="birthYear"
+              type="number"
+              inputMode="numeric"
+              min={1950}
+              max={new Date().getFullYear()}
+              defaultValue={student.birthYear ?? ""}
+            />
+          </Field>
+        </div>
         <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea name="note" defaultValue={student.note ?? ""} />
         </Field>

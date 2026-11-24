@@ -360,7 +360,8 @@ export default async function ClassesPage({
                       .map((student) => ({
                         id: student.id,
                         fullName: student.fullName,
-                        phone: student.phone
+                        phone: student.phone,
+                        birthYear: student.birthYear
                       }))}
                   />
                 )}
@@ -386,6 +387,7 @@ export default async function ClassesPage({
                       studentId: enrollment.student.id,
                       studentName: invoice?.studentNameSnapshot ?? enrollment.student.fullName,
                       phone: invoice?.studentPhoneSnapshot ?? enrollment.student.phone,
+                      birthYear: enrollment.student.birthYear,
                       studentArchived: Boolean(enrollment.student.archivedAt),
                       monthlyStatus: plan.status,
                       periodInitialized: plan.initialized,

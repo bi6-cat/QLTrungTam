@@ -1,15 +1,38 @@
-import { formatMonth } from "@/lib/format";
+const BULLET = "• ";
+const SESSIONS_PREFIX = `${BULLET}Số buổi tháng `;
+const PAY_PREFIX = `${BULLET}Link thanh toán: `;
 
-/** Dòng lý do trong tin nhắn: `[lý do]`; rỗng nếu không có lý do. */
+/** "K26 - Tiếng Anh 10" -> "K26 TIẾNG ANH 10" cho dòng tiêu đề viết hoa. */
+function headingClassName(className: string) {
+  return className.trim().replace(/\s+[-–]\s+/g, " ").toLocaleUpperCase("vi");
+}
+
+/** Phần lý do gắn sau số buổi: ` (lý do)`; rỗng nếu không có lý do. */
+function reasonSuffix(reason: string) {
+  const text = reason.trim();
+  return text ? ` (${text})` : "";
+}
+
+/** Dòng lý do riêng khi lớp không cùng số buổi (không có dòng số buổi để gắn vào). */
 export function reasonLine(reason: string) {
   const text = reason.trim();
-  return text ? `[${text}]` : "";
+  return text ? `${BULLET}Ghi chú: ${text}` : "";
 }
 
 /**
- * Tin gửi nhóm phụ huynh của lớp: ngắn, đủ ý. Cả lớp cùng số buổi thì ghi luôn số buổi; có buổi
- * lớp nghỉ/học bù tháng trước thì kèm lý do (dòng riêng trong ngoặc vuông) để phụ huynh không
- * thắc mắc vì sao số buổi đổi.
+ * Tin gửi nhóm phụ huynh của lớp:
+ *
+ *   THÔNG BÁO HỌC PHÍ THÁNG 11/2026 – LỚP K26 TIẾNG ANH 10
+ *
+ *   Kính gửi Quý phụ huynh và các em @All,
+ *
+ *   • Số buổi tháng 11: 7 buổi (đã trừ 2 buổi nghỉ: 09/11 GV bận, 20/11 nghỉ lễ)
+ *   • Link thanh toán: https://...
+ *
+ *   Hướng dẫn: Mở link → Chọn tên học sinh → Kiểm tra số tiền → Quét QR.
+ *
+ * Cả lớp cùng số buổi mới ghi dòng số buổi (lý do trong ngoặc ngay sau); khác nhau thì lý do thành
+ * dòng "Ghi chú" riêng.
  */
 export function buildParentNotice(input: {
   className: string;
@@ -21,39 +44,53 @@ export function buildParentNotice(input: {
 }) {
   const billed = input.rows.filter((row) => row.status === "unpaid" || row.status === "paid" || row.status === "not_created");
   const sessionCounts = new Set(billed.map((row) => row.sessions));
-  const sessionsLine = sessionCounts.size === 1 ? `Tổng số buổi T${input.month} dự kiến: ${[...sessionCounts][0]} buổi` : "";
+  const details =
+    sessionCounts.size === 1
+      ? [`${SESSIONS_PREFIX}${input.month}: ${[...sessionCounts][0]} buổi${reasonSuffix(input.adjustmentNote)}`]
+      : [reasonLine(input.adjustmentNote)];
+  const month = String(input.month).padStart(2, "0");
   return [
-    `Thông báo học phí ${formatMonth(input.month, input.year)}`,
-    `Kính gửi phụ huynh lớp ${input.className}, @All`,
-    sessionsLine,
-    reasonLine(input.adjustmentNote),
-    `Xem và thanh toán: ${input.payUrl}`,
-    "Chọn tên, kiểm tra số tiền rồi quét QR (không cần sửa nội dung chuyển khoản). Hệ thống tự xác nhận khi nhận tiền."
-  ]
-    .filter(Boolean)
-    .join("\n");
+    `THÔNG BÁO HỌC PHÍ THÁNG ${month}/${input.year} – LỚP ${headingClassName(input.className)}`,
+    "",
+    "Kính gửi Quý phụ huynh và các em @All,",
+    "",
+    ...details.filter(Boolean),
+    `${PAY_PREFIX}${input.payUrl}`,
+    "",
+    "Hướng dẫn: Mở link → Chọn tên học sinh → Kiểm tra số tiền → Quét QR."
+  ].join("\n");
 }
 
 /**
- * Đổi lý do trong tin đang soạn mà không đụng phần người dùng đã sửa tay: thay đúng dòng lý do
- * cũ; tin chưa có lý do thì chèn ngay trước dòng "Xem và thanh toán". Dòng cũ đã bị người dùng
- * sửa/xoá tay hoặc không tìm được chỗ chèn thì giữ nguyên tin.
+ * Đổi lý do trong tin đang soạn mà không đụng phần người dùng đã sửa tay: thay đúng phần lý do cũ
+ * (trong ngoặc cuối dòng số buổi, hoặc dòng "Ghi chú"). Tin chưa có lý do thì gắn vào dòng số buổi,
+ * không có dòng số buổi thì chèn dòng "Ghi chú" trước dòng link. Phần cũ đã bị sửa/xoá tay hoặc
+ * không tìm được chỗ thì giữ nguyên tin.
  */
 export function swapReasonLine(message: string, oldReason: string, newReason: string) {
+  if (oldReason.trim() === newReason.trim()) return message;
+  const lines = message.split("\n");
+  const sessionsAt = lines.findIndex((line) => line.startsWith(SESSIONS_PREFIX));
+
+  if (sessionsAt >= 0) {
+    const line = lines[sessionsAt];
+    const oldSuffix = reasonSuffix(oldReason);
+    if (oldSuffix && !line.endsWith(oldSuffix)) return message; // người dùng đã tự sửa phần này
+    lines[sessionsAt] = line.slice(0, line.length - oldSuffix.length) + reasonSuffix(newReason);
+    return lines.join("\n");
+  }
+
   const oldLine = reasonLine(oldReason);
   const newLine = reasonLine(newReason);
-  if (oldLine === newLine) return message;
-
-  const lines = message.split("\n");
   if (oldLine) {
     const at = lines.indexOf(oldLine);
-    if (at < 0) return message; // người dùng đã tự xoá/sửa dòng này, không đoán thay
+    if (at < 0) return message;
     if (newLine) lines[at] = newLine;
     else lines.splice(at, 1);
     return lines.join("\n");
   }
 
-  const payAt = lines.findIndex((line) => line.startsWith("Xem và thanh toán"));
+  const payAt = lines.findIndex((line) => line.startsWith(PAY_PREFIX));
   if (payAt < 0) return message;
   lines.splice(payAt, 0, newLine);
   return lines.join("\n");

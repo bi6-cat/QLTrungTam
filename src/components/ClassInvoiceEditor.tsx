@@ -20,6 +20,7 @@ type InvoiceRow = {
   studentId: string;
   studentName: string;
   phone: string;
+  birthYear: number | null;
   studentArchived: boolean;
   monthlyStatus: "active" | "on_leave";
   periodInitialized: boolean;
@@ -445,7 +446,10 @@ export function ClassInvoiceEditor({
                       >
                         {row.studentName}
                       </Link>
-                      <div className="text-xs text-stone-500">{row.phone}</div>
+                      <div className="text-xs text-stone-500">
+                        {row.phone}
+                        {row.birthYear ? ` · SN ${row.birthYear}` : ""}
+                      </div>
                       {row.olderDebts.map((debt) => (
                         <Link
                           key={`${debt.year}-${debt.month}`}

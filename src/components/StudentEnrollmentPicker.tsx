@@ -12,6 +12,7 @@ type StudentOption = {
   id: string;
   fullName: string;
   phone: string;
+  birthYear: number | null;
 };
 
 const PAGE_SIZE = 12;
@@ -161,7 +162,10 @@ export function StudentEnrollmentPicker({
                 </span>
                 {student.fullName}
               </div>
-              <div className="text-xs text-stone-500">{student.phone}</div>
+              <div className="text-xs text-stone-500">
+                {student.phone}
+                {student.birthYear ? ` · SN ${student.birthYear}` : ""}
+              </div>
             </button>
           );
         })}

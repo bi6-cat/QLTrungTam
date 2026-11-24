@@ -77,7 +77,7 @@ describe("thời khóa biểu: điểm danh và gợi ý số buổi", { concurr
     assert.deepEqual(await suggestSeptember(fixture), {
       sessions: 4,
       hint: "5 theo lịch − 1 nghỉ",
-      note: "đã trừ 1 buổi lớp nghỉ: 15/09 (GV ốm)"
+      note: "đã trừ 1 buổi nghỉ: 15/09 GV ốm"
     });
   });
 

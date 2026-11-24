@@ -209,7 +209,7 @@ function ParentLinkDialog({
 
         <div>
           <label htmlFor="parent-link-reason" className="text-sm font-semibold text-neutralText">
-            Lý do (hiện thành dòng trong ngoặc vuông)
+            Lý do (hiện trong ngoặc sau số buổi)
           </label>
           <p className="mt-1 text-xs text-stone-500">Ví dụ lớp nghỉ, học bù, trừ buổi. Để trống nếu không cần.</p>
           <input

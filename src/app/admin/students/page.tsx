@@ -186,6 +186,7 @@ export default async function StudentsPage({
         phone: student.phone,
         address: student.address,
         parentName: student.parentName,
+        birthYear: student.birthYear,
         note: student.note
       }
     };
@@ -370,6 +371,7 @@ export default async function StudentsPage({
                       <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
                         {student.fullName}
                       </Link>
+                      {student.birthYear ? <BirthYear year={student.birthYear} /> : null}
                       {isNew ? <NewTag /> : null}
                       <p className="mt-0.5 text-sm text-stone-600">
                         {student.parentName ? `${student.parentName} · ` : ""}
@@ -409,6 +411,7 @@ export default async function StudentsPage({
                         <Link href={`/admin/students/${student.id}`} className="font-semibold text-primary hover:underline">
                           {student.fullName}
                         </Link>
+                        {student.birthYear ? <BirthYear year={student.birthYear} /> : null}
                         {isNew ? <NewTag /> : null}
                         {student.address ? <div className="max-w-56 truncate text-xs text-stone-500">{student.address}</div> : null}
                       </td>
@@ -464,6 +467,14 @@ function LegendDot({ className, label }: { className: string; label: string }) {
     <span className="inline-flex items-center gap-1">
       <span className={`h-2 w-2 rounded-full ${className}`} />
       {label}
+    </span>
+  );
+}
+
+function BirthYear({ year }: { year: number }) {
+  return (
+    <span className="ml-1.5 align-middle text-xs font-medium tabular-nums text-stone-500" title="Năm sinh">
+      ({year})
     </span>
   );
 }

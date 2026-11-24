@@ -4,72 +4,82 @@ import { describe, test } from "node:test";
 import { buildParentNotice, swapReasonLine } from "../src/lib/parent-notice";
 
 const base = {
-  className: "K26 - Tiếng Anh 9",
+  className: "K26 - Tiếng Anh 10",
   payUrl: "https://aplus.zett.io.vn/pay/abc",
-  month: 10,
+  month: 11,
   year: 2026,
   rows: [
-    { status: "unpaid", sessions: 9 },
-    { status: "paid", sessions: 9 }
+    { status: "unpaid", sessions: 7 },
+    { status: "paid", sessions: 7 }
   ],
-  adjustmentNote: "Tháng 9 lớp nghỉ 1 buổi, trừ vào học phí tháng 10"
+  adjustmentNote: "đã trừ 2 buổi nghỉ: 09/11 GV bận, 20/11 nghỉ lễ"
 };
 
 describe("buildParentNotice", () => {
-  test("uses the fixed layout with sessions and reason lines", () => {
+  test("uses the fixed layout with the reason after the session count", () => {
     assert.equal(
       buildParentNotice(base),
       [
-        "Thông báo học phí Tháng 10/2026",
-        "Kính gửi phụ huynh lớp K26 - Tiếng Anh 9, @All",
-        "Tổng số buổi T10 dự kiến: 9 buổi",
-        "[Tháng 9 lớp nghỉ 1 buổi, trừ vào học phí tháng 10]",
-        "Xem và thanh toán: https://aplus.zett.io.vn/pay/abc",
-        "Chọn tên, kiểm tra số tiền rồi quét QR (không cần sửa nội dung chuyển khoản). Hệ thống tự xác nhận khi nhận tiền."
+        "THÔNG BÁO HỌC PHÍ THÁNG 11/2026 – LỚP K26 TIẾNG ANH 10",
+        "",
+        "Kính gửi Quý phụ huynh và các em @All,",
+        "",
+        "• Số buổi tháng 11: 7 buổi (đã trừ 2 buổi nghỉ: 09/11 GV bận, 20/11 nghỉ lễ)",
+        "• Link thanh toán: https://aplus.zett.io.vn/pay/abc",
+        "",
+        "Hướng dẫn: Mở link → Chọn tên học sinh → Kiểm tra số tiền → Quét QR."
       ].join("\n")
     );
   });
 
-  test("drops the reason line when there is none", () => {
-    const message = buildParentNotice({ ...base, adjustmentNote: "  " });
-    assert.doesNotMatch(message, /\[/);
-    assert.match(message, /dự kiến: 9 buổi\nXem và thanh toán/);
+  test("pads single-digit months in the heading", () => {
+    assert.match(buildParentNotice({ ...base, month: 9 }), /^THÔNG BÁO HỌC PHÍ THÁNG 09\/2026/);
   });
 
-  test("drops the sessions line when students have different session counts", () => {
+  test("drops the parentheses when there is no reason", () => {
+    const message = buildParentNotice({ ...base, adjustmentNote: "  " });
+    assert.match(message, /• Số buổi tháng 11: 7 buổi\n• Link thanh toán/);
+  });
+
+  test("uses a separate note line when students have different session counts", () => {
     const message = buildParentNotice({ ...base, rows: [{ status: "unpaid", sessions: 9 }, { status: "unpaid", sessions: 8 }] });
-    assert.doesNotMatch(message, /Tổng số buổi/);
+    assert.doesNotMatch(message, /Số buổi tháng/);
+    assert.match(message, /\n• Ghi chú: đã trừ 2 buổi nghỉ: 09\/11 GV bận, 20\/11 nghỉ lễ\n• Link thanh toán/);
   });
 
   test("ignores students who are not billed when counting sessions", () => {
     const message = buildParentNotice({ ...base, rows: [...base.rows, { status: "on_leave", sessions: 0 }] });
-    assert.match(message, /dự kiến: 9 buổi/);
+    assert.match(message, /Số buổi tháng 11: 7 buổi/);
   });
 });
 
 describe("swapReasonLine", () => {
   const message = buildParentNotice(base);
 
-  test("replaces the old reason line and keeps manual edits elsewhere", () => {
+  test("replaces the old reason and keeps manual edits elsewhere", () => {
     const edited = message.replace("@All", "@All (nhóm lớp)");
-    const swapped = swapReasonLine(edited, base.adjustmentNote, "GV ốm ngày 15/10");
+    const swapped = swapReasonLine(edited, base.adjustmentNote, "GV ốm ngày 15/11");
     assert.match(swapped, /@All \(nhóm lớp\)/);
-    assert.match(swapped, /\n\[GV ốm ngày 15\/10\]\n/);
-    assert.doesNotMatch(swapped, /Tháng 9 lớp nghỉ/);
+    assert.match(swapped, /• Số buổi tháng 11: 7 buổi \(GV ốm ngày 15\/11\)\n/);
+    assert.doesNotMatch(swapped, /nghỉ lễ/);
   });
 
-  test("removes the line when the reason is cleared", () => {
-    assert.doesNotMatch(swapReasonLine(message, base.adjustmentNote, ""), /\[/);
+  test("removes the parentheses when the reason is cleared", () => {
+    assert.match(swapReasonLine(message, base.adjustmentNote, ""), /• Số buổi tháng 11: 7 buổi\n/);
   });
 
-  test("inserts the line before the pay link when there was no reason", () => {
+  test("adds the reason to the session line when there was none", () => {
     const without = buildParentNotice({ ...base, adjustmentNote: "" });
-    const swapped = swapReasonLine(without, "", "Lớp nghỉ lễ");
-    assert.match(swapped, /dự kiến: 9 buổi\n\[Lớp nghỉ lễ\]\nXem và thanh toán/);
+    assert.match(swapReasonLine(without, "", "Lớp nghỉ lễ"), /• Số buổi tháng 11: 7 buổi \(Lớp nghỉ lễ\)\n/);
   });
 
-  test("leaves the message alone when the old reason line was deleted by hand", () => {
-    const handEdited = message.split("\n").filter((line) => !line.startsWith("[")).join("\n");
+  test("inserts a note line before the pay link when there is no session line", () => {
+    const mixed = buildParentNotice({ ...base, adjustmentNote: "", rows: [{ status: "unpaid", sessions: 9 }, { status: "unpaid", sessions: 8 }] });
+    assert.match(swapReasonLine(mixed, "", "Lớp nghỉ lễ"), /\n• Ghi chú: Lớp nghỉ lễ\n• Link thanh toán/);
+  });
+
+  test("leaves the message alone when the old reason was edited by hand", () => {
+    const handEdited = message.replace("nghỉ lễ)", "lễ)");
     assert.equal(swapReasonLine(handEdited, base.adjustmentNote, "Khác"), handEdited);
   });
 });

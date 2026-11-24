@@ -11,9 +11,38 @@
 @tailwind utilities;
 
 :root {
+  /* Màu chủ đạo + dải indigo (kênh RGB cho Tailwind, xem tailwind.config.ts). */
+  --c-primary: 55 48 163;
+  --c-indigo-50: 238 242 255;
+  --c-indigo-100: 224 231 255;
+  --c-indigo-200: 199 210 254;
+  --c-indigo-300: 165 180 252;
+  --c-indigo-400: 129 140 248;
+  --c-indigo-500: 99 102 241;
+  --c-indigo-600: 79 70 229;
+  --c-indigo-700: 67 56 202;
+  --c-indigo-800: 55 48 163;
+  --c-indigo-900: 49 46 129;
+  --c-indigo-950: 30 27 75;
   background: #fafaf9;
   color: #1f2933;
   color-scheme: light;
+}
+
+/* Bản staging: toàn bộ giao diện tông cam để không nhầm với production. */
+:root[data-env="staging"] {
+  --c-primary: 194 65 12;
+  --c-indigo-50: 255 247 237;
+  --c-indigo-100: 255 237 213;
+  --c-indigo-200: 254 215 170;
+  --c-indigo-300: 253 186 116;
+  --c-indigo-400: 251 146 60;
+  --c-indigo-500: 249 115 22;
+  --c-indigo-600: 234 88 12;
+  --c-indigo-700: 194 65 12;
+  --c-indigo-800: 154 52 18;
+  --c-indigo-900: 124 45 18;
+  --c-indigo-950: 67 20 7;
 }
 
 * {
@@ -28,7 +57,7 @@ body {
   min-height: 100vh;
   /* Nền dịu với hai vầng sáng thương hiệu (indigo + amber) ở góc trên. */
   background:
-    radial-gradient(1100px 560px at -8% -18%, rgba(55, 48, 163, 0.08), transparent 58%),
+    radial-gradient(1100px 560px at -8% -18%, rgb(var(--c-primary) / 0.08), transparent 58%),
     radial-gradient(1000px 520px at 108% -12%, rgba(245, 158, 11, 0.08), transparent 55%),
     #fafaf9;
   background-attachment: fixed;
@@ -46,7 +75,7 @@ textarea {
 }
 
 ::selection {
-  background: rgba(55, 48, 163, 0.16);
+  background: rgb(var(--c-primary) / 0.16);
   color: #1f2933;
 }
 

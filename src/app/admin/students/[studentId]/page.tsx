@@ -438,6 +438,7 @@ export default async function Student360Page({
                   phone: student.phone,
                   address: student.address,
                   parentName: student.parentName,
+                  birthYear: student.birthYear,
                   note: student.note
                 }}
               />
@@ -475,6 +476,10 @@ export default async function Student360Page({
             <div>
               <dt className="text-xs font-semibold uppercase tracking-wide text-stone-400">Họ tên</dt>
               <dd className="mt-1 font-semibold text-neutralText">{student.fullName}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-stone-400">Năm sinh</dt>
+              <dd className="mt-1 font-semibold text-neutralText">{student.birthYear ?? "Chưa cập nhật"}</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase tracking-wide text-stone-400">Phụ huynh</dt>

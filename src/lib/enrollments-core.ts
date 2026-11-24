@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { logAudit, type AuditActor } from "@/lib/audit";
+import { fillMissingBirthYears } from "@/lib/birth-year";
 
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeZone: "Asia/Ho_Chi_Minh" });
 
@@ -61,6 +62,7 @@ export async function enrollStudentInClass(tx: Prisma.TransactionClient, data: E
         status: data.status
       }
     });
+    await fillMissingBirthYears(tx, [data.studentId]);
     return { studentName: student.fullName, className: classRoom.name, rejoined: false };
   }
 
@@ -85,5 +87,6 @@ export async function enrollStudentInClass(tx: Prisma.TransactionClient, data: E
       startDate: startDate.toISOString()
     }
   });
+  await fillMissingBirthYears(tx, [data.studentId]);
   return { studentName: student.fullName, className: classRoom.name, rejoined: true };
 }
