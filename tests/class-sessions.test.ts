@@ -163,14 +163,13 @@ describe("buildParentNotice", () => {
         { status: "not_created", sessions: 7 },
         { status: "on_leave", sessions: 0 }
       ],
-      adjustmentNote: "đã trừ 1 buổi lớp nghỉ T10: 15/10 (GV ốm)"
+      adjustmentNote: "đã trừ 1 buổi nghỉ: 15/11 GV ốm"
     });
-    assert.match(message, /^Thông báo học phí Tháng 11\/2026$/m);
-    assert.match(message, /^Kính gửi phụ huynh lớp Toán 9, @All$/m);
-    assert.match(message, /^Tổng số buổi T11 dự kiến: 7 buổi$/m);
-    assert.match(message, /^\[đã trừ 1 buổi lớp nghỉ T10: 15\/10 \(GV ốm\)\]$/m);
+    assert.match(message, /^THÔNG BÁO HỌC PHÍ THÁNG 11\/2026 – LỚP TOÁN 9$/m);
+    assert.match(message, /^Kính gửi Quý phụ huynh và các em @All,$/m);
+    assert.match(message, /^• Số buổi tháng 11: 7 buổi \(đã trừ 1 buổi nghỉ: 15\/11 GV ốm\)$/m);
+    assert.match(message, /^• Link thanh toán: https:\/\/x\/pay\/T9-abc$/m);
     assert.ok(!message.includes("(T9)"));
-    assert.ok(message.split("\n").length <= 6);
   });
 
   test("số buổi khác nhau thì không ghi số buổi chung", () => {
@@ -185,7 +184,7 @@ describe("buildParentNotice", () => {
       ],
       adjustmentNote: ""
     });
-    assert.match(message, /^Thông báo học phí Tháng 11\/2026$/m);
-    assert.doesNotMatch(message, /Tổng số buổi/);
+    assert.match(message, /^THÔNG BÁO HỌC PHÍ THÁNG 11\/2026 – LỚP TOÁN 9$/m);
+    assert.doesNotMatch(message, /Số buổi tháng/);
   });
 });
